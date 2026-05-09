@@ -754,9 +754,10 @@ var KM_END   = 4.605;
 
 var GITHUB_USER_REPO = 'Pripravar/Sulice---Zelivec';
 var GITHUB_BRANCH_PDF = 'main';
-// Bázová URL pro PDF výkresy (PDPS) - hostováno na GitHub raw.
-// Po výměně PDPS → realizační dokumentaci stačí přepsat soubory v repu.
-var PDF_BASE = 'https://raw.githubusercontent.com/' + GITHUB_USER_REPO + '/' + GITHUB_BRANCH_PDF + '/pdf/';
+// Bázová cesta k PDF výkresům - RELATIVNÍ k aplikaci (na GitHub Pages).
+// Důvod: raw.githubusercontent.com servíruje PDF jako application/octet-stream
+// → iframe je nezobrazí. Pages servírují PDF jako application/pdf → iframe OK.
+var PDF_BASE = 'pdf/';
 
 // ── BODY OSY TRASY (65 GPX bodů z mapy.cz, ZÚ Hlubočinka → KÚ Kamenice, ~5,0 km) ──
 var GPX_POINTS = [
