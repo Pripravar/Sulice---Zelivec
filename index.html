@@ -790,7 +790,7 @@ var GPX_POINTS = [
 // proto staničení v krajních úsecích km 0-0,5 a km 4,3-4,6 bude extrapolováno
 // (ne přesně na silnici). Až prodloužíš GPX trasu o tyto okraje, bude to perfektní.
 var CALIB_POINTS = [
-  {lat:49.934822, lng:14.558044, km:0.000},  // ZÚ - Hlubočinka, križovatka Hlavní × Slunečná
+  {lat:49.9348717, lng:14.5579467, km:0.000},  // ZÚ - Hlubočinka, križovatka Hlavní × Slunečná (přesná GPS)
   {lat:49.926820, lng:14.568976, km:1.180},
   {lat:49.923107, lng:14.575239, km:1.800},
   {lat:49.919390, lng:14.581171, km:2.400},
@@ -917,14 +917,13 @@ function buildCumulative() {
 }
 
 function buildCalibSorted() {
-  calibSorted=CALIB_POINTS.map(function(cp){
-    var minD=Infinity,minCum=0;
-    for(var i=0;i<GPX_POINTS.length;i++){
-      var d=haversine(cp.lat,cp.lng,GPX_POINTS[i][0],GPX_POINTS[i][1]);
-      if(d<minD){minD=d;minCum=gpxCumulative[i];}
-    }
-    return {gpxM:minCum,realKm:cp.km};
-  }).sort(function(a,b){return a.realKm-b.realKm;});
+  // Vylepšeno: kalibrační bod se promítá na nejbližší SEGMENT GPX (ne jen na nejbližší bod).
+  // Tím se eliminuje chyba u krajních bodů (ZU/KU), kdy nejbližší bod GPX je vzdálen
+  // desítky metrů od skutečné kalibrační pozice.
+  calibSorted = CALIB_POINTS.map(function(cp){
+    var n = nearestOnRoute(cp.lat, cp.lng);
+    return {gpxM: n.cum, realKm: cp.km};
+  }).sort(function(a,b){ return a.realKm - b.realKm; });
 }
 
 function interp(arr,xKey,yKey,x) {
@@ -1309,6 +1308,11 @@ var currentPdfSrc = '';
 function isMobile() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
 }
+// iOS Safari NEZOBRAZÍ PDF v iframu - vždy ho stáhne. Detekce, abychom mu nabídli tlačítko místo iframu.
+function isIOS() {
+  return (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
+}
 
 function openPdfExternal() {
   if(currentPdfSrc) window.open(currentPdfSrc, '_blank');
@@ -1345,10 +1349,20 @@ function renderDocPage(realKm) {
   nosit.style.display = 'none';
   currentPdfSrc = p.soubor;
 
-  if(openWrap) openWrap.style.display='none';
-  if(frameWrap) frameWrap.style.display='flex';
-  var frame = document.getElementById('pdf-frame');
-  if(frame) frame.src = p.soubor;
+  // Na iOS Safari iframe nezobrazí PDF, vždy stáhne. Ukaž místo toho tlačítko.
+  if(isIOS()) {
+    if(frameWrap) frameWrap.style.display='none';
+    if(openWrap) {
+      openWrap.style.display='flex';
+      var lbl = document.getElementById('pdf-open-label');
+      if(lbl) lbl.textContent = p.nazev;
+    }
+  } else {
+    if(openWrap) openWrap.style.display='none';
+    if(frameWrap) frameWrap.style.display='flex';
+    var frame = document.getElementById('pdf-frame');
+    if(frame) frame.src = p.soubor;
+  }
 }
 
 function docNav(dir) {
