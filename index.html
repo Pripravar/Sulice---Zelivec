@@ -869,15 +869,31 @@ var DOCS_TZ = [
   {kmOd:0.000, kmDo:4.605, soubor:PDF_BASE+'SO_101/D.101-1_Technicka_zprava_PDPS_R2_06_2025.pdf', nazev:'Technická zpráva SO 101'},
 ];
 
-// PROPUSTKY - propustky s GPS markery na mapě
-// Soubor s technickou zprávou je v každém SO zvlášť (SO 104, SO 105)
+// PROPUSTKY - GPS markery na mapě, kliknutí otevře PDF panel se VŠEMI výkresy daného SO
+// SO 104 (P1) a SO 105 (P2) - každý má kompletní sadu: situace, pod. profil, vzor. řezy,
+// char. řezy, propustek nový stav, dopravní značení, technická zpráva
 var PROPUSTKY = [
-  {id:'P1', km:2.40491, soubor:PDF_BASE+'SO_104/D.104-2_Situace_PDPS.pdf', nazev:'Propustek P1 — km 2,405 (SO 104)',
-   tz:PDF_BASE+'SO_104/D.104-1_Technicka_zprava_PDPS_R2_06_2025.pdf'},
-  {id:'P2', km:3.07132, soubor:PDF_BASE+'SO_105/D.105-2_Situace_PDPS.pdf', nazev:'Propustek P2 — km 3,071 (SO 105)',
-   tz:PDF_BASE+'SO_105/D.105-1_Technicka_zprava_PDPS_R2_06_2025.pdf'},
+  {id:'P1', km:2.40491, nazev:'Propustek P1 — km 2,405 (SO 104)',
+   vykresy: [
+     {typ:'📐 Situace',      nazev:'Situace SO 104',                       soubor:PDF_BASE+'SO_104/D.104-2_Situace_PDPS.pdf'},
+     {typ:'📊 Pod. profil',  nazev:'Podélný profil SO 104',                soubor:PDF_BASE+'SO_104/D.104-3_Podelne_profily_PDPS.pdf'},
+     {typ:'✂️ Vzor. řezy',   nazev:'Vzorové příčné řezy SO 104',          soubor:PDF_BASE+'SO_104/D.104-4_Vzorove_pricne_rezy_PDPS_R3_06_2025.pdf'},
+     {typ:'✂️ Char. řezy',   nazev:'Charakteristické příčné řezy SO 104',  soubor:PDF_BASE+'SO_104/D.104-5_Charakteristicke_pricne_rezy_PDPS.pdf'},
+     {typ:'🌉 Nový stav',    nazev:'Propustek - nový stav, úprava pozemků', soubor:PDF_BASE+'SO_104/D.104-6_Propustek_novy_stav_uprava_pozemky-104.pdf'},
+     {typ:'🚦 Sit. DZ',      nazev:'Situace dopravního značení SO 104',    soubor:PDF_BASE+'SO_104/D.104-7_Situace_dopravni_znaceni_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 104',              soubor:PDF_BASE+'SO_104/D.104-1_Technicka_zprava_PDPS_R2_06_2025.pdf'},
+   ]},
+  {id:'P2', km:3.07132, nazev:'Propustek P2 — km 3,071 (SO 105)',
+   vykresy: [
+     {typ:'📐 Situace',      nazev:'Situace SO 105',                       soubor:PDF_BASE+'SO_105/D.105-2_Situace_PDPS.pdf'},
+     {typ:'📊 Pod. profil',  nazev:'Podélný profil SO 105',                soubor:PDF_BASE+'SO_105/D.105-3_Podelne_profily_PDPS.pdf'},
+     {typ:'✂️ Vzor. řezy',   nazev:'Vzorové příčné řezy SO 105',          soubor:PDF_BASE+'SO_105/D.105-4_Vzorove_pricne_rezy_PDPS_R3_06_2025.pdf'},
+     {typ:'✂️ Char. řezy',   nazev:'Charakteristické příčné řezy SO 105',  soubor:PDF_BASE+'SO_105/D.105-5_Charakteristicke_pricne_rezy_PDPS.pdf'},
+     {typ:'🌉 Nový stav',    nazev:'Propustek - nový stav, úprava pozemků', soubor:PDF_BASE+'SO_105/D.105-6_Propustek_novy_stav_uprava_pozemky-105.pdf'},
+     {typ:'🚦 Sit. DZ',      nazev:'Situace dopravního značení SO 105',    soubor:PDF_BASE+'SO_105/D.105-7_Situace_dopravni_znaceni_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 105',              soubor:PDF_BASE+'SO_105/D.105-1_Technicka_zprava_PDPS_R2_06_2025.pdf'},
+   ]},
 ];
-// Pozn.: PROPUSTEK_TZ je společná TZ - pro Sulice ji nemáme, každý propustek má svou (viz tz výše)
 var PROPUSTEK_TZ = '';
 
 // PRACOVNÍ ŘEZY - PDPS Sulice je nemá, prázdná lookup mapa
@@ -2642,16 +2658,22 @@ function buildPropustky() {
 function openPropPanel(prop) {
   var pPos = realKmToLatLng(prop.km); if(pPos) showSelectionRing(L.latLng(pPos[0],pPos[1]));
   currentPropId = prop.id;
-  currentPropSrc = prop.soubor;
-  propPages = [
-    {soubor: prop.soubor, nazev: prop.nazev, typ: '📐 Situace'},
-  ];
-  // Pokud má propustek vlastní TZ (Sulice: každý SO má svou)
-  if(prop.tz) {
-    propPages.push({soubor: prop.tz, nazev: 'Tech. zpráva (' + prop.id + ')', typ: '📋 Tech. zpráva'});
-  } else if(PROPUSTEK_TZ) {
-    propPages.push({soubor: PROPUSTEK_TZ, nazev: 'Společná TZ propustků', typ: '📋 Tech. zpráva'});
+  // Sulice: každý propustek má pole 'vykresy' s kompletní sadou (situace, PP, vzor.řezy, ...)
+  // Fallback (Votice-style): pokud je definován jen 'soubor' + 'tz', sestav minimální pole
+  if(prop.vykresy && prop.vykresy.length) {
+    propPages = prop.vykresy.slice();
+  } else {
+    propPages = [
+      {soubor: prop.soubor, nazev: prop.nazev, typ: '📐 Situace'},
+    ];
+    if(prop.tz) {
+      propPages.push({soubor: prop.tz, nazev: 'Tech. zpráva (' + prop.id + ')', typ: '📋 Tech. zpráva'});
+    } else if(PROPUSTEK_TZ) {
+      propPages.push({soubor: PROPUSTEK_TZ, nazev: 'Společná TZ propustků', typ: '📋 Tech. zpráva'});
+    }
   }
+  // Aktualizuj globální currentPropSrc pro tlačítko 'Otevřít externě'
+  currentPropSrc = propPages[0].soubor;
   propPageIdx = 0;
 
   var panel = document.getElementById('prop-panel');
@@ -2686,8 +2708,21 @@ function renderPropPage(idx) {
   document.querySelectorAll('#prop-tabs .pdf-tab').forEach(function(b,i){ b.classList.toggle('active',i===idx); });
   var openWrap = document.getElementById('prop-open-wrap');
   var frameEl  = document.getElementById('prop-iframe');
-  if(openWrap) openWrap.style.display = 'none';
-  if(frameEl)  { frameEl.style.display = 'flex'; frameEl.src = p.soubor; }
+  // Aktualizuj titulek a label
+  var title = document.getElementById('prop-title');
+  if(title) title.textContent = p.nazev || p.typ || 'Propustek';
+  // Na iOS Safari iframe nezobrazí PDF - ukaž tlačítko "Otevřít externě"
+  if(isIOS()) {
+    if(frameEl) { frameEl.style.display = 'none'; frameEl.src = 'about:blank'; }
+    if(openWrap) {
+      openWrap.style.display = 'flex';
+      var lbl = document.getElementById('prop-open-label');
+      if(lbl) lbl.textContent = p.nazev;
+    }
+  } else {
+    if(openWrap) openWrap.style.display = 'none';
+    if(frameEl)  { frameEl.style.display = 'flex'; frameEl.src = p.soubor; }
+  }
 }
 
 function openPropPdfExternal() {
@@ -3221,6 +3256,8 @@ function renderGallery() {
     <div id="prop-open-wrap" style="flex:1;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:20px;">
       <div style="font-size:40px;">📄</div>
       <div id="prop-open-label" style="font-size:13px;color:var(--text2);text-align:center;"></div>
+      <button onclick="openPropPdfExternal()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px 28px;font-size:16px;font-weight:700;cursor:pointer;">📂 Otevřít PDF ↗</button>
+      <div style="font-size:11px;color:var(--text2);text-align:center;">Otevře se v novém záložce — scroll i zoom funguje</div>
     </div>
   </div>
   <!-- Poznámky propustku -->
