@@ -1802,15 +1802,32 @@ window.addEventListener('load', function() {
 // -- GitHub foto upload -------------------------------------------
 var GITHUB_REPO   = GITHUB_USER_REPO;     // 'Pripravar/Sulice---Zelivec'
 var GITHUB_BRANCH = GITHUB_BRANCH_PDF;    // 'main'
-// Token se ukládá v localStorage. Při prvním použití aplikace zeptá uživatele.
+// Token se ukládá v localStorage prohlížeče (per-zařízení).
+// Aktivace: 1) URL parametr ?gh_tok=github_pat_... (jednorázově, pak vyčištěno z URL)
+//           2) prompt při prvním pokusu o upload, pokud nic není
 function getGithubToken() {
+  // Pokus #1: URL parametr (aktivační odkaz pro nového uživatele)
+  try {
+    var url = new URLSearchParams(window.location.search);
+    var fromUrl = url.get('gh_tok');
+    if(fromUrl) {
+      localStorage.setItem('gh_tok_sulice', fromUrl);
+      // vyčistit URL aby token nezůstal v history / nešel sdílet omylem
+      history.replaceState(null, '', window.location.pathname + window.location.hash);
+      showToast('✅ GitHub token uložen do tohoto zařízení', 3000);
+      return fromUrl;
+    }
+  } catch(e) {}
+  // Pokus #2: localStorage
   var t = localStorage.getItem('gh_tok_sulice');
   if(!t) {
-    t = prompt('GitHub token pro upload fotek (vygeneruj na github.com → Settings → Developer settings → Fine-grained tokens. Repo: Sulice---Zelivec, oprávnění Contents: Read & Write):');
+    t = prompt('GitHub token pro upload fotek (Pripravar/Sulice---Zelivec, Contents: Read & Write):');
     if(t) localStorage.setItem('gh_tok_sulice', t);
   }
   return t || '';
 }
+// Při načtení aplikace zkus rovnou aktivovat token z URL (ať se nemusí čekat na 1. upload)
+window.addEventListener('load', function(){ try { getGithubToken(); } catch(e){} });
 
 // -- Burn-in metadata do fotky --------
 function burnInMetadata(dataUrl, km, author, callback) {
