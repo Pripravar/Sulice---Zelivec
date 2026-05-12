@@ -33,30 +33,47 @@
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
 body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
 
-#header { background:var(--panel); border-bottom:1px solid var(--border); padding:8px 10px; display:flex; align-items:center; gap:6px; z-index:1000; flex-shrink:0; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scroll-behavior:smooth; }
+#header {
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+  padding:10px 12px;
+  padding-top:calc(10px + env(safe-area-inset-top)); /* aby nebyla schovaná za iOS notch */
+  padding-left:calc(12px + env(safe-area-inset-left));
+  padding-right:calc(12px + env(safe-area-inset-right));
+  display:flex;
+  align-items:center;
+  gap:8px;
+  z-index:1000;
+  flex-shrink:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scroll-behavior:smooth;
+}
 #header::-webkit-scrollbar { height:3px; }
 #header::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 #header > * { flex-shrink:0; }
-#header h1 { font-size:14px; font-weight:700; flex:0 0 auto; max-width:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#header h1 { font-size:15px; font-weight:700; flex:0 0 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #header h1 .title-name, #header h1 .title-suffix { color:var(--accent); }
-#header button { padding:5px 8px !important; font-size:14px !important; }
-#km-display { background:var(--panel2); border:1px solid var(--accent); border-radius:8px; padding:3px 7px; font-size:12px; font-weight:700; color:var(--accent2); min-width:auto; text-align:center; white-space:nowrap; }
-#btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:5px 8px !important; font-size:12px !important; cursor:pointer; white-space:nowrap; }
+#header button { padding:7px 10px; font-size:15px; }
+#km-display { background:var(--panel2); border:1px solid var(--accent); border-radius:8px; padding:5px 9px; font-size:13px; font-weight:700; color:var(--accent2); min-width:auto; text-align:center; white-space:nowrap; }
+#btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px 10px; font-size:13px; cursor:pointer; white-space:nowrap; }
 
-/* Na úzkém telefonu (≤420 px) zmenšit / skrýt některé prvky aby vše bylo vidět najednou */
+/* Na úzkém telefonu (≤420 px) - jen mírná kompakce, tlačítka zůstávají dotykově použitelná */
 @media (max-width:420px) {
-  #header { gap:4px; padding:6px 8px; }
-  #header h1 { font-size:13px; }
+  #header { gap:6px; padding:9px 10px; padding-top:calc(9px + env(safe-area-inset-top)); }
+  #header h1 { font-size:14px; }
   #header h1 .title-prefix,
   #header h1 .title-suffix { display:none; }
-  #header button { padding:5px 6px !important; font-size:14px !important; }
-  #btn-layers { padding:5px 7px !important; font-size:11px !important; }
-  #user-badge { max-width:32px; padding:2px 3px !important; }
+  #header button { padding:6px 9px; font-size:15px; }
+  #btn-layers { padding:6px 9px; font-size:12px; }
+  #user-badge { max-width:36px; padding:3px 4px; }
   #user-badge span { display:none; }
-  #user-badge img { width:22px; height:22px; }
-  #km-display { font-size:11px; padding:3px 5px; }
+  #user-badge img { width:24px; height:24px; }
+  #km-display { font-size:12px; padding:4px 7px; }
 }
-/* Ještě menší telefony (≤360 px, např. iPhone SE 1st gen) */
+/* Hodně úzký telefon (≤360 px) - skryj titulek úplně */
 @media (max-width:360px) {
   #header h1 { display:none; }
 }
