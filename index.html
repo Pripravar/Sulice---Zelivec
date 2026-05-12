@@ -1716,7 +1716,7 @@ function renderDocPage(realKm) {
 // Zoom úroveň pro PDF.js canvas. 1.0 = fit-to-width, 1.25, 1.5, 2.0, …
 window._pdfZoom = 1.0;
 function pdfZoom(dir) {
-  var levels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0];
+  var levels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0];
   var cur = levels.indexOf(window._pdfZoom);
   if(cur === -1) cur = 2;
   cur = Math.max(0, Math.min(levels.length - 1, cur + dir));
