@@ -748,6 +748,10 @@ textarea.task-field { resize:none; min-height:80px; }
 .td-comment .cmt-head b { color:var(--accent2); font-weight:600; }
 .td-photos { display:flex; flex-wrap:wrap; gap:6px; }
 .td-photos img { width:64px; height:64px; object-fit:cover; border-radius:6px; cursor:pointer; }
+.tnm-photo-thumb { position:relative; width:64px; height:64px; border-radius:6px; overflow:hidden; background:var(--panel2); }
+.tnm-photo-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+.tnm-photo-thumb .x { position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.7); color:#fff; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer; font-weight:700; }
+.tnm-photo-thumb .pending { position:absolute; bottom:2px; left:2px; background:rgba(245,166,35,0.9); color:#0f3460; font-size:9px; padding:1px 4px; border-radius:3px; font-weight:700; }
 
 /* Lišta nahoře iPhone install hint */
 #ios-install-hint { position:fixed; bottom:0; left:0; right:0; background:var(--accent); color:#fff; padding:10px 14px; font-size:12px; text-align:center; z-index:5000; display:none; }
@@ -4283,11 +4287,13 @@ function escapeHtml(s) {
 // ── NOVÝ / EDIT ÚKOL ────────────────────────────────────────────────
 window.editingTaskId = null;
 window.newTaskAssignees = []; // [{uid,name}]
+window.taskFormPhotos  = []; // [{url} | {dataUrl, name, pending:true}]
 
 function openNewTaskModal(lat, lng, km) {
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
   window.editingTaskId = null;
   window.newTaskAssignees = [];
+  window.taskFormPhotos  = [];
   document.getElementById('tnm-title').textContent = '➕ Nový úkol';
   document.getElementById('tnm-id').value = '';
   document.getElementById('tnm-text-title').value = '';
@@ -4295,6 +4301,7 @@ function openNewTaskModal(lat, lng, km) {
   document.getElementById('tnm-deadline').value = '';
   document.getElementById('tnm-priority').value = 'normalni';
   document.getElementById('tnm-prof').value = '';
+  renderTnmPhotos();
   document.getElementById('tnm-lat').value = (lat !== null && lat !== undefined) ? lat : '';
   document.getElementById('tnm-lng').value = (lng !== null && lng !== undefined) ? lng : '';
   document.getElementById('tnm-km').value  = (km  !== null && km  !== undefined) ? km  : '';
@@ -4314,6 +4321,52 @@ function openNewTaskModal(lat, lng, km) {
 
 function closeNewTaskModal() {
   document.getElementById('task-new-modal').classList.remove('open');
+}
+
+// ── Fotky úkolu ─────────────────────────────────────────────────────
+function renderTnmPhotos() {
+  var box = document.getElementById('tnm-photos-preview');
+  if(!box) return;
+  box.innerHTML = window.taskFormPhotos.map(function(p, idx){
+    var src = p.url || p.dataUrl;
+    var pendBadge = p.pending ? '<div class="pending">⏳ nová</div>' : '';
+    return '<div class="tnm-photo-thumb">'
+      + '<img src="' + src + '" alt="">'
+      + '<div class="x" onclick="removeTnmPhoto(' + idx + ')">✕</div>'
+      + pendBadge
+      + '</div>';
+  }).join('');
+}
+
+function removeTnmPhoto(idx) {
+  window.taskFormPhotos.splice(idx, 1);
+  renderTnmPhotos();
+}
+
+function addTaskPhotos(input) {
+  var files = input.files;
+  if(!files || files.length === 0) return;
+  var processed = 0, total = files.length;
+  for(var i = 0; i < files.length; i++) {
+    (function(file){
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        compressImage(ev.target.result, function(compressed){
+          window.taskFormPhotos.push({
+            dataUrl: compressed,
+            name:    'task_foto_' + Date.now() + '_' + Math.random().toString(36).substr(2,5) + '.jpg',
+            pending: true
+          });
+          processed++;
+          if(processed === total) {
+            renderTnmPhotos();
+            input.value = '';
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+    })(files[i]);
+  }
 }
 
 function renderAssigneeChips() {
@@ -4366,28 +4419,52 @@ function saveTaskFromForm() {
     id = 't_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
   }
 
-  var task = {
-    id:         id,
-    title:      title,
-    text:       detail,
-    zadalUid:   existing ? existing.zadalUid  : window.currentUser.uid,
-    zadalName:  existing ? existing.zadalName : window.currentUser.name,
-    prirazeno:  window.newTaskAssignees.slice(),
-    termin:     deadline,
-    priorita:   priority,
-    profese:    profese,
-    stav:       existing ? existing.stav : 'open',
-    vytvoreno:  existing ? existing.vytvoreno : Date.now(),
-    upraveno:   Date.now(),
-    komentare:  existing ? (existing.komentare || null) : null
-  };
-  if(!isNaN(lat) && !isNaN(lng)) {
-    task.lat = lat; task.lng = lng;
-    if(!isNaN(km)) task.km = km;
+  // Připravit fotky: existující URL + nově nahrané přes GitHub
+  var existingUrls = window.taskFormPhotos.filter(function(p){ return p.url && !p.pending; }).map(function(p){ return p.url; });
+  var pendingItems = window.taskFormPhotos.filter(function(p){ return p.pending; }).map(function(p){ return {dataUrl: p.dataUrl, name: p.name}; });
+
+  function buildAndSaveTask(photoUrls) {
+    var task = {
+      id:         id,
+      title:      title,
+      text:       detail,
+      zadalUid:   existing ? existing.zadalUid  : window.currentUser.uid,
+      zadalName:  existing ? existing.zadalName : window.currentUser.name,
+      prirazeno:  window.newTaskAssignees.slice(),
+      termin:     deadline,
+      priorita:   priority,
+      profese:    profese,
+      stav:       existing ? existing.stav : 'open',
+      vytvoreno:  existing ? existing.vytvoreno : Date.now(),
+      upraveno:   Date.now(),
+      komentare:  existing ? (existing.komentare || null) : null,
+      photos:     photoUrls
+    };
+    if(!isNaN(lat) && !isNaN(lng)) {
+      task.lat = lat; task.lng = lng;
+      if(!isNaN(km)) task.km = km;
+    }
+    saveTaskToFirebase(task, function(){
+      closeNewTaskModal();
+    });
   }
-  saveTaskToFirebase(task, function(){
-    closeNewTaskModal();
-  });
+
+  if(pendingItems.length === 0) {
+    buildAndSaveTask(existingUrls);
+    return;
+  }
+
+  // Upload nových fotek na GitHub, pak teprve uložit úkol
+  showSync('⏳ Nahrávám fotky 0/' + pendingItems.length + '…');
+  uploadPhotosToGitHub(
+    pendingItems,
+    function(done, total){ showSync('⏳ Nahrávám fotky ' + done + '/' + total + '…'); },
+    function(uploadedUrls){
+      hideSync();
+      buildAndSaveTask(existingUrls.concat(uploadedUrls));
+    },
+    null // bez razítka pro úkoly
+  );
 }
 
 // ── DETAIL ÚKOLU ────────────────────────────────────────────────────
@@ -4420,6 +4497,20 @@ function renderTaskDetail(t) {
   + '<div><b>Profese:</b> ' + escapeHtml(profese) + (km ? (' &nbsp;&nbsp; <b>📍</b> ' + km) : '') + '</div>';
 
   document.getElementById('td-text').textContent = t.text || '(bez detailu)';
+
+  // Fotky
+  var photosBox = document.getElementById('td-photos');
+  if(photosBox) {
+    if(t.photos && t.photos.length > 0) {
+      photosBox.style.display = 'flex';
+      photosBox.innerHTML = t.photos.map(function(url){
+        return '<img src="' + url + '" loading="lazy" onclick="openPhotoFs(\'' + url + '\')">';
+      }).join('');
+    } else {
+      photosBox.style.display = 'none';
+      photosBox.innerHTML = '';
+    }
+  }
 
   // Tlačítka
   document.getElementById('td-btn-done').style.display   = t.stav === 'done' ? 'none' : '';
@@ -4480,6 +4571,9 @@ function editTask() {
   closeTaskDetail();
   window.editingTaskId = t.id;
   window.newTaskAssignees = (t.prirazeno || []).slice();
+  // Načti existující fotky úkolu jako URL záznamy
+  window.taskFormPhotos = (t.photos || []).map(function(url){ return {url: url}; });
+  renderTnmPhotos();
   document.getElementById('tnm-title').textContent = '✏️ Upravit úkol';
   document.getElementById('tnm-id').value = t.id;
   document.getElementById('tnm-text-title').value = t.title || '';
@@ -4934,6 +5028,11 @@ if('serviceWorker' in navigator) {
     <label>Profese / oddíl (volný text)</label>
     <input type="text" class="task-field" id="tnm-prof" placeholder="geodet / beton / výkop / asfalt / TDS …" list="prof-suggestions">
     <datalist id="prof-suggestions"></datalist>
+
+    <label>Fotky (volitelně)</label>
+    <div id="tnm-photos-preview" style="display:flex;flex-wrap:wrap;gap:6px;min-height:6px;"></div>
+    <button type="button" class="btn-secondary" style="font-size:13px;padding:8px;cursor:pointer;border-radius:8px;" onclick="document.getElementById('tnm-photo-input').click()">📷 Přidat fotku</button>
+    <input type="file" id="tnm-photo-input" accept="image/*" capture="environment" multiple style="display:none" onchange="addTaskPhotos(this)">
 
     <label>Přiřadit (1+ osob)</label>
     <div id="assignee-list"></div>
