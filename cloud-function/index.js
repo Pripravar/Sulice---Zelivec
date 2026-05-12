@@ -21,13 +21,17 @@
    v Firebase Console - dokud nepřekročíš limit, žádné poplatky.
    ════════════════════════════════════════════════════════════════ */
 
-const functions = require('firebase-functions');
+// firebase-functions v6 vyžaduje explicitní /v1 import pro starší API (.ref().onCreate())
+const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.database();
 
-exports.sendTaskNotifications = functions.database
+// Funkce musí běžet ve stejné oblasti jako Realtime DB (europe-west1).
+exports.sendTaskNotifications = functions
+  .region('europe-west1')
+  .database
   .ref('/notifikace_fronta/{id}')
   .onCreate(async (snap, context) => {
     const rec = snap.val();
