@@ -11,12 +11,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#16213e">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<!-- PWA manifest pro instalaci na plochu (iPhone: Sdílet → Přidat na plochu) -->
-<link rel="manifest" href="manifest.json">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Plugin pro otáčení mapy dvěma prsty (touch rotate jako v Google Maps) -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
@@ -616,106 +612,6 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .gallery-item-meta { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.6); color:#fff; font-size:9px; border-radius:0 0 6px 6px; padding:2px 4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gallery-note-badge { position:absolute; top:3px; right:3px; background:rgba(233,69,96,0.85); color:#fff; font-size:9px; border-radius:3px; padding:1px 4px; }
 #gallery-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:14px; }
-
-/* ═══════════════════════════════════════════════════════
-   AUTH GATE + UŽIVATEL + ÚKOLNÍČEK (přidáno 2026-05-12)
-   ═══════════════════════════════════════════════════════ */
-#auth-gate { position:fixed; inset:0; z-index:9000; background:linear-gradient(135deg,#0f3460 0%,#16213e 60%,#1a1a2e 100%); display:flex; align-items:center; justify-content:center; padding:20px; }
-#auth-gate.hide { display:none; }
-.auth-box { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:24px 22px; width:min(94vw,360px); display:flex; flex-direction:column; gap:14px; box-shadow:0 8px 28px rgba(0,0,0,0.4); }
-.auth-box h2 { font-size:18px; color:var(--accent2); text-align:center; }
-.auth-box p { font-size:13px; color:var(--text2); text-align:center; line-height:1.45; }
-.auth-google { background:#fff; color:#3c4043; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; }
-.auth-google:hover { background:#f1f3f4; }
-.auth-google img { width:18px; height:18px; }
-#auth-error { color:#ff6b81; font-size:12px; text-align:center; min-height:14px; }
-#user-badge { display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; max-width:140px; }
-#user-badge img { width:20px; height:20px; border-radius:50%; flex-shrink:0; }
-#user-badge span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
-/* Tlačítko úkoly + badge počtu */
-#btn-tasks { position:relative; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:15px; cursor:pointer; }
-#btn-tasks .task-badge { position:absolute; top:-5px; right:-5px; background:var(--accent); color:#fff; font-size:10px; font-weight:700; border-radius:9px; padding:1px 5px; min-width:16px; text-align:center; display:none; }
-#btn-tasks .task-badge.show { display:block; }
-
-/* Panel úkolů – posuvný shora */
-#tasks-panel { position:fixed; top:0; left:0; right:0; bottom:0; z-index:3500; background:var(--bg); display:none; flex-direction:column; }
-#tasks-panel.open { display:flex; }
-#tasks-header { background:var(--panel); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; align-items:center; gap:8px; flex-shrink:0; }
-#tasks-header h2 { flex:1; font-size:15px; color:var(--accent2); }
-#tasks-header button { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:13px; cursor:pointer; }
-#tasks-tabs { display:flex; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; }
-.tt { padding:10px 12px; font-size:12px; font-weight:700; color:var(--text2); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
-.tt.active { color:var(--accent2); border-bottom-color:var(--accent2); }
-.tt .cnt { display:inline-block; background:var(--panel2); color:var(--text); font-size:10px; padding:1px 6px; border-radius:8px; margin-left:4px; }
-#tasks-filter-bar { display:flex; gap:6px; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; }
-#tasks-filter-bar input { flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px 8px; font-size:12px; }
-#tasks-filter-bar button { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:13px; font-weight:700; cursor:pointer; }
-#tasks-list { flex:1; overflow-y:auto; padding:8px; -webkit-overflow-scrolling:touch; }
-.task-card { background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--accent2); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
-.task-card.done { opacity:0.6; border-left-color:var(--green); }
-.task-card.overdue { border-left-color:#ff6b6b; }
-.task-card .tc-title { font-size:14px; font-weight:700; color:var(--text); margin-bottom:4px; word-break:break-word; }
-.task-card .tc-meta { font-size:11px; color:var(--text2); display:flex; flex-wrap:wrap; gap:8px; }
-.task-card .tc-prof { display:inline-block; background:var(--panel2); color:var(--accent2); padding:1px 6px; border-radius:8px; font-size:10px; }
-.task-card .tc-prio-vys { color:#ff6b6b; font-weight:700; }
-.task-card .tc-prio-nor { color:var(--text2); }
-.task-card .tc-prio-niz { color:var(--text2); opacity:0.7; }
-.task-card.has-loc::before { content:'📍 '; font-size:11px; color:var(--accent); }
-#tasks-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:13px; }
-
-/* Modal nový/edit úkol */
-.task-modal { display:none; position:fixed; inset:0; z-index:4500; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
-.task-modal.open { display:flex; }
-.task-modal .tm-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,440px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
-.task-modal h3 { font-size:15px; color:var(--accent2); margin-bottom:4px; }
-.task-modal label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; }
-.task-field { width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 10px; font-size:14px; font-family:inherit; }
-.task-field:focus { outline:none; border-color:var(--accent2); }
-textarea.task-field { resize:none; min-height:80px; }
-.tf-row { display:flex; gap:8px; }
-.tf-row > * { flex:1; }
-.tm-buttons { display:flex; gap:8px; margin-top:6px; }
-.tm-buttons button { flex:1; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:700; cursor:pointer; }
-.btn-primary { background:var(--accent); color:#fff; }
-.btn-secondary { background:var(--panel2); color:var(--text2); border:1px solid var(--border) !important; }
-.btn-success { background:var(--green); color:#fff; }
-.btn-danger { background:#ff6b6b; color:#fff; }
-.assignee-chip { display:inline-flex; align-items:center; gap:5px; background:var(--panel2); border:1px solid var(--border); border-radius:14px; padding:3px 10px; font-size:12px; margin:2px; }
-.assignee-chip .x { cursor:pointer; color:var(--text2); margin-left:2px; }
-#assignee-list { display:flex; flex-wrap:wrap; min-height:30px; padding:4px 0; }
-
-/* Detail úkolu */
-#task-detail .td-status { display:inline-block; padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700; }
-#task-detail .td-status.open { background:#ffb44455; color:#ffb444; }
-#task-detail .td-status.done { background:#48bb7855; color:#48bb78; }
-#task-detail .td-info { font-size:12px; color:var(--text2); line-height:1.7; }
-#task-detail .td-info b { color:var(--text); font-weight:600; }
-#task-detail .td-text { background:var(--panel2); border-radius:8px; padding:10px; font-size:14px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
-#td-comments { display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto; padding:4px 0; }
-.td-comment { background:var(--panel2); border-radius:8px; padding:8px 10px; font-size:13px; }
-.td-comment .cmt-head { font-size:10px; color:var(--text2); margin-bottom:3px; }
-.td-comment .cmt-head b { color:var(--accent2); font-weight:600; }
-.td-photos { display:flex; flex-wrap:wrap; gap:6px; }
-.td-photos img { width:64px; height:64px; object-fit:cover; border-radius:6px; cursor:pointer; }
-
-/* Lišta nahoře iPhone install hint */
-#ios-install-hint { position:fixed; bottom:0; left:0; right:0; background:var(--accent); color:#fff; padding:10px 14px; font-size:12px; text-align:center; z-index:5000; display:none; }
-#ios-install-hint.show { display:block; }
-#ios-install-hint .close { float:right; cursor:pointer; padding:0 6px; }
-
-/* Markery úkolů na mapě */
-.task-marker { background:#ffb444; border:2px solid #fff; border-radius:50%; width:22px; height:22px; box-shadow:0 2px 6px rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700; }
-.task-marker.done { background:#48bb78; }
-.task-marker.overdue { background:#ff6b6b; animation:taskPulse 2s ease-in-out infinite; }
-@keyframes taskPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.15);} }
-
-/* Long-press chooser - poznámka vs. úkol */
-#lp-chooser { display:none; position:fixed; inset:0; z-index:4600; background:rgba(0,0,0,.65); align-items:center; justify-content:center; }
-#lp-chooser.open { display:flex; }
-#lp-chooser .box { background:var(--panel); border-radius:14px; padding:18px; width:min(92vw,320px); display:flex; flex-direction:column; gap:10px; }
-#lp-chooser h3 { font-size:14px; color:var(--accent2); text-align:center; }
-#lp-chooser button { border:none; border-radius:10px; padding:12px; font-size:14px; font-weight:700; cursor:pointer; }
 </style>
 
 <script>
