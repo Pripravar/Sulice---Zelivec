@@ -620,7 +620,7 @@ textarea.note-field { min-height:80px; resize:vertical; }
 /* ═══════════════════════════════════════════════════════
    AUTH GATE + UŽIVATEL + ÚKOLNÍČEK (přidáno 2026-05-12)
    ═══════════════════════════════════════════════════════ */
-#auth-gate { position:fixed; inset:0; z-index:9000; background:linear-gradient(135deg,#0f3460 0%,#16213e 60%,#1a1a2e 100%); display:flex; align-items:center; justify-content:center; padding:20px; }
+#auth-gate { position:fixed; top:0; right:0; bottom:0; left:0; z-index:9000; background:linear-gradient(135deg,#0f3460 0%,#16213e 60%,#1a1a2e 100%); display:flex; align-items:center; justify-content:center; padding:20px; }
 #auth-gate.hide { display:none; }
 .auth-box { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:24px 22px; width:min(94vw,360px); display:flex; flex-direction:column; gap:14px; box-shadow:0 8px 28px rgba(0,0,0,0.4); }
 .auth-box h2 { font-size:18px; color:var(--accent2); text-align:center; }
@@ -665,7 +665,7 @@ textarea.note-field { min-height:80px; resize:vertical; }
 #tasks-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:13px; }
 
 /* Modal nový/edit úkol */
-.task-modal { display:none; position:fixed; inset:0; z-index:4500; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
+.task-modal { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4500; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
 .task-modal.open { display:flex; }
 .task-modal .tm-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,440px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
 .task-modal h3 { font-size:15px; color:var(--accent2); margin-bottom:4px; }
@@ -711,7 +711,7 @@ textarea.task-field { resize:none; min-height:80px; }
 @keyframes taskPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.15);} }
 
 /* Long-press chooser - poznámka vs. úkol */
-#lp-chooser { display:none; position:fixed; inset:0; z-index:4600; background:rgba(0,0,0,.65); align-items:center; justify-content:center; }
+#lp-chooser { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4600; background:rgba(0,0,0,.65); align-items:center; justify-content:center; }
 #lp-chooser.open { display:flex; }
 #lp-chooser .box { background:var(--panel); border-radius:14px; padding:18px; width:min(92vw,320px); display:flex; flex-direction:column; gap:10px; }
 #lp-chooser h3 { font-size:14px; color:var(--accent2); text-align:center; }
@@ -930,7 +930,9 @@ var FIREBASE_VAPID_KEY = 'PLACEHOLDER_VAPID_KEY';
 // Firebase inicializace
 firebase.initializeApp(FIREBASE_CONFIG);
 var db = firebase.database();
-var fbAuth = firebase.auth();
+var fbAuth = null;
+try { fbAuth = firebase.auth(); }
+catch(e) { console.warn('Firebase Auth instance se nepodařilo vytvořit:', e); }
 // Messaging inicializujeme až po service worker registraci (níže v skriptu)
 var fbMessaging = null;
 
@@ -2054,7 +2056,12 @@ function initLongPress() {
       if(navigator.vibrate) navigator.vibrate(50);
       _lpLat = latlng.lat;
       _lpLng = latlng.lng;
-      // Spočítat km pro info (pokud existuje funkce gpsToKm)
+      // Legacy mód (bez Auth konfigurace) → rovnou poznámka, žádný chooser
+      if(typeof authConfigOk === 'function' && !authConfigOk()) {
+        lpChoose('note');
+        return;
+      }
+      // Spočítat km pro info
       var kmTxt = '';
       try {
         if(typeof gpsToKm === 'function') {
@@ -3571,6 +3578,741 @@ function renderGallery() {
       grid.appendChild(div);
     });
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//   ÚKOLNÍČEK + AUTH + PWA + PUSH (přidáno 2026-05-12)
+// ════════════════════════════════════════════════════════════════════
+
+// ── AUTH STATE ──────────────────────────────────────────────────────
+window.currentUser = null;     // {uid, name, email, photo}
+window.allUsers    = {};       // {uid: {uid,name,email,photo,fcmToken,lastSeen}}
+window.allTasks    = [];       // [taskObj, ...]
+window.profSet     = new Set();// známé profese (z existujících úkolů)
+
+function authConfigOk() {
+  return FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('PLACEHOLDER') === -1;
+}
+
+function showAuthError(msg) {
+  var el = document.getElementById('auth-error');
+  if(el) el.textContent = msg || '';
+}
+
+function signInWithGoogle() {
+  if(!authConfigOk()) {
+    showAuthError('⚠ Firebase Auth ještě není nakonfigurován. Doplň v index.html FIREBASE_CONFIG (apiKey, messagingSenderId, appId) z Firebase Console.');
+    return;
+  }
+  var provider = new firebase.auth.GoogleAuthProvider();
+  fbAuth.signInWithPopup(provider)
+    .catch(function(err){
+      console.error('Auth error:', err);
+      // Fallback na redirect (lepší pro mobile/PWA)
+      if(err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+        fbAuth.signInWithRedirect(provider);
+      } else {
+        showAuthError('Chyba přihlášení: ' + (err.message || err.code));
+      }
+    });
+}
+
+function signOutUser() {
+  fbAuth.signOut().then(function(){
+    location.reload();
+  });
+}
+
+function showUserMenu() {
+  if(!window.currentUser) return;
+  var msg = '👤 ' + window.currentUser.name + '\n' + window.currentUser.email;
+  if(confirm(msg + '\n\nOdhlásit se?')) signOutUser();
+}
+
+// Pokud Firebase Auth není nakonfigurován, nezablokuj appku –
+// jen schovej úkolníček (badge, panel) a appka pojede v "legacy" módu.
+if(!authConfigOk()) {
+  document.getElementById('auth-gate').classList.add('hide');
+  var taskBtn = document.getElementById('btn-tasks');
+  if(taskBtn) taskBtn.style.display = 'none';
+  var userBadge = document.getElementById('user-badge');
+  if(userBadge) userBadge.style.display = 'none';
+  console.warn('⚠ Firebase Auth/Messaging není nakonfigurován – úkolníček a notifikace jsou vypnuté. Doplň FIREBASE_CONFIG v index.html.');
+}
+
+// Hlavní auth listener - běží automaticky po načtení stránky
+if(fbAuth) fbAuth.onAuthStateChanged(function(user) {
+  if(!authConfigOk()) return; // skip - legacy mode
+  if(user) {
+    window.currentUser = {
+      uid:   user.uid,
+      name:  user.displayName || user.email.split('@')[0],
+      email: user.email,
+      photo: user.photoURL || ''
+    };
+    // Zapsat uživatele do DB (pro picker přiřazení)
+    var ref = db.ref('uzivatele/' + user.uid);
+    ref.update({
+      uid:      user.uid,
+      name:     window.currentUser.name,
+      email:    window.currentUser.email,
+      photo:    window.currentUser.photo,
+      lastSeen: Date.now()
+    });
+    // UI - badge
+    document.getElementById('user-photo').src = window.currentUser.photo || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23a0aec0%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z%22/></svg>';
+    document.getElementById('user-name').textContent = window.currentUser.name.split(' ')[0];
+    // Sync s localStorage author (kompatibilita se starým systémem poznámek)
+    localStorage.setItem('noteAuthor', window.currentUser.name);
+
+    // Skrýt auth gate
+    document.getElementById('auth-gate').classList.add('hide');
+
+    // Spustit načítání úkolů, uživatelů, FCM
+    loadAllUsers();
+    loadTasks();
+    setupFcmIfPossible();
+
+    // iPhone hint pokud není v PWA módu
+    maybeShowIosHint();
+  } else {
+    // Není přihlášen
+    document.getElementById('auth-gate').classList.remove('hide');
+    if(!authConfigOk()) {
+      showAuthError('⚠ Firebase Auth ještě není nakonfigurován v index.html. Aplikace pojede v omezeném režimu (bez úkolníčku a notifikací). Doplň hodnoty FIREBASE_CONFIG a obnov stránku.');
+    }
+  }
+});
+
+// ── UŽIVATELÉ - načtení seznamu pro assignee picker ─────────────────
+function loadAllUsers() {
+  db.ref('uzivatele').on('value', function(snap) {
+    window.allUsers = snap.val() || {};
+    rebuildAssigneePicker();
+  });
+}
+
+function rebuildAssigneePicker() {
+  var sel = document.getElementById('tnm-assignee-pick');
+  if(!sel) return;
+  // Vyčistit a doplnit
+  sel.innerHTML = '<option value="">+ Vyber osobu…</option>';
+  Object.keys(window.allUsers).forEach(function(uid){
+    var u = window.allUsers[uid];
+    if(!u || !u.name) return;
+    var opt = document.createElement('option');
+    opt.value = uid;
+    opt.textContent = u.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ── ÚKOLY: data layer ───────────────────────────────────────────────
+function loadTasks() {
+  db.ref('ukoly').on('value', function(snap) {
+    var val = snap.val() || {};
+    window.allTasks = Object.keys(val).map(function(id){ return val[id]; });
+    // Sběr profesí
+    window.profSet = new Set();
+    window.allTasks.forEach(function(t){ if(t.profese) window.profSet.add(t.profese); });
+    rebuildProfSuggestions();
+    renderTasksList();
+    renderTasksOnMap();
+    updateTaskBadge();
+    // Pokud je otevřený detail, refresh ho
+    if(window.openTaskId) {
+      var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+      if(t) renderTaskDetail(t);
+    }
+  });
+}
+
+function rebuildProfSuggestions() {
+  var dl = document.getElementById('prof-suggestions');
+  if(!dl) return;
+  dl.innerHTML = '';
+  Array.from(window.profSet).sort().forEach(function(p){
+    var o = document.createElement('option');
+    o.value = p;
+    dl.appendChild(o);
+  });
+}
+
+function saveTaskToFirebase(task, cb) {
+  showSync('⏳ Ukládám úkol…');
+  db.ref('ukoly/' + task.id).set(task).then(function(){
+    hideSync();
+    showToast('✅ Úkol uložen', 1500);
+    // Notifikační záznam pro Cloud Function
+    sendTaskNotificationRequest(task, 'novy');
+    if(cb) cb();
+  }).catch(function(e){
+    console.error('Chyba uložení úkolu:', e);
+    hideSync();
+    showToast('❌ Chyba uložení', 2500);
+  });
+}
+
+function deleteTaskFromFirebase(taskId, cb) {
+  showSync('⏳ Mažu úkol…');
+  db.ref('ukoly/' + taskId).remove().then(function(){
+    hideSync();
+    showToast('🗑️ Smazáno', 1500);
+    if(cb) cb();
+  }).catch(function(e){
+    hideSync();
+    showToast('❌ Chyba mazání', 2500);
+  });
+}
+
+function sendTaskNotificationRequest(task, typ) {
+  // Cloud Function (viz cloud-function/) sleduje uzel /notifikace_fronta
+  // a pošle FCM zprávu příslušným uživatelům. Pokud Cloud Function neexistuje,
+  // notifikace prostě nepřijdou - úkolníček ale funguje normálně.
+  if(!task || !task.id) return;
+  var rec = {
+    id:         'n_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+    taskId:     task.id,
+    typ:        typ, // 'novy' | 'hotovo' | 'komentar'
+    title:      task.title || '',
+    zadalUid:   task.zadalUid,
+    zadalName:  task.zadalName,
+    prirazeno:  task.prirazeno || [],
+    time:       Date.now()
+  };
+  db.ref('notifikace_fronta/' + rec.id).set(rec).catch(function(e){
+    console.warn('Notifikace nemohly být zařazeny:', e);
+  });
+}
+
+// ── HELPER: GPS → km ────────────────────────────────────────────────
+function gpsToKm(lat, lng) {
+  try {
+    var nr = nearestOnRoute(lat, lng);
+    return gpxCumToRealKm(nr.cum);
+  } catch(e) { return null; }
+}
+
+// ── ÚKOLY: filtrování a rendering seznamu ───────────────────────────
+window.currentTaskTab = 'moje';
+function setTaskTab(tab) {
+  window.currentTaskTab = tab;
+  document.querySelectorAll('#tasks-tabs .tt').forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('data-tab') === tab);
+  });
+  renderTasksList();
+}
+function clearTaskFilter() {
+  document.getElementById('tasks-filter-prof').value = '';
+  renderTasksList();
+}
+
+function filterTasksForTab(tab) {
+  var uid = window.currentUser ? window.currentUser.uid : null;
+  var profFilter = (document.getElementById('tasks-filter-prof') || {}).value || '';
+  profFilter = profFilter.trim().toLowerCase();
+  var now = Date.now();
+  return window.allTasks.filter(function(t) {
+    if(profFilter && (!t.profese || t.profese.toLowerCase().indexOf(profFilter) === -1)) return false;
+    if(tab === 'moje') {
+      if(t.stav === 'done') return false;
+      return Array.isArray(t.prirazeno) && t.prirazeno.some(function(p){ return p.uid === uid; });
+    }
+    if(tab === 'zadane') {
+      if(t.stav === 'done') return false;
+      return t.zadalUid === uid;
+    }
+    if(tab === 'po-terminu') {
+      if(t.stav === 'done') return false;
+      if(!t.termin) return false;
+      return new Date(t.termin).getTime() < now;
+    }
+    if(tab === 'hotove') {
+      return t.stav === 'done';
+    }
+    if(tab === 'vsechny') {
+      return t.stav !== 'done';
+    }
+    return true;
+  });
+}
+
+function renderTasksList() {
+  // Aktualizovat čísla u záložek
+  ['moje','zadane','po-terminu','vsechny','hotove'].forEach(function(tab){
+    var el = document.getElementById('tc-' + tab);
+    if(el) el.textContent = filterTasksForTab(tab).length;
+  });
+  rebuildProfSuggestions();
+
+  var list = document.getElementById('tasks-list');
+  if(!list) return;
+  var items = filterTasksForTab(window.currentTaskTab);
+  // Třídění: po termínu nejdřív, pak podle termínu, pak podle data vytvoření
+  items.sort(function(a,b){
+    if(a.stav !== b.stav) return a.stav === 'done' ? 1 : -1;
+    var ta = a.termin ? new Date(a.termin).getTime() : Infinity;
+    var tb = b.termin ? new Date(b.termin).getTime() : Infinity;
+    if(ta !== tb) return ta - tb;
+    return (b.vytvoreno || 0) - (a.vytvoreno || 0);
+  });
+  if(items.length === 0) {
+    list.innerHTML = '<div id="tasks-empty">Žádné úkoly v této kategorii.</div>';
+    return;
+  }
+  var now = Date.now();
+  list.innerHTML = items.map(function(t){
+    var overdue = (t.stav !== 'done' && t.termin && new Date(t.termin).getTime() < now);
+    var cls = 'task-card' + (t.stav === 'done' ? ' done' : '') + (overdue ? ' overdue' : '') + (t.lat ? ' has-loc' : '');
+    var prirazeno = (t.prirazeno || []).map(function(p){ return p.name; }).join(', ') || '—';
+    var termin = t.termin ? new Date(t.termin).toLocaleDateString('cs-CZ') : '';
+    var prioCls = 'tc-prio-nor';
+    var prioLbl = '';
+    if(t.priorita === 'vysoka') { prioCls = 'tc-prio-vys'; prioLbl = '🔴 Vysoká'; }
+    else if(t.priorita === 'nizka') { prioCls = 'tc-prio-niz'; prioLbl = '⚪ Nízká'; }
+    var profHtml = t.profese ? '<span class="tc-prof">' + escapeHtml(t.profese) + '</span>' : '';
+    var km = (t.km !== undefined && t.km !== null) ? ('km ' + (typeof fmtKm === 'function' ? fmtKm(t.km) : t.km.toFixed(3))) : '';
+    var cmtCount = t.komentare ? Object.keys(t.komentare).length : 0;
+    return '<div class="' + cls + '" onclick="openTaskDetail(\'' + t.id + '\')">'
+      + '<div class="tc-title">' + escapeHtml(t.title || '(bez názvu)') + '</div>'
+      + '<div class="tc-meta">'
+      +   profHtml
+      +   '<span>👥 ' + escapeHtml(prirazeno) + '</span>'
+      +   (termin ? '<span>📅 ' + termin + '</span>' : '')
+      +   (km ? '<span>📍 ' + km + '</span>' : '')
+      +   (prioLbl ? '<span class="' + prioCls + '">' + prioLbl + '</span>' : '')
+      +   (cmtCount ? '<span>💬 ' + cmtCount + '</span>' : '')
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function updateTaskBadge() {
+  var uid = window.currentUser ? window.currentUser.uid : null;
+  if(!uid) return;
+  var mine = window.allTasks.filter(function(t){
+    return t.stav !== 'done' && Array.isArray(t.prirazeno) && t.prirazeno.some(function(p){ return p.uid === uid; });
+  }).length;
+  var badge = document.getElementById('task-badge');
+  if(!badge) return;
+  badge.textContent = mine;
+  badge.classList.toggle('show', mine > 0);
+}
+
+function openTasksPanel() {
+  if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  document.getElementById('tasks-panel').classList.add('open');
+  renderTasksList();
+}
+function closeTasksPanel() {
+  document.getElementById('tasks-panel').classList.remove('open');
+}
+
+function escapeHtml(s) {
+  if(s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+// ── NOVÝ / EDIT ÚKOL ────────────────────────────────────────────────
+window.editingTaskId = null;
+window.newTaskAssignees = []; // [{uid,name}]
+
+function openNewTaskModal(lat, lng, km) {
+  if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  window.editingTaskId = null;
+  window.newTaskAssignees = [];
+  document.getElementById('tnm-title').textContent = '➕ Nový úkol';
+  document.getElementById('tnm-id').value = '';
+  document.getElementById('tnm-text-title').value = '';
+  document.getElementById('tnm-text-detail').value = '';
+  document.getElementById('tnm-deadline').value = '';
+  document.getElementById('tnm-priority').value = 'normalni';
+  document.getElementById('tnm-prof').value = '';
+  document.getElementById('tnm-lat').value = (lat !== null && lat !== undefined) ? lat : '';
+  document.getElementById('tnm-lng').value = (lng !== null && lng !== undefined) ? lng : '';
+  document.getElementById('tnm-km').value  = (km  !== null && km  !== undefined) ? km  : '';
+  renderAssigneeChips();
+  var locInfo = document.getElementById('tnm-loc-info');
+  var locLbl  = document.getElementById('tnm-loc-label');
+  if(lat !== null && lat !== undefined) {
+    locLbl.style.display = 'block';
+    locInfo.style.display = 'block';
+    locInfo.textContent = (km !== null && km !== undefined) ? ('km ' + (typeof fmtKm === 'function' ? fmtKm(km) : km.toFixed(3))) : (lat.toFixed(5) + ', ' + lng.toFixed(5));
+  } else {
+    locLbl.style.display = 'none';
+    locInfo.style.display = 'none';
+  }
+  document.getElementById('task-new-modal').classList.add('open');
+}
+
+function closeNewTaskModal() {
+  document.getElementById('task-new-modal').classList.remove('open');
+}
+
+function renderAssigneeChips() {
+  var box = document.getElementById('assignee-list');
+  if(!box) return;
+  if(window.newTaskAssignees.length === 0) {
+    box.innerHTML = '<div style="color:var(--text2);font-size:12px;">Nikdo přiřazen</div>';
+    return;
+  }
+  box.innerHTML = window.newTaskAssignees.map(function(a, idx){
+    return '<span class="assignee-chip">' + escapeHtml(a.name) + ' <span class="x" onclick="removeAssignee(' + idx + ')">✕</span></span>';
+  }).join('');
+}
+function addAssigneeFromPick() {
+  var sel = document.getElementById('tnm-assignee-pick');
+  var uid = sel.value;
+  if(!uid) return;
+  var u = window.allUsers[uid];
+  if(!u) return;
+  if(window.newTaskAssignees.some(function(a){ return a.uid === uid; })) {
+    sel.value = '';
+    return;
+  }
+  window.newTaskAssignees.push({uid: uid, name: u.name});
+  sel.value = '';
+  renderAssigneeChips();
+}
+function removeAssignee(idx) {
+  window.newTaskAssignees.splice(idx, 1);
+  renderAssigneeChips();
+}
+
+function saveTaskFromForm() {
+  if(!window.currentUser) return;
+  var title = document.getElementById('tnm-text-title').value.trim();
+  if(!title) { showToast('Zadej krátký název úkolu', 2000); return; }
+  var detail = document.getElementById('tnm-text-detail').value.trim();
+  var deadline = document.getElementById('tnm-deadline').value || '';
+  var priority = document.getElementById('tnm-priority').value || 'normalni';
+  var profese = document.getElementById('tnm-prof').value.trim();
+  var lat = parseFloat(document.getElementById('tnm-lat').value);
+  var lng = parseFloat(document.getElementById('tnm-lng').value);
+  var km  = parseFloat(document.getElementById('tnm-km').value);
+
+  var id, existing = null;
+  if(window.editingTaskId) {
+    id = window.editingTaskId;
+    existing = window.allTasks.filter(function(t){ return t.id === id; })[0];
+  } else {
+    id = 't_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  }
+
+  var task = {
+    id:         id,
+    title:      title,
+    text:       detail,
+    zadalUid:   existing ? existing.zadalUid  : window.currentUser.uid,
+    zadalName:  existing ? existing.zadalName : window.currentUser.name,
+    prirazeno:  window.newTaskAssignees.slice(),
+    termin:     deadline,
+    priorita:   priority,
+    profese:    profese,
+    stav:       existing ? existing.stav : 'open',
+    vytvoreno:  existing ? existing.vytvoreno : Date.now(),
+    upraveno:   Date.now(),
+    komentare:  existing ? (existing.komentare || null) : null
+  };
+  if(!isNaN(lat) && !isNaN(lng)) {
+    task.lat = lat; task.lng = lng;
+    if(!isNaN(km)) task.km = km;
+  }
+  saveTaskToFirebase(task, function(){
+    closeNewTaskModal();
+  });
+}
+
+// ── DETAIL ÚKOLU ────────────────────────────────────────────────────
+window.openTaskId = null;
+
+function openTaskDetail(id) {
+  var t = window.allTasks.filter(function(x){ return x.id === id; })[0];
+  if(!t) return;
+  window.openTaskId = id;
+  renderTaskDetail(t);
+  document.getElementById('task-detail').classList.add('open');
+}
+
+function renderTaskDetail(t) {
+  document.getElementById('td-title').textContent = t.title || '(bez názvu)';
+  var st = document.getElementById('td-status');
+  st.textContent = t.stav === 'done' ? '✅ Hotovo' : '🟡 Otevřeno';
+  st.className = 'td-status ' + (t.stav === 'done' ? 'done' : 'open');
+
+  var prirazeno = (t.prirazeno || []).map(function(p){ return p.name; }).join(', ') || '—';
+  var termin = t.termin ? new Date(t.termin).toLocaleDateString('cs-CZ') : '—';
+  var profese = t.profese || '—';
+  var prio = ({vysoka:'🔴 Vysoká', normalni:'⚪ Normální', nizka:'⚫ Nízká'})[t.priorita] || t.priorita || '';
+  var vytvoreno = t.vytvoreno ? new Date(t.vytvoreno).toLocaleString('cs-CZ') : '—';
+  var km = (t.km !== undefined && t.km !== null) ? ('km ' + (typeof fmtKm === 'function' ? fmtKm(t.km) : t.km.toFixed(3))) : '';
+  document.getElementById('td-info').innerHTML =
+    '<div><b>Zadal:</b> ' + escapeHtml(t.zadalName || '') + ' (' + vytvoreno + ')</div>'
+  + '<div><b>Přiřazeno:</b> ' + escapeHtml(prirazeno) + '</div>'
+  + '<div><b>Termín:</b> ' + termin + ' &nbsp;&nbsp; <b>Priorita:</b> ' + prio + '</div>'
+  + '<div><b>Profese:</b> ' + escapeHtml(profese) + (km ? (' &nbsp;&nbsp; <b>📍</b> ' + km) : '') + '</div>';
+
+  document.getElementById('td-text').textContent = t.text || '(bez detailu)';
+
+  // Tlačítka
+  document.getElementById('td-btn-done').style.display   = t.stav === 'done' ? 'none' : '';
+  document.getElementById('td-btn-reopen').style.display = t.stav === 'done' ? '' : 'none';
+  document.getElementById('td-btn-map').style.display    = (t.lat !== undefined && t.lat !== null) ? '' : 'none';
+
+  // Komentáře
+  renderComments(t);
+}
+
+function closeTaskDetail() {
+  document.getElementById('task-detail').classList.remove('open');
+  window.openTaskId = null;
+}
+
+function showTaskOnMap() {
+  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+  if(!t || t.lat === undefined) return;
+  closeTaskDetail();
+  closeTasksPanel();
+  map.setView([t.lat, t.lng], 18);
+}
+
+function markTaskDone() {
+  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+  if(!t) return;
+  t.stav = 'done';
+  t.hotovo = Date.now();
+  t.hotovilUid  = window.currentUser.uid;
+  t.hotovilName = window.currentUser.name;
+  db.ref('ukoly/' + t.id).update({
+    stav: 'done',
+    hotovo: Date.now(),
+    hotovilUid: window.currentUser.uid,
+    hotovilName: window.currentUser.name
+  }).then(function(){
+    showToast('✅ Úkol označen jako hotový', 1500);
+    sendTaskNotificationRequest(t, 'hotovo');
+  });
+}
+
+function reopenTask() {
+  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+  if(!t) return;
+  db.ref('ukoly/' + t.id).update({
+    stav: 'open',
+    hotovo: null,
+    hotovilUid: null,
+    hotovilName: null
+  }).then(function(){
+    showToast('↩ Úkol znovu otevřen', 1500);
+  });
+}
+
+function editTask() {
+  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+  if(!t) return;
+  closeTaskDetail();
+  window.editingTaskId = t.id;
+  window.newTaskAssignees = (t.prirazeno || []).slice();
+  document.getElementById('tnm-title').textContent = '✏️ Upravit úkol';
+  document.getElementById('tnm-id').value = t.id;
+  document.getElementById('tnm-text-title').value = t.title || '';
+  document.getElementById('tnm-text-detail').value = t.text || '';
+  document.getElementById('tnm-deadline').value = t.termin || '';
+  document.getElementById('tnm-priority').value = t.priorita || 'normalni';
+  document.getElementById('tnm-prof').value = t.profese || '';
+  document.getElementById('tnm-lat').value = (t.lat !== undefined && t.lat !== null) ? t.lat : '';
+  document.getElementById('tnm-lng').value = (t.lng !== undefined && t.lng !== null) ? t.lng : '';
+  document.getElementById('tnm-km').value  = (t.km  !== undefined && t.km  !== null) ? t.km  : '';
+  renderAssigneeChips();
+  var locInfo = document.getElementById('tnm-loc-info');
+  var locLbl  = document.getElementById('tnm-loc-label');
+  if(t.lat !== undefined && t.lat !== null) {
+    locLbl.style.display = 'block';
+    locInfo.style.display = 'block';
+    locInfo.textContent = (t.km !== undefined && t.km !== null) ? ('km ' + (typeof fmtKm === 'function' ? fmtKm(t.km) : t.km.toFixed(3))) : (t.lat.toFixed(5) + ', ' + t.lng.toFixed(5));
+  } else {
+    locLbl.style.display = 'none';
+    locInfo.style.display = 'none';
+  }
+  document.getElementById('task-new-modal').classList.add('open');
+}
+
+function deleteTaskConfirm() {
+  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+  if(!t) return;
+  if(!confirm('Smazat úkol "' + (t.title || '') + '"? Tato akce je nevratná.')) return;
+  deleteTaskFromFirebase(t.id, function(){ closeTaskDetail(); });
+}
+
+// ── KOMENTÁŘE ───────────────────────────────────────────────────────
+function renderComments(t) {
+  var box = document.getElementById('td-comments');
+  if(!box) return;
+  var cmts = t.komentare || {};
+  var arr = Object.keys(cmts).map(function(k){ return cmts[k]; })
+    .sort(function(a,b){ return (a.time || 0) - (b.time || 0); });
+  if(arr.length === 0) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:6px 0;">Žádné komentáře.</div>';
+    return;
+  }
+  box.innerHTML = arr.map(function(c){
+    var dt = c.time ? new Date(c.time).toLocaleString('cs-CZ') : '';
+    return '<div class="td-comment"><div class="cmt-head"><b>' + escapeHtml(c.name) + '</b> · ' + dt + '</div><div>' + escapeHtml(c.text) + '</div></div>';
+  }).join('');
+  // Scroll dolů
+  box.scrollTop = box.scrollHeight;
+}
+
+function addComment() {
+  var input = document.getElementById('td-cmt-input');
+  var txt = input.value.trim();
+  if(!txt) return;
+  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
+  if(!t || !window.currentUser) return;
+  var cid = 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
+  var cmt = {
+    id:   cid,
+    uid:  window.currentUser.uid,
+    name: window.currentUser.name,
+    text: txt,
+    time: Date.now()
+  };
+  db.ref('ukoly/' + t.id + '/komentare/' + cid).set(cmt).then(function(){
+    input.value = '';
+    sendTaskNotificationRequest(t, 'komentar');
+  });
+}
+
+// ── ÚKOLY: vrstva na mapě ───────────────────────────────────────────
+window.tasksLayer = null;
+window.tasksLayerVisible = true;
+window.taskSubLayers = {open: true, done: false};
+
+function renderTasksOnMap() {
+  if(!window.tasksLayer) {
+    window.tasksLayer = L.layerGroup();
+    if(typeof layerGroups !== 'undefined') layerGroups.tasks = window.tasksLayer;
+    if(window.tasksLayerVisible && map) window.tasksLayer.addTo(map);
+  }
+  window.tasksLayer.clearLayers();
+  var now = Date.now();
+  window.allTasks.forEach(function(t){
+    if(t.lat === undefined || t.lat === null) return;
+    var isDone = t.stav === 'done';
+    if(isDone && !window.taskSubLayers.done) return;
+    if(!isDone && !window.taskSubLayers.open) return;
+    var overdue = !isDone && t.termin && new Date(t.termin).getTime() < now;
+    var cls = 'task-marker' + (isDone ? ' done' : '') + (overdue ? ' overdue' : '');
+    var icon = L.divIcon({
+      className: '',
+      html: '<div class="' + cls + '">' + (isDone ? '✓' : '!') + '</div>',
+      iconSize: [22,22],
+      iconAnchor: [11,11]
+    });
+    var m = L.marker([t.lat, t.lng], {icon: icon, zIndexOffset: 1500});
+    m.on('click', function(){ openTaskDetail(t.id); });
+    window.tasksLayer.addLayer(m);
+  });
+}
+
+function toggleTasksLayer(visible) {
+  window.tasksLayerVisible = visible;
+  if(!window.tasksLayer) return;
+  if(visible) {
+    if(!map.hasLayer(window.tasksLayer)) window.tasksLayer.addTo(map);
+  } else {
+    if(map.hasLayer(window.tasksLayer)) map.removeLayer(window.tasksLayer);
+  }
+}
+function toggleTaskSubLayer(which, visible) {
+  window.taskSubLayers[which] = visible;
+  renderTasksOnMap();
+}
+
+// ── PWA: service worker registrace ──────────────────────────────────
+function registerServiceWorker() {
+  if(!('serviceWorker' in navigator)) return Promise.reject('SW nepodporován');
+  return navigator.serviceWorker.register('service-worker.js')
+    .then(function(reg){
+      console.log('Service worker zaregistrován:', reg.scope);
+      return reg;
+    })
+    .catch(function(err){
+      console.warn('SW registrace selhala:', err);
+    });
+}
+
+// ── PUSH: FCM token získání + uložení ───────────────────────────────
+function setupFcmIfPossible() {
+  if(!authConfigOk()) return;
+  if(!('serviceWorker' in navigator) || !('Notification' in window)) {
+    console.warn('Notifikace nejsou v tomto prohlížeči podporovány.');
+    return;
+  }
+  try {
+    fbMessaging = firebase.messaging();
+  } catch(e) {
+    console.warn('Firebase Messaging nemůže být inicializován:', e);
+    return;
+  }
+  // Registrovat SW (Firebase Messaging chce vlastní SW soubor, ale my registrujeme společný)
+  registerServiceWorker().then(function(reg){
+    if(!reg || !fbMessaging) return;
+    // Požádat o povolení
+    Notification.requestPermission().then(function(perm){
+      if(perm !== 'granted') {
+        console.log('Notifikace nepovoleny:', perm);
+        return;
+      }
+      // Získat FCM token
+      fbMessaging.getToken({vapidKey: FIREBASE_VAPID_KEY, serviceWorkerRegistration: reg})
+        .then(function(token){
+          if(!token) { console.warn('FCM token prázdný'); return; }
+          // Uložit token do DB pod uživatele
+          if(window.currentUser) {
+            db.ref('uzivatele/' + window.currentUser.uid + '/fcmToken').set(token);
+          }
+        })
+        .catch(function(err){
+          console.warn('FCM token error:', err);
+        });
+    });
+    // Foreground zpráva
+    fbMessaging.onMessage(function(payload){
+      console.log('FCM foreground:', payload);
+      var title = (payload.notification && payload.notification.title) || 'Notifikace';
+      var body  = (payload.notification && payload.notification.body)  || '';
+      showToast('🔔 ' + title + ': ' + body, 4000);
+    });
+  });
+}
+
+// ── iPhone install hint ─────────────────────────────────────────────
+function isIos() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+function isStandalone() {
+  return window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+function maybeShowIosHint() {
+  if(localStorage.getItem('iosHintDismissed') === '1') return;
+  if(!isIos()) return;
+  if(isStandalone()) return;
+  setTimeout(function(){
+    document.getElementById('ios-install-hint').classList.add('show');
+  }, 1500);
+}
+function dismissIosHint() {
+  localStorage.setItem('iosHintDismissed', '1');
+  document.getElementById('ios-install-hint').classList.remove('show');
+}
+
+// SW registrace běží i pro PWA cache (i bez auth/FCM)
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){ registerServiceWorker(); });
 }
 
 </script>
