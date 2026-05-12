@@ -744,12 +744,33 @@ document.addEventListener('touchend', function(e){
 </head>
 <body>
 
+<!-- ═════════════ AUTH GATE - viditelný dokud uživatel není přihlášen ═════════════ -->
+<div id="auth-gate">
+  <div class="auth-box">
+    <h2>🗺️ Sulice – Želivec</h2>
+    <p>Pro vstup do aplikace se přihlas Googlem.<br>(používá se pro úkoly a notifikace)</p>
+    <button class="auth-google" onclick="signInWithGoogle()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+      <span>Přihlásit se Googlem</span>
+    </button>
+    <div id="auth-error"></div>
+  </div>
+</div>
+
+<!-- iPhone instalační hint -->
+<div id="ios-install-hint">
+  <span class="close" onclick="dismissIosHint()">✕</span>
+  Pro notifikace přidej appku na plochu: <b>Sdílet ⤴ → Přidat na plochu</b>
+</div>
+
 <div id="header">
   <h1>II/603 <span>Sulice – Želivec</span></h1>
   <div id="km-display">km –</div>
+  <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
+  <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span></div>
   <button id="btn-layers" onclick="toggleLayers()">☰ Vrstvy</button>
 </div>
 
@@ -811,6 +832,18 @@ document.addEventListener('touchend', function(e){
   <div class="layer-row" style="padding-left:12px;">
     <label style="font-size:12px;" id="notes-lbl-6">↳ 🏷️ Vlastní</label>
     <label class="toggle"><input type="checkbox" id="lyr-notes6" onchange="toggleLayer('notes6',this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="layer-row">
+    <label>✅ Úkoly</label>
+    <label class="toggle"><input type="checkbox" id="lyr-tasks" checked onchange="toggleTasksLayer(this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="layer-row" style="padding-left:12px;">
+    <label style="font-size:12px;">↳ 🟡 Otevřené</label>
+    <label class="toggle"><input type="checkbox" id="lyr-tasks-open" checked onchange="toggleTaskSubLayer('open',this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="layer-row" style="padding-left:12px;">
+    <label style="font-size:12px;">↳ 🟢 Hotové</label>
+    <label class="toggle"><input type="checkbox" id="lyr-tasks-done" onchange="toggleTaskSubLayer('done',this.checked)"><span class="toggle-slider"></span></label>
   </div>
   <div class="layer-row">
     <label>🔵 Propustky (SO 104, SO 105)</label>
@@ -1987,29 +2020,56 @@ function clearSelectionRing() {
   selectedRingMarker = null;
 }
 
-// ── Dlouhý stisk mapy = nová poznámka ─────────────────
+// ── Dlouhý stisk mapy = výběr Poznámka / Úkol ─────────
+var _lpLat = null, _lpLng = null;
 function initLongPress() {
   map.on('mousedown touchstart', function(e) {
     var latlng = e.latlng;
     longPressTimer = setTimeout(function() {
       if(navigator.vibrate) navigator.vibrate(50);
-      newNoteLat = latlng.lat;
-      newNoteLng = latlng.lng;
-      newNotePhotos = [];
-      newNoteCat = 0;
-      document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || '';
-      document.getElementById('note-text').value = '';
-      document.getElementById('note-photos-preview').innerHTML = '';
-      // Razítko checkbox - načti naposledy zvolený stav z localStorage (default = zapnuto)
-      var stampToggle = document.getElementById('note-stamp-toggle');
-      if(stampToggle) stampToggle.checked = getStampPref();
-      selectCat(0);
-      document.getElementById('note-modal').classList.add('open');
+      _lpLat = latlng.lat;
+      _lpLng = latlng.lng;
+      // Spočítat km pro info (pokud existuje funkce gpsToKm)
+      var kmTxt = '';
+      try {
+        if(typeof gpsToKm === 'function') {
+          var km = gpsToKm(latlng.lat, latlng.lng);
+          if(km !== null && km !== undefined) kmTxt = ' (km ' + km.toFixed(3) + ')';
+        }
+      } catch(e){}
+      document.getElementById('lp-km-info').textContent = '📍 Co tady přidat?' + kmTxt;
+      document.getElementById('lp-chooser').classList.add('open');
     }, 700);
   });
   map.on('mouseup touchend touchcancel mousemove', function() {
     if(longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
   });
+}
+function lpCancel() {
+  document.getElementById('lp-chooser').classList.remove('open');
+  _lpLat = _lpLng = null;
+}
+function lpChoose(kind) {
+  document.getElementById('lp-chooser').classList.remove('open');
+  if(_lpLat === null) return;
+  if(kind === 'note') {
+    newNoteLat = _lpLat;
+    newNoteLng = _lpLng;
+    newNotePhotos = [];
+    newNoteCat = 0;
+    document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || (window.currentUser ? window.currentUser.name : '');
+    document.getElementById('note-text').value = '';
+    document.getElementById('note-photos-preview').innerHTML = '';
+    var stampToggle = document.getElementById('note-stamp-toggle');
+    if(stampToggle) stampToggle.checked = getStampPref();
+    selectCat(0);
+    document.getElementById('note-modal').classList.add('open');
+  } else if(kind === 'task') {
+    var km = null;
+    try { if(typeof gpsToKm === 'function') km = gpsToKm(_lpLat, _lpLng); } catch(e){}
+    openNewTaskModal(_lpLat, _lpLng, km);
+  }
+  _lpLat = _lpLng = null;
 }
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
@@ -3685,6 +3745,116 @@ function renderGallery() {
     <button class="prikop-stav-btn castecne" onclick="setPrikopStav('castecne')">🟠 Hotovo částečně</button>
     <button class="prikop-stav-btn reset" onclick="setPrikopStav(null)">↩ Zrušit stav</button>
     <button onclick="closePrikopModal()" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px;text-align:center;">Zavřít</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ÚKOLNÍČEK – panel + modaly ═══════════════════════ -->
+<div id="tasks-panel">
+  <div id="tasks-header">
+    <h2>✅ Úkoly</h2>
+    <button onclick="openNewTaskModal(null,null,null)" style="background:var(--accent);color:#fff;">+ Nový</button>
+    <button onclick="closeTasksPanel()">✕</button>
+  </div>
+  <div id="tasks-tabs">
+    <div class="tt active" data-tab="moje" onclick="setTaskTab('moje')">Moje <span class="cnt" id="tc-moje">0</span></div>
+    <div class="tt" data-tab="zadane" onclick="setTaskTab('zadane')">Mnou zadané <span class="cnt" id="tc-zadane">0</span></div>
+    <div class="tt" data-tab="po-terminu" onclick="setTaskTab('po-terminu')">Po termínu <span class="cnt" id="tc-po-terminu">0</span></div>
+    <div class="tt" data-tab="vsechny" onclick="setTaskTab('vsechny')">Všechny <span class="cnt" id="tc-vsechny">0</span></div>
+    <div class="tt" data-tab="hotove" onclick="setTaskTab('hotove')">Hotové <span class="cnt" id="tc-hotove">0</span></div>
+  </div>
+  <div id="tasks-filter-bar">
+    <input type="text" id="tasks-filter-prof" placeholder="Filtr profese (např. geodet, beton…)" oninput="renderTasksList()">
+    <button onclick="clearTaskFilter()">⌫</button>
+  </div>
+  <div id="tasks-list"></div>
+</div>
+
+<!-- Modal: nový / editace úkolu -->
+<div class="task-modal" id="task-new-modal">
+  <div class="tm-box">
+    <h3 id="tnm-title">➕ Nový úkol</h3>
+    <input type="hidden" id="tnm-id">
+    <input type="hidden" id="tnm-lat">
+    <input type="hidden" id="tnm-lng">
+    <input type="hidden" id="tnm-km">
+
+    <label>Co je potřeba udělat</label>
+    <input type="text" class="task-field" id="tnm-text-title" placeholder="Krátký název (např. Vytyčit šachtu)" maxlength="80">
+
+    <label>Detail (volitelně)</label>
+    <textarea class="task-field" id="tnm-text-detail" placeholder="Popis, kontext, čísla bodů…"></textarea>
+
+    <div class="tf-row">
+      <div>
+        <label>Termín</label>
+        <input type="date" class="task-field" id="tnm-deadline">
+      </div>
+      <div>
+        <label>Priorita</label>
+        <select class="task-field" id="tnm-priority">
+          <option value="normalni">Normální</option>
+          <option value="vysoka">Vysoká</option>
+          <option value="nizka">Nízká</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Profese / oddíl (volný text)</label>
+    <input type="text" class="task-field" id="tnm-prof" placeholder="geodet / beton / výkop / asfalt / TDS …" list="prof-suggestions">
+    <datalist id="prof-suggestions"></datalist>
+
+    <label>Přiřadit (1+ osob)</label>
+    <div id="assignee-list"></div>
+    <select class="task-field" id="tnm-assignee-pick" onchange="addAssigneeFromPick()">
+      <option value="">+ Vyber osobu…</option>
+    </select>
+
+    <label id="tnm-loc-label" style="display:none;">📍 Lokace</label>
+    <div id="tnm-loc-info" style="font-size:12px;color:var(--accent2);display:none;"></div>
+
+    <div class="tm-buttons">
+      <button class="btn-primary" onclick="saveTaskFromForm()">💾 Uložit</button>
+      <button class="btn-secondary" onclick="closeNewTaskModal()">Zrušit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: detail úkolu -->
+<div class="task-modal" id="task-detail">
+  <div class="tm-box">
+    <div style="display:flex;align-items:flex-start;gap:8px;">
+      <h3 style="flex:1;" id="td-title">…</h3>
+      <span class="td-status" id="td-status">…</span>
+    </div>
+    <div class="td-info" id="td-info"></div>
+    <div class="td-text" id="td-text"></div>
+    <div class="td-photos" id="td-photos" style="display:none;"></div>
+
+    <label style="margin-top:6px;">Komentáře</label>
+    <div id="td-comments"></div>
+    <div style="display:flex;gap:6px;">
+      <input type="text" class="task-field" id="td-cmt-input" placeholder="Napsat komentář…" onkeydown="if(event.key==='Enter')addComment()">
+      <button class="btn-primary" style="flex:0 0 auto;padding:0 14px;" onclick="addComment()">Odeslat</button>
+    </div>
+
+    <div class="tm-buttons" style="flex-wrap:wrap;">
+      <button class="btn-success" id="td-btn-done" onclick="markTaskDone()">✅ Hotovo</button>
+      <button class="btn-secondary" id="td-btn-reopen" onclick="reopenTask()" style="display:none;">↩ Znovu otevřít</button>
+      <button class="btn-secondary" onclick="editTask()">✏ Upravit</button>
+      <button class="btn-danger" onclick="deleteTaskConfirm()">🗑</button>
+      <button class="btn-secondary" id="td-btn-map" onclick="showTaskOnMap()" style="display:none;">📍 Mapa</button>
+      <button class="btn-secondary" onclick="closeTaskDetail()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- Long-press na mapě: Poznámka NEBO Úkol -->
+<div id="lp-chooser">
+  <div class="box">
+    <h3 id="lp-km-info">📍 Co tady přidat?</h3>
+    <button class="btn-primary" style="background:var(--accent);color:#fff;" onclick="lpChoose('note')">📝 Poznámka</button>
+    <button class="btn-primary" style="background:var(--accent2);color:#0f3460;" onclick="lpChoose('task')">✅ Úkol</button>
+    <button class="btn-secondary" onclick="lpCancel()">Zrušit</button>
   </div>
 </div>
 
