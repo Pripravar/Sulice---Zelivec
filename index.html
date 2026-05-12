@@ -1788,10 +1788,21 @@ function startGPS() {
 
 function startCompass() {
   if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ a iOS PWA - vyžaduje explicitní povolení v reakci na user gesture
     DeviceOrientationEvent.requestPermission().then(function(state) {
-      if(state === 'granted') window.addEventListener('deviceorientation', handleOrientation, true);
-    }).catch(function(){});
+      if(state === 'granted') {
+        window.addEventListener('deviceorientation', handleOrientation, true);
+        console.log('Kompas povolen');
+      } else if(state === 'denied') {
+        showToast('🧭 Kompas zakázán. Pro povolení: Nastavení → Safari → Pokročilé → Webové prohlížení → povolit Pohyb a orientaci', 6000);
+      }
+    }).catch(function(err){
+      console.warn('Compass permission error:', err);
+      // Některé verze iOS PWA permission silently odmítají - alespoň o tom dáme vědět
+      showToast('🧭 Kompas se nepodařilo aktivovat (iOS omezení v PWA módu)', 4000);
+    });
   } else {
+    // Android a starší iOS
     window.addEventListener('deviceorientation', handleOrientation, true);
   }
 }
@@ -3760,22 +3771,27 @@ function signInWithGoogle() {
     return;
   }
   var provider = new firebase.auth.GoogleAuthProvider();
-  // Na iOS (Safari i PWA) je redirect spolehlivější než popup.
-  // Stejně tak v jakékoliv PWA (přidáno na plochu) - popup tam často nefunguje.
-  var useRedirect = isIos() || isStandalone();
-  if(useRedirect) {
-    showAuthError('Přesměrovávám na Google…');
-    fbAuth.signInWithRedirect(provider).catch(function(err){
-      console.error('Auth redirect error:', err);
-      showAuthError('Chyba přihlášení: ' + (err.message || err.code));
-    });
-    return;
-  }
+  showAuthError('⏳ Otvírám Google přihlášení…');
+  // Strategie: vždy zkusit POPUP nejdřív (na iOS PWA otevře in-app browser sheet,
+  // který má přístup ke storage PWA a session se po dokončení automaticky uloží).
+  // Redirect se použije jen jako fallback, pokud popup selže.
   fbAuth.signInWithPopup(provider)
+    .then(function(){
+      showAuthError('');
+      // onAuthStateChanged se postará o zbytek
+    })
     .catch(function(err){
-      console.error('Auth error:', err);
-      if(err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
-        fbAuth.signInWithRedirect(provider);
+      console.warn('Popup login error:', err && err.code, err && err.message);
+      if(err && (err.code === 'auth/popup-blocked' ||
+                 err.code === 'auth/popup-closed-by-user' ||
+                 err.code === 'auth/cancelled-popup-request' ||
+                 err.code === 'auth/operation-not-supported-in-this-environment')) {
+        // Fallback: redirect
+        showAuthError('⏳ Přesměrovávám na Google…');
+        fbAuth.signInWithRedirect(provider).catch(function(err2){
+          console.error('Redirect fallback error:', err2);
+          showAuthError('Chyba přihlášení: ' + (err2.message || err2.code));
+        });
       } else {
         showAuthError('Chyba přihlášení: ' + (err.message || err.code));
       }
