@@ -4,10 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <title>II/603 Sulice – Želivec</title>
+<!-- PWA podpora: aplikace přidaná na plochu se chová jako nativní -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sulice–Želivec">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#16213e">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Plugin pro otáčení mapy dvěma prsty (touch rotate jako v Google Maps) -->
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <!-- PDF.js pro náhled výkresů na iOS Safari (kde iframe PDF nezobrazí) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
@@ -712,6 +720,11 @@ document.addEventListener('touchend', function(e){
     <label>📍 GPS poloha</label>
     <label class="toggle"><input type="checkbox" id="lyr-gps" checked onchange="toggleGPS(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <h3>📷 Fotky</h3>
+  <div class="layer-row">
+    <label>🏷️ Razítko (km, datum, jméno)</label>
+    <label class="toggle"><input type="checkbox" id="lyr-stamp" onchange="onStampToggle(this.checked)"><span class="toggle-slider"></span></label>
+  </div>
 </div>
 
 <button id="btn-gps" onclick="toggleGpsBtn()" title="GPS zapnout/vypnout / centrovat">📍</button>
@@ -1011,7 +1024,17 @@ function showToast(msg,dur) {
 
 // ── MAPA ──────────────────────────────
 function initMap() {
-  map=L.map('map',{center:[49.917,14.580],zoom:14,maxZoom:20,zoomControl:true});
+  map=L.map('map',{
+    center:[49.917,14.580],
+    zoom:14,
+    maxZoom:20,
+    zoomControl:true,
+    // Otáčení mapy dvěma prsty (leaflet-rotate plugin) - jako v Google Maps
+    rotate: true,
+    bearing: 0,
+    touchRotate: true,
+    rotateControl: { position: 'topleft', closeOnZeroBearing: true }
+  });
 
   var mUrl=function(type){return 'https://api.mapy.cz/v1/maptiles/'+type+'/256/{z}/{x}/{y}?apikey='+MAPY_API_KEY;};
   baseLayers.outdoor=L.tileLayer(mUrl('outdoor'),{maxZoom:20,maxNativeZoom:20,attribution:'© Mapy.cz'});
@@ -1339,9 +1362,22 @@ function isIOS() {
   return (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) ||
          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
 }
+// Detekce PWA módu (přidáno na plochu jako standalone app)
+function isPWA() {
+  return window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true; // iOS Safari home-screen app
+}
 
 function openPdfExternal() {
-  if(currentPdfSrc) window.open(currentPdfSrc, '_blank');
+  if(!currentPdfSrc) return;
+  // V PWA módu na iOS otevírá window.open _blank PDF v Safari mimo aplikaci
+  // → uživatel se nemůže vrátit zpět. Místo toho zaktivnit interní fullscreen.
+  if(isPWA() && isIOS()) {
+    var panel = document.getElementById('pdf-panel');
+    if(panel) panel.classList.add('fullscreen');
+    return;
+  }
+  window.open(currentPdfSrc, '_blank');
 }
 
 function renderDocPage(realKm) {
@@ -1860,6 +1896,9 @@ function initLongPress() {
       document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || '';
       document.getElementById('note-text').value = '';
       document.getElementById('note-photos-preview').innerHTML = '';
+      // Razítko checkbox - načti naposledy zvolený stav z localStorage (default = zapnuto)
+      var stampToggle = document.getElementById('note-stamp-toggle');
+      if(stampToggle) stampToggle.checked = getStampPref();
       selectCat(0);
       document.getElementById('note-modal').classList.add('open');
     }, 700);
@@ -1868,6 +1907,31 @@ function initLongPress() {
     if(longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
   });
 }
+
+// ── Preference razítka (km, datum, jméno) do fotek ──
+// Hodnota v localStorage: '1' = zapnuto, '0' = vypnuto. Default = '1' (zapnuto)
+function getStampPref() {
+  var v = localStorage.getItem('foto_razitko');
+  return v === null ? true : (v === '1');
+}
+function setStampPref(bool) {
+  localStorage.setItem('foto_razitko', bool ? '1' : '0');
+  // synchronizuj všechny toggle elementy
+  ['lyr-stamp','note-stamp-toggle','edit-stamp-toggle'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.checked = !!bool;
+  });
+}
+// Volání z toggle v layers panelu
+function onStampToggle(checked) {
+  setStampPref(checked);
+  showToast(checked ? '🏷️ Razítko zapnuto' : '🏷️ Razítko vypnuto', 1500);
+}
+// Při načtení synchronizuj stav layers toggle s preferencí
+window.addEventListener('load', function(){
+  var t = document.getElementById('lyr-stamp');
+  if(t) t.checked = getStampPref();
+});
 
 function selectCat(idx) {
   newNoteCat = idx;
@@ -2056,8 +2120,12 @@ function saveNote() {
       photos:keepUrls.concat(uploadedUrls), time:new Date().toLocaleString('cs-CZ') };
     saveNote_toFirebase(note, null);
   }
+  // Razítko: jen pokud uživatel zaškrtl toggle (a uložíme preferenci pro příště)
+  var stampToggle = document.getElementById('note-stamp-toggle');
+  var useStamp = stampToggle ? stampToggle.checked : getStampPref();
+  setStampPref(useStamp);
   var metaKm = null;
-  if(newNoteLat && newNoteLng) {
+  if(useStamp && newNoteLat && newNoteLng) {
     try { metaKm = fmtKm(gpxCumToRealKm(nearestOnRoute(newNoteLat, newNoteLng).cum)); } catch(e){}
   }
   closeNoteModal();
@@ -2067,7 +2135,7 @@ function saveNote() {
     uploadPhotosToGitHub(toUpload,
       function(done,total){ showSync('⏳ Nahrávám fotky (' + done + '/' + total + ')...'); },
       function(urls){ finish(urls); },
-      {km: metaKm, author: author});
+      useStamp ? {km: metaKm, author: author} : null);
   }
 }
 
@@ -2240,6 +2308,9 @@ function editCurrentNote() {
   document.getElementById('edit-text').value = note.text || '';
   document.getElementById('edit-nazev').value = note.nazev || '';
   selectEditCat(note.cat || 0);
+  // Razítko toggle - načti naposledy zvolený stav
+  var editStampT = document.getElementById('edit-stamp-toggle');
+  if(editStampT) editStampT.checked = getStampPref();
   renderEditPhotoPreviews();
 
   closeNoteDetail();
@@ -2300,8 +2371,12 @@ function saveEditNote() {
     var savedId = note.id;
     saveNote_toFirebase(note, function(){ setTimeout(function(){ openNoteDetail(savedId); }, 400); });
   }
+  // Razítko: jen pokud uživatel zaškrtl toggle
+  var editStampToggle = document.getElementById('edit-stamp-toggle');
+  var editUseStamp = editStampToggle ? editStampToggle.checked : getStampPref();
+  setStampPref(editUseStamp);
   var editMetaKm = null;
-  if(note && note.lat && note.lng) {
+  if(editUseStamp && note && note.lat && note.lng) {
     try { editMetaKm = fmtKm(gpxCumToRealKm(nearestOnRoute(note.lat, note.lng).cum)); } catch(e){}
   }
   closeEditModal();
@@ -2311,7 +2386,7 @@ function saveEditNote() {
     uploadPhotosToGitHub(toUpload,
       function(done,total){ showSync('⏳ Nahrávám fotky (' + done + '/' + total + ')...'); },
       function(urls){ finish(urls); },
-      {km: editMetaKm, author: author});
+      editUseStamp ? {km: editMetaKm, author: author} : null);
   }
 }
 
@@ -2851,7 +2926,14 @@ function renderPropPdfOnCanvas(pdfUrl) {
 }
 
 function openPropPdfExternal() {
-  if(currentPropSrc) window.open(currentPropSrc,'_blank');
+  if(!currentPropSrc) return;
+  // V PWA na iOS: fullscreen interního panelu místo Safari (kvůli návratu zpět)
+  if(isPWA() && isIOS()) {
+    var panel = document.getElementById('prop-panel');
+    if(panel) panel.classList.add('fullscreen');
+    return;
+  }
+  window.open(currentPropSrc,'_blank');
 }
 
 
@@ -3159,10 +3241,12 @@ window.addEventListener('load', function() {
     var reader = new FileReader();
     reader.onload = function(ev) {
       compressImage(ev.target.result, function(compressed) {
-        burnInMetadata(compressed, km, author, function(withMeta) {
+        // Razítko: jen pokud uživatel má nastavený stamp pref. Jinak nahraj bez metadat.
+        var useStamp = getStampPref();
+        function doUpload(finalSrc) {
           var filename = 'standalone/foto_' + Date.now() + '.jpg';
           showSync('⏳ Nahrávám fotku...');
-          uploadPhotoToGitHub(withMeta, filename, function(url) {
+          uploadPhotoToGitHub(finalSrc, filename, function(url) {
             if(!url) return;
             var entry = {
               url: url, km: km, author: author,
@@ -3176,7 +3260,9 @@ window.addEventListener('load', function() {
               .then(function() { showToast('✅ Fotka uložena!', 2000); })
               .catch(function() { showToast('❌ Chyba uložení', 2500); });
           });
-        });
+        }
+        if(useStamp) burnInMetadata(compressed, km, author, doUpload);
+        else         doUpload(compressed);
       });
     };
     reader.readAsDataURL(file);
@@ -3275,6 +3361,10 @@ function renderGallery() {
     <textarea id="note-text" class="note-field" placeholder="Text poznámky..."></textarea>
     <div id="note-photos-preview" class="note-photos-preview"></div>
     <input type="file" id="note-photo-input" accept="image/*" multiple style="display:none">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:6px 0;cursor:pointer;">
+      <input type="checkbox" id="note-stamp-toggle" checked style="width:18px;height:18px;cursor:pointer;">
+      <span>🏷️ Razítko do fotky (km, datum, jméno)</span>
+    </label>
     <div class="note-btns">
       <button class="note-btn note-btn-cancel" onclick="closeNoteModal()">Zrušit</button>
       <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-photo-input').click()">📷</button>
@@ -3358,6 +3448,10 @@ function renderGallery() {
     <textarea id="edit-text" class="note-field" placeholder="Text poznámky..."></textarea>
     <div id="edit-photos-preview" class="note-photos-preview"></div>
     <input type="file" id="edit-photo-input" accept="image/*" multiple style="display:none">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:6px 0;cursor:pointer;">
+      <input type="checkbox" id="edit-stamp-toggle" checked style="width:18px;height:18px;cursor:pointer;">
+      <span>🏷️ Razítko do nových fotek (km, datum, jméno)</span>
+    </label>
     <div class="note-btns">
       <button class="note-btn note-btn-cancel" onclick="closeEditModal()">Zrušit</button>
       <button class="note-btn note-btn-addphoto" onclick="document.getElementById('edit-photo-input').click()">📷</button>
