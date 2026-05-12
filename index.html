@@ -33,8 +33,11 @@
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
 body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
 
-#header { background:var(--panel); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; align-items:center; gap:10px; z-index:1000; flex-shrink:0; }
-#header h1 { font-size:15px; font-weight:700; flex:1; }
+#header { background:var(--panel); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; align-items:center; gap:10px; z-index:1000; flex-shrink:0; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scroll-behavior:smooth; }
+#header::-webkit-scrollbar { height:3px; }
+#header::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+#header > * { flex-shrink:0; }
+#header h1 { font-size:15px; font-weight:700; flex:0 0 auto; max-width:46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #header h1 span { color:var(--accent); }
 #km-display { background:var(--panel2); border:1px solid var(--accent); border-radius:8px; padding:4px 10px; font-size:13px; font-weight:700; color:var(--accent2); min-width:90px; text-align:center; }
 #btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:13px; cursor:pointer; white-space:nowrap; }
@@ -634,6 +637,10 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .auth-back:hover { background:var(--panel2); }
 .auth-input { background:var(--panel2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:12px 14px; font-size:16px; width:100%; box-sizing:border-box; margin-bottom:10px; }
 .auth-input:focus { outline:none; border-color:var(--accent2); }
+.auth-note { background:rgba(72,187,120,0.10); border:1px solid rgba(72,187,120,0.30); border-radius:8px; padding:8px 10px; font-size:11px; line-height:1.45; color:var(--text2); }
+.auth-note b { color:var(--green); }
+.auth-note-warn { background:rgba(245,166,35,0.10); border-color:rgba(245,166,35,0.30); }
+.auth-note-warn b { color:var(--accent2); }
 #auth-view-main, #auth-view-phone, #auth-view-code, #auth-view-name { display:flex; flex-direction:column; gap:10px; }
 #auth-error { color:#ff6b81; font-size:12px; text-align:center; min-height:14px; }
 #user-badge { display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; max-width:140px; }
@@ -717,6 +724,18 @@ textarea.task-field { resize:none; min-height:80px; }
 .task-marker.overdue { background:#ff6b6b; animation:taskPulse 2s ease-in-out infinite; }
 @keyframes taskPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.15);} }
 
+/* Foto-flow modal (razítkovat? / vyfotit další?) */
+#photo-prompt-modal { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4700; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:20px; }
+#photo-prompt-modal.open { display:flex; }
+#photo-prompt-modal .pp-box { background:var(--panel); border-radius:14px; padding:22px 18px; width:min(92vw,360px); display:flex; flex-direction:column; gap:12px; box-shadow:0 8px 28px rgba(0,0,0,0.5); }
+#pp-title { font-size:16px; font-weight:700; color:var(--text); text-align:center; line-height:1.4; }
+#pp-counter { font-size:11px; color:var(--text2); text-align:center; }
+.pp-btn { border:none; border-radius:10px; padding:14px; font-size:15px; font-weight:700; cursor:pointer; }
+.pp-yes { background:var(--green); color:#fff; }
+.pp-yes:hover { background:#3da165; }
+.pp-no  { background:var(--panel2); color:var(--text2); border:1px solid var(--border); }
+.pp-no:hover  { background:#1a3a6e; }
+
 /* Long-press chooser - poznámka vs. úkol */
 #lp-chooser { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4600; background:rgba(0,0,0,.65); align-items:center; justify-content:center; }
 #lp-chooser.open { display:flex; }
@@ -761,12 +780,18 @@ document.addEventListener('touchend', function(e){
       <p>Pro vstup do aplikace se přihlas.<br>(používá se pro úkoly a notifikace)</p>
       <button class="auth-google" onclick="signInWithGoogle()">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
-        <span>Přihlásit se Googlem</span>
+        <span>Přihlásit se Googlem ⭐</span>
       </button>
-      <div style="text-align:center;color:var(--text2);font-size:11px;margin:6px 0;">— nebo —</div>
+      <div class="auth-note">
+        ✅ <b>Doporučená cesta.</b> Pokud máš Gmail (i pracovní), klepni nahoře — je to rychlé, zdarma a bezpečné.
+      </div>
+      <div style="text-align:center;color:var(--text2);font-size:11px;margin:6px 0;">— nebo, pokud Gmail nemáš —</div>
       <button class="auth-phone-btn" onclick="showPhoneView()">
         📱 Přihlásit se telefonem
       </button>
+      <div class="auth-note auth-note-warn">
+        ⚠️ <b>Jen pro nouzové případy.</b> Každou SMS platí tvůrce aplikace ze svého. Aplikace ho stojí čas i peníze, tak ho prosím šetři — Google login je doslova rychlejší a všem nám usnadní život 🙏
+      </div>
     </div>
 
     <!-- Pohled 2: zadání telefonního čísla -->
@@ -3504,12 +3529,94 @@ function updatePrikopLabel(id, stav) {
 
 var galleryTab = 0;
 
+// ── Foto-flow: vyfotit → razítkovat? → vyfotit další? → smyčka ─────
+window.photoSession = {count: 0, pendingPhoto: null, pendingMeta: null, phase: null};
+
 function takeStandalonePhoto() {
   if(!gpsActive || !gpsMarker) {
     showToast('⚠️ Zapni si GPS!', 3000);
     return;
   }
+  // Reset série a otevři foťák
+  window.photoSession.count = 0;
   document.getElementById('standalone-photo-input').click();
+}
+
+function _showStampPrompt() {
+  document.getElementById('pp-title').innerHTML = '🏷️ Razítkovat tuto fotku?<br><span style="font-size:11px;font-weight:400;color:var(--text2);">(km + datum + jméno)</span>';
+  document.getElementById('pp-yes').textContent = '✓ Ano, razítkovat';
+  document.getElementById('pp-no').textContent  = '✗ Ne, bez razítka';
+  document.getElementById('pp-counter').textContent = window.photoSession.count > 0
+    ? ('📸 V sérii: ' + window.photoSession.count + ' uloženo')
+    : '📸 První fotka v sérii';
+  window.photoSession.phase = 'stamp';
+  document.getElementById('photo-prompt-modal').classList.add('open');
+}
+
+function _showContinuePrompt() {
+  document.getElementById('pp-title').innerHTML = '📸 Vyfotit další fotku?';
+  document.getElementById('pp-yes').textContent = '📷 Ano, další';
+  document.getElementById('pp-no').textContent  = '✅ Hotovo';
+  document.getElementById('pp-counter').textContent = '📸 V sérii uloženo: ' + window.photoSession.count;
+  window.photoSession.phase = 'continue';
+  document.getElementById('photo-prompt-modal').classList.add('open');
+}
+
+function ppAnswer(yes) {
+  document.getElementById('photo-prompt-modal').classList.remove('open');
+  var sess = window.photoSession;
+  if(sess.phase === 'stamp') {
+    var compressed = sess.pendingPhoto;
+    var meta = sess.pendingMeta;
+    sess.pendingPhoto = null;
+    if(!compressed || !meta) { _showContinuePrompt(); return; }
+    function doUpload(finalSrc) {
+      var filename = 'standalone/foto_' + Date.now() + '.jpg';
+      showSync('⏳ Nahrávám fotku...');
+      uploadPhotoToGitHub(finalSrc, filename, function(url) {
+        if(!url) {
+          hideSync();
+          showToast('❌ Upload selhal', 2500);
+          _showContinuePrompt();
+          return;
+        }
+        var entry = {
+          url: url, km: meta.km, author: meta.author,
+          lat: meta.lat, lng: meta.lng,
+          time: new Date().toLocaleString('cs-CZ'),
+          date: new Date().toLocaleDateString('cs-CZ'),
+          ts: Date.now()
+        };
+        var key = Date.now().toString();
+        db.ref('standalone_photos/' + key).set(entry)
+          .then(function() {
+            sess.count++;
+            hideSync();
+            _showContinuePrompt();
+          })
+          .catch(function() {
+            hideSync();
+            showToast('❌ Chyba uložení do DB', 2500);
+            _showContinuePrompt();
+          });
+      });
+    }
+    if(yes) burnInMetadata(compressed, meta.km, meta.author, doUpload);
+    else    doUpload(compressed);
+  } else if(sess.phase === 'continue') {
+    if(yes) {
+      // Otevři foťák znovu
+      setTimeout(function(){
+        try { document.getElementById('standalone-photo-input').click(); } catch(e){}
+      }, 200);
+    } else {
+      // Konec série
+      if(sess.count > 0) {
+        showToast('✅ Hotovo, uloženo ' + sess.count + ' ' + (sess.count === 1 ? 'fotka' : (sess.count < 5 ? 'fotky' : 'fotek')), 2500);
+      }
+      sess.count = 0;
+    }
+  }
 }
 
 window.addEventListener('load', function() {
@@ -3523,34 +3630,14 @@ window.addEventListener('load', function() {
     var latlng = gpsMarker.getLatLng();
     var km = null;
     try { km = fmtKm(gpxCumToRealKm(nearestOnRoute(latlng.lat, latlng.lng).cum)); } catch(ex){}
-    var author = localStorage.getItem('noteAuthor') || '';
+    var author = (window.currentUser && window.currentUser.name) || localStorage.getItem('noteAuthor') || '';
     var reader = new FileReader();
     reader.onload = function(ev) {
       compressImage(ev.target.result, function(compressed) {
-        // Razítko: jen pokud uživatel má nastavený stamp pref. Jinak nahraj bez metadat.
-        var useStamp = getStampPref();
-        function doUpload(finalSrc) {
-          var filename = 'standalone/foto_' + Date.now() + '.jpg';
-          showSync('⏳ Nahrávám fotku...');
-          uploadPhotoToGitHub(finalSrc, filename, function(url) {
-            if(!url) return;
-            var entry = {
-              url: url, km: km, author: author,
-              lat: latlng.lat, lng: latlng.lng,
-              time: new Date().toLocaleString('cs-CZ'),
-              date: new Date().toLocaleDateString('cs-CZ'),
-              ts: Date.now()
-            };
-            var key = Date.now().toString();
-            db.ref('standalone_photos/' + key).set(entry)
-              .then(function() { showToast('✅ Fotka uložena!', 2000); })
-              .catch(function() { showToast('❌ Chyba uložení', 2500); });
-          });
-        }
-        if(useStamp) burnInMetadata(compressed, km, author, doUpload);
-        else         doUpload(compressed);
-        // Re-open kamera pro další standalone fotku (sekvence - skončí když user dá Zrušit)
-        setTimeout(function(){ try { inp.click(); } catch(e){} }, 350);
+        // Připrav fotku a otázku
+        window.photoSession.pendingPhoto = compressed;
+        window.photoSession.pendingMeta  = {km: km, author: author, lat: latlng.lat, lng: latlng.lng};
+        _showStampPrompt();
       });
     };
     reader.readAsDataURL(file);
@@ -4840,6 +4927,16 @@ if('serviceWorker' in navigator) {
       <button class="btn-secondary" id="td-btn-map" onclick="showTaskOnMap()" style="display:none;">📍 Mapa</button>
       <button class="btn-secondary" onclick="closeTaskDetail()">Zavřít</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: foto-flow (razítkovat? / vyfotit další?) -->
+<div id="photo-prompt-modal">
+  <div class="pp-box">
+    <div id="pp-title">...</div>
+    <div id="pp-counter">📸 0 fotek</div>
+    <button id="pp-yes" class="pp-btn pp-yes" onclick="ppAnswer(true)">Ano</button>
+    <button id="pp-no" class="pp-btn pp-no" onclick="ppAnswer(false)">Ne</button>
   </div>
 </div>
 
