@@ -905,9 +905,34 @@ document.addEventListener('touchend', function(e){
 <script>
 var MAPY_API_KEY = 'n4vDG-d4mkhllq8P_9783hgyMtm9U6RU6WwwGvvpvuY';
 var FIREBASE_URL = 'https://sulice-zelivec-default-rtdb.europe-west1.firebasedatabase.app';
+
+// ════════════════════════════════════════════════════════════════════
+// Firebase konfigurace pro Auth + Messaging (PUSH notifikace).
+// !! DŮLEŽITÉ: hodnoty níže (apiKey, authDomain, projectId, atd.) musíš
+//    nahradit reálnými z Firebase Console:
+//    Firebase Console → ⚙️ Project Settings → General → Your apps →
+//    Web app → SDK setup and configuration → Config
+// Pokud apiKey zůstane na 'PLACEHOLDER', přihlášení se zobrazí jako
+// nedostupné s instrukcí, co udělat. Realtime Database funguje i bez tohoto.
+// ════════════════════════════════════════════════════════════════════
+var FIREBASE_CONFIG = {
+  apiKey:            'PLACEHOLDER_API_KEY',         // ← nahraď
+  authDomain:        'sulice-zelivec.firebaseapp.com',
+  databaseURL:       FIREBASE_URL,
+  projectId:         'sulice-zelivec',
+  storageBucket:     'sulice-zelivec.appspot.com',
+  messagingSenderId: 'PLACEHOLDER_SENDER_ID',       // ← nahraď
+  appId:             'PLACEHOLDER_APP_ID'           // ← nahraď
+};
+// VAPID klíč pro Web Push (Firebase Console → Project Settings → Cloud Messaging → Web Push certificates)
+var FIREBASE_VAPID_KEY = 'PLACEHOLDER_VAPID_KEY';
+
 // Firebase inicializace
-firebase.initializeApp({databaseURL: FIREBASE_URL});
+firebase.initializeApp(FIREBASE_CONFIG);
 var db = firebase.database();
+var fbAuth = firebase.auth();
+// Messaging inicializujeme až po service worker registraci (níže v skriptu)
+var fbMessaging = null;
 
 var KM_START = 0.000;
 var KM_END   = 4.605;
