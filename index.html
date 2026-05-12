@@ -3660,6 +3660,25 @@ if(!authConfigOk()) {
   console.warn('⚠ Firebase Auth/Messaging není nakonfigurován – úkolníček a notifikace jsou vypnuté. Doplň FIREBASE_CONFIG v index.html.');
 }
 
+// Po návratu z redirect přihlášení explicitně dokončit flow.
+// Bez toho onAuthStateChanged v iOS PWA někdy nefiruje a uživatel zůstane viset na login obrazovce.
+if(fbAuth && authConfigOk()) {
+  showAuthError('⏳ Dokončuji přihlášení…');
+  fbAuth.getRedirectResult().then(function(result) {
+    if(result && result.user) {
+      console.log('Redirect login OK:', result.user.uid, result.user.displayName);
+      showAuthError('');
+      // onAuthStateChanged se postará o zbytek (skrytí gate, načtení dat).
+    } else {
+      // Nebyl žádný redirect (běžné načtení) - zhasni "Dokončuji…"
+      showAuthError('');
+    }
+  }).catch(function(err) {
+    console.error('Redirect result error:', err);
+    showAuthError('Chyba dokončení přihlášení: ' + (err.message || err.code || 'neznámá') + '. Zkus to znovu.');
+  });
+}
+
 // Hlavní auth listener - běží automaticky po načtení stránky
 if(fbAuth) fbAuth.onAuthStateChanged(function(user) {
   if(!authConfigOk()) return; // skip - legacy mode
