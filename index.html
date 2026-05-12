@@ -933,8 +933,16 @@ var FIREBASE_VAPID_KEY = 'BLuBWSnvcWt7J_6KdB8KDTLJqEEBluKkB54DbGv2yUYdxcXhQ32dsN
 firebase.initializeApp(FIREBASE_CONFIG);
 var db = firebase.database();
 var fbAuth = null;
-try { fbAuth = firebase.auth(); }
-catch(e) { console.warn('Firebase Auth instance se nepodařilo vytvořit:', e); }
+try {
+  fbAuth = firebase.auth();
+  // Trvalá persistence (default LOCAL = IndexedDB). Důležité pro PWA na iOS,
+  // aby uživatel nemusel logovat znovu při každém otevření z plochy.
+  if(fbAuth && fbAuth.setPersistence) {
+    fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(e){
+      console.warn('Auth persistence se nepodařilo nastavit:', e);
+    });
+  }
+} catch(e) { console.warn('Firebase Auth instance se nepodařilo vytvořit:', e); }
 // Messaging inicializujeme až po service worker registraci (níže v skriptu)
 var fbMessaging = null;
 
@@ -3607,10 +3615,20 @@ function signInWithGoogle() {
     return;
   }
   var provider = new firebase.auth.GoogleAuthProvider();
+  // Na iOS (Safari i PWA) je redirect spolehlivější než popup.
+  // Stejně tak v jakékoliv PWA (přidáno na plochu) - popup tam často nefunguje.
+  var useRedirect = isIos() || isStandalone();
+  if(useRedirect) {
+    showAuthError('Přesměrovávám na Google…');
+    fbAuth.signInWithRedirect(provider).catch(function(err){
+      console.error('Auth redirect error:', err);
+      showAuthError('Chyba přihlášení: ' + (err.message || err.code));
+    });
+    return;
+  }
   fbAuth.signInWithPopup(provider)
     .catch(function(err){
       console.error('Auth error:', err);
-      // Fallback na redirect (lepší pro mobile/PWA)
       if(err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
         fbAuth.signInWithRedirect(provider);
       } else {
