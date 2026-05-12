@@ -33,14 +33,33 @@
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
 body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
 
-#header { background:var(--panel); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; align-items:center; gap:10px; z-index:1000; flex-shrink:0; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scroll-behavior:smooth; }
+#header { background:var(--panel); border-bottom:1px solid var(--border); padding:8px 10px; display:flex; align-items:center; gap:6px; z-index:1000; flex-shrink:0; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scroll-behavior:smooth; }
 #header::-webkit-scrollbar { height:3px; }
 #header::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 #header > * { flex-shrink:0; }
-#header h1 { font-size:15px; font-weight:700; flex:0 0 auto; max-width:46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#header h1 span { color:var(--accent); }
-#km-display { background:var(--panel2); border:1px solid var(--accent); border-radius:8px; padding:4px 10px; font-size:13px; font-weight:700; color:var(--accent2); min-width:90px; text-align:center; }
-#btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:13px; cursor:pointer; white-space:nowrap; }
+#header h1 { font-size:14px; font-weight:700; flex:0 0 auto; max-width:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#header h1 .title-name, #header h1 .title-suffix { color:var(--accent); }
+#header button { padding:5px 8px !important; font-size:14px !important; }
+#km-display { background:var(--panel2); border:1px solid var(--accent); border-radius:8px; padding:3px 7px; font-size:12px; font-weight:700; color:var(--accent2); min-width:auto; text-align:center; white-space:nowrap; }
+#btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:5px 8px !important; font-size:12px !important; cursor:pointer; white-space:nowrap; }
+
+/* Na úzkém telefonu (≤420 px) zmenšit / skrýt některé prvky aby vše bylo vidět najednou */
+@media (max-width:420px) {
+  #header { gap:4px; padding:6px 8px; }
+  #header h1 { font-size:13px; }
+  #header h1 .title-prefix,
+  #header h1 .title-suffix { display:none; }
+  #header button { padding:5px 6px !important; font-size:14px !important; }
+  #btn-layers { padding:5px 7px !important; font-size:11px !important; }
+  #user-badge { max-width:32px; padding:2px 3px !important; }
+  #user-badge span { display:none; }
+  #user-badge img { width:22px; height:22px; }
+  #km-display { font-size:11px; padding:3px 5px; }
+}
+/* Ještě menší telefony (≤360 px, např. iPhone SE 1st gen) */
+@media (max-width:360px) {
+  #header h1 { display:none; }
+}
 
 #map { flex:1; width:100%; z-index:1; touch-action:none; }
 
@@ -828,7 +847,7 @@ document.addEventListener('touchend', function(e){
 </div>
 
 <div id="header">
-  <h1>II/603 <span>Sulice – Želivec</span></h1>
+  <h1><span class="title-prefix">II/603 </span><span class="title-name">Sulice</span><span class="title-suffix"> – Želivec</span></h1>
   <div id="km-display">km –</div>
   <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
