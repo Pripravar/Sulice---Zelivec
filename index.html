@@ -916,16 +916,18 @@ var FIREBASE_URL = 'https://sulice-zelivec-default-rtdb.europe-west1.firebasedat
 // nedostupné s instrukcí, co udělat. Realtime Database funguje i bez tohoto.
 // ════════════════════════════════════════════════════════════════════
 var FIREBASE_CONFIG = {
-  apiKey:            'PLACEHOLDER_API_KEY',         // ← nahraď
+  apiKey:            'AIzaSyAKkflwExg61LvgXAWWihHRXC-TJDWsiMo',
   authDomain:        'sulice-zelivec.firebaseapp.com',
   databaseURL:       FIREBASE_URL,
   projectId:         'sulice-zelivec',
-  storageBucket:     'sulice-zelivec.appspot.com',
-  messagingSenderId: 'PLACEHOLDER_SENDER_ID',       // ← nahraď
-  appId:             'PLACEHOLDER_APP_ID'           // ← nahraď
+  storageBucket:     'sulice-zelivec.firebasestorage.app',
+  messagingSenderId: '275319910276',
+  appId:             '1:275319910276:web:d5e95b64f65aa5fb2637d1',
+  measurementId:     'G-976H6NGCQJ'
 };
 // VAPID klíč pro Web Push (Firebase Console → Project Settings → Cloud Messaging → Web Push certificates)
-var FIREBASE_VAPID_KEY = 'PLACEHOLDER_VAPID_KEY';
+// !! BEZ tohoto klíče push notifikace NEPŮJDOU. Klient i tak může fungovat, jen nepřijde upozornění.
+var FIREBASE_VAPID_KEY = 'BLuBWSnvcWt7J_6KdB8KDTLJqEEBluKkB54DbGv2yUYdxcXhQ32dsNfpiLm5H6823oZYlBVrs7MdpPHX8zxRPWU';
 
 // Firebase inicializace
 firebase.initializeApp(FIREBASE_CONFIG);

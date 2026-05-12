@@ -12,15 +12,15 @@
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// !! Doplň reálné hodnoty z Firebase Console (stejné jako v index.html)
+// Hodnoty stejné jako v index.html (FIREBASE_CONFIG)
 firebase.initializeApp({
-  apiKey:            'PLACEHOLDER_API_KEY',
+  apiKey:            'AIzaSyAKkflwExg61LvgXAWWihHRXC-TJDWsiMo',
   authDomain:        'sulice-zelivec.firebaseapp.com',
   databaseURL:       'https://sulice-zelivec-default-rtdb.europe-west1.firebasedatabase.app',
   projectId:         'sulice-zelivec',
-  storageBucket:     'sulice-zelivec.appspot.com',
-  messagingSenderId: 'PLACEHOLDER_SENDER_ID',
-  appId:             'PLACEHOLDER_APP_ID'
+  storageBucket:     'sulice-zelivec.firebasestorage.app',
+  messagingSenderId: '275319910276',
+  appId:             '1:275319910276:web:d5e95b64f65aa5fb2637d1'
 });
 
 const messaging = firebase.messaging();
