@@ -625,9 +625,16 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .auth-box { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:24px 22px; width:min(94vw,360px); display:flex; flex-direction:column; gap:14px; box-shadow:0 8px 28px rgba(0,0,0,0.4); }
 .auth-box h2 { font-size:18px; color:var(--accent2); text-align:center; }
 .auth-box p { font-size:13px; color:var(--text2); text-align:center; line-height:1.45; }
-.auth-google { background:#fff; color:#3c4043; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; }
+.auth-google { background:#fff; color:#3c4043; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; }
 .auth-google:hover { background:#f1f3f4; }
 .auth-google img { width:18px; height:18px; }
+.auth-phone-btn { background:var(--accent2); color:#0f3460; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; }
+.auth-phone-btn:hover { background:#e89c1f; }
+.auth-back { background:transparent; color:var(--text2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; font-size:13px; cursor:pointer; width:100%; margin-top:6px; }
+.auth-back:hover { background:var(--panel2); }
+.auth-input { background:var(--panel2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:12px 14px; font-size:16px; width:100%; box-sizing:border-box; margin-bottom:10px; }
+.auth-input:focus { outline:none; border-color:var(--accent2); }
+#auth-view-main, #auth-view-phone, #auth-view-code, #auth-view-name { display:flex; flex-direction:column; gap:10px; }
 #auth-error { color:#ff6b81; font-size:12px; text-align:center; min-height:14px; }
 #user-badge { display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; max-width:140px; }
 #user-badge img { width:20px; height:20px; border-radius:50%; flex-shrink:0; }
@@ -748,11 +755,43 @@ document.addEventListener('touchend', function(e){
 <div id="auth-gate">
   <div class="auth-box">
     <h2>🗺️ Sulice – Želivec</h2>
-    <p>Pro vstup do aplikace se přihlas Googlem.<br>(používá se pro úkoly a notifikace)</p>
-    <button class="auth-google" onclick="signInWithGoogle()">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
-      <span>Přihlásit se Googlem</span>
-    </button>
+
+    <!-- Pohled 1: výchozí – Google nebo telefon -->
+    <div id="auth-view-main">
+      <p>Pro vstup do aplikace se přihlas.<br>(používá se pro úkoly a notifikace)</p>
+      <button class="auth-google" onclick="signInWithGoogle()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+        <span>Přihlásit se Googlem</span>
+      </button>
+      <div style="text-align:center;color:var(--text2);font-size:11px;margin:6px 0;">— nebo —</div>
+      <button class="auth-phone-btn" onclick="showPhoneView()">
+        📱 Přihlásit se telefonem
+      </button>
+    </div>
+
+    <!-- Pohled 2: zadání telefonního čísla -->
+    <div id="auth-view-phone" style="display:none;">
+      <p style="text-align:left;">Telefonní číslo:</p>
+      <input type="tel" id="phone-input" class="auth-input" placeholder="+420 600 123 456" autocomplete="tel">
+      <button id="btn-send-sms" class="auth-google" onclick="sendSmsCode()">📨 Odeslat SMS kód</button>
+      <button class="auth-back" onclick="showMainView()">↩ Zpět</button>
+    </div>
+
+    <!-- Pohled 3: zadání SMS kódu -->
+    <div id="auth-view-code" style="display:none;">
+      <p style="text-align:left;">Zadej 6-místný kód, který jsme ti poslali:</p>
+      <input type="tel" id="sms-code-input" class="auth-input" placeholder="123456" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
+      <button class="auth-google" onclick="verifySmsCode()">✓ Ověřit kód</button>
+      <button class="auth-back" onclick="showPhoneView()">↩ Změnit číslo</button>
+    </div>
+
+    <!-- Pohled 4: první přihlášení – doplnění jména -->
+    <div id="auth-view-name" style="display:none;">
+      <p style="text-align:left;">Vítej! Pro ostatní v týmu, jak se jmenuješ?</p>
+      <input type="text" id="name-input" class="auth-input" placeholder="Jméno a příjmení" autocapitalize="words">
+      <button class="auth-google" onclick="savePhoneUserName()">Pokračovat →</button>
+    </div>
+
     <div id="auth-error"></div>
   </div>
 </div>
@@ -3679,49 +3718,199 @@ if(fbAuth && authConfigOk()) {
   });
 }
 
+// ── Pohledy auth-gate ───────────────────────────────────────────────
+function _setAuthView(name) {
+  ['main','phone','code','name'].forEach(function(v){
+    var el = document.getElementById('auth-view-' + v);
+    if(el) el.style.display = (v === name) ? 'flex' : 'none';
+  });
+  showAuthError('');
+}
+function showMainView()  { _setAuthView('main'); }
+function showPhoneView() { _setAuthView('phone'); }
+function showCodeView()  { _setAuthView('code'); }
+function showNameView()  { _setAuthView('name'); }
+
+// ── Dokončit přihlášení (společné pro Google i telefon) ─────────────
+function completeLogin(user, nameOverride) {
+  var displayName = nameOverride || user.displayName || '';
+  var email = user.email || '';
+  var phone = user.phoneNumber || '';
+  // Fallback name: část před @ nebo telefon
+  if(!displayName) displayName = email ? email.split('@')[0] : (phone || 'uživatel');
+
+  window.currentUser = {
+    uid:   user.uid,
+    name:  displayName,
+    email: email,
+    phone: phone,
+    photo: user.photoURL || ''
+  };
+  // Zapsat / aktualizovat profil v DB
+  db.ref('uzivatele/' + user.uid).update({
+    uid:      user.uid,
+    name:     displayName,
+    email:    email,
+    phone:    phone,
+    photo:    window.currentUser.photo,
+    lastSeen: Date.now()
+  });
+  // UI: badge
+  document.getElementById('user-photo').src = window.currentUser.photo || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23a0aec0%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z%22/></svg>';
+  document.getElementById('user-name').textContent = displayName.split(' ')[0];
+  localStorage.setItem('noteAuthor', displayName);
+  document.getElementById('auth-gate').classList.add('hide');
+  // Načíst data
+  loadAllUsers();
+  loadTasks();
+  setupFcmIfPossible();
+  maybeShowIosHint();
+}
+
 // Hlavní auth listener - běží automaticky po načtení stránky
 if(fbAuth) fbAuth.onAuthStateChanged(function(user) {
   if(!authConfigOk()) return; // skip - legacy mode
   if(user) {
-    window.currentUser = {
-      uid:   user.uid,
-      name:  user.displayName || user.email.split('@')[0],
-      email: user.email,
-      photo: user.photoURL || ''
-    };
-    // Zapsat uživatele do DB (pro picker přiřazení)
-    var ref = db.ref('uzivatele/' + user.uid);
-    ref.update({
-      uid:      user.uid,
-      name:     window.currentUser.name,
-      email:    window.currentUser.email,
-      photo:    window.currentUser.photo,
-      lastSeen: Date.now()
-    });
-    // UI - badge
-    document.getElementById('user-photo').src = window.currentUser.photo || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23a0aec0%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z%22/></svg>';
-    document.getElementById('user-name').textContent = window.currentUser.name.split(' ')[0];
-    // Sync s localStorage author (kompatibilita se starým systémem poznámek)
-    localStorage.setItem('noteAuthor', window.currentUser.name);
-
-    // Skrýt auth gate
-    document.getElementById('auth-gate').classList.add('hide');
-
-    // Spustit načítání úkolů, uživatelů, FCM
-    loadAllUsers();
-    loadTasks();
-    setupFcmIfPossible();
-
-    // iPhone hint pokud není v PWA módu
-    maybeShowIosHint();
+    // Pokud je uživatel přihlášený přes telefon a NEMÁ ještě jméno (první přihlášení),
+    // donutíme ho jméno zadat. Jinak (Google, nebo telefonista co už jméno má) dokončíme login.
+    if(!user.displayName) {
+      db.ref('uzivatele/' + user.uid + '/name').once('value').then(function(snap){
+        var existingName = snap.val();
+        if(existingName) {
+          // Uložené jméno v DB – použij ho a doplň zpátky do auth profile
+          user.updateProfile({displayName: existingName}).catch(function(){});
+          completeLogin(user, existingName);
+        } else {
+          // První přihlášení – zobraz pohled pro jméno
+          document.getElementById('auth-gate').classList.remove('hide');
+          showNameView();
+        }
+      });
+    } else {
+      completeLogin(user);
+    }
   } else {
     // Není přihlášen
     document.getElementById('auth-gate').classList.remove('hide');
+    showMainView();
     if(!authConfigOk()) {
       showAuthError('⚠ Firebase Auth ještě není nakonfigurován v index.html. Aplikace pojede v omezeném režimu (bez úkolníčku a notifikací). Doplň hodnoty FIREBASE_CONFIG a obnov stránku.');
     }
   }
 });
+
+// ── Přihlášení TELEFONEM ────────────────────────────────────────────
+window._phoneVerifier   = null;
+window._phoneConfirm    = null;
+
+function _ensureRecaptcha() {
+  if(window._phoneVerifier) return window._phoneVerifier;
+  try {
+    // Invisible reCAPTCHA navázaná na tlačítko "Odeslat SMS kód"
+    window._phoneVerifier = new firebase.auth.RecaptchaVerifier('btn-send-sms', {
+      size: 'invisible',
+      callback: function(){ /* reCAPTCHA vyřešena - signInWithPhoneNumber pokračuje */ }
+    });
+    window._phoneVerifier.render();
+  } catch(e) {
+    console.error('reCAPTCHA init error:', e);
+  }
+  return window._phoneVerifier;
+}
+
+function normalizePhone(input) {
+  if(!input) return '';
+  var s = input.trim().replace(/\s|-|\(|\)/g, '');
+  if(s.indexOf('+') === 0) return s;
+  if(s.indexOf('00') === 0) return '+' + s.slice(2);
+  if(s.indexOf('0') === 0 && s.length === 10) return '+420' + s.slice(1); // české "0xxx xxx xxx" je atypické, ale ošetříme
+  if(s.length === 9) return '+420' + s;          // 600123456
+  if(s.indexOf('420') === 0 && s.length === 12) return '+' + s;
+  return s; // necháme být - Firebase odmítne pokud je špatné
+}
+
+function sendSmsCode() {
+  var raw = document.getElementById('phone-input').value;
+  var phone = normalizePhone(raw);
+  if(!phone || phone.length < 8) {
+    showAuthError('Zadej platné telefonní číslo (např. +420600123456)');
+    return;
+  }
+  showAuthError('⏳ Odesílám SMS…');
+  var verifier = _ensureRecaptcha();
+  if(!verifier) {
+    showAuthError('Chyba: reCAPTCHA se nepodařilo inicializovat.');
+    return;
+  }
+  fbAuth.signInWithPhoneNumber(phone, verifier)
+    .then(function(result){
+      window._phoneConfirm = result;
+      showAuthError('✓ SMS odeslána na ' + phone);
+      showCodeView();
+      setTimeout(function(){ var i = document.getElementById('sms-code-input'); if(i) i.focus(); }, 200);
+    })
+    .catch(function(err){
+      console.error('SMS error:', err);
+      showAuthError('Chyba SMS: ' + (err.message || err.code));
+      // Reset reCAPTCHA, jinak nelze poslat další pokus
+      try { if(window._phoneVerifier && window._phoneVerifier.clear) window._phoneVerifier.clear(); } catch(e){}
+      window._phoneVerifier = null;
+    });
+}
+
+function verifySmsCode() {
+  var code = (document.getElementById('sms-code-input').value || '').trim();
+  if(!code || code.length < 4) {
+    showAuthError('Zadej kód z SMS');
+    return;
+  }
+  if(!window._phoneConfirm) {
+    showAuthError('Žádné čekající ověření. Začni znovu.');
+    showPhoneView();
+    return;
+  }
+  showAuthError('⏳ Ověřuji…');
+  window._phoneConfirm.confirm(code)
+    .then(function(result){
+      // Přihlášeno. onAuthStateChanged se postará o zobrazení pohledu "name"
+      // pro nové uživatele, nebo o completeLogin pro stávající.
+      showAuthError('');
+    })
+    .catch(function(err){
+      console.error('SMS verify error:', err);
+      showAuthError('Chybný kód: ' + (err.message || err.code));
+    });
+}
+
+function savePhoneUserName() {
+  var name = (document.getElementById('name-input').value || '').trim();
+  if(!name || name.length < 2) {
+    showAuthError('Zadej prosím jméno a příjmení');
+    return;
+  }
+  var u = fbAuth.currentUser;
+  if(!u) { showAuthError('Chyba: nejsi přihlášen.'); return; }
+  showAuthError('⏳ Ukládám…');
+  u.updateProfile({displayName: name})
+    .then(function(){
+      return db.ref('uzivatele/' + u.uid).update({
+        uid: u.uid,
+        name: name,
+        email: u.email || '',
+        phone: u.phoneNumber || '',
+        photo: u.photoURL || '',
+        lastSeen: Date.now()
+      });
+    })
+    .then(function(){
+      // Manuálně dokončit login (onAuthStateChanged se neopakuje při updateProfile)
+      completeLogin(u, name);
+    })
+    .catch(function(err){
+      console.error('Save name error:', err);
+      showAuthError('Chyba uložení: ' + (err.message || err.code));
+    });
+}
 
 // ── UŽIVATELÉ - načtení seznamu pro assignee picker ─────────────────
 function loadAllUsers() {
