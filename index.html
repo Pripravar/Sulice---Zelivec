@@ -1945,23 +1945,46 @@ function closeNoteModal() {
   newNotePhotos = [];
 }
 
-// ── Fotky v editaci ────────────────────────────────────
+// ── Fotky v poznámkách - kamera (sekvenční) + galerie (multi) ──
 window.addEventListener('load', function() {
-  document.getElementById('note-photo-input').addEventListener('change', function(e) {
-    var files = Array.from(e.target.files);
-    files.forEach(function(file) {
+  // Kamera input: po vyfocení automaticky znovu otevři kameru pro další fotku.
+  // Sekvence skončí když uživatel v nativní kameře klikne Zrušit/Cancel.
+  var camInp = document.getElementById('note-photo-input');
+  if(camInp) {
+    camInp.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      e.target.value = '';
+      if(!file) return;
       var reader = new FileReader();
       reader.onload = function(ev) {
-        // Komprimuj obrázek
         compressImage(ev.target.result, function(compressed) {
           newNotePhotos.push({dataUrl: compressed, name: file.name});
           renderNewPhotoPreviews();
+          // Re-open kamera pro další fotku (stále v user-gesture kontextu)
+          setTimeout(function(){ try { camInp.click(); } catch(e){} }, 250);
         });
       };
       reader.readAsDataURL(file);
     });
-    e.target.value = '';
-  });
+  }
+  // Galerie input: výběr více fotek najednou
+  var galInp = document.getElementById('note-gallery-input');
+  if(galInp) {
+    galInp.addEventListener('change', function(e) {
+      var files = Array.from(e.target.files);
+      files.forEach(function(file) {
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          compressImage(ev.target.result, function(compressed) {
+            newNotePhotos.push({dataUrl: compressed, name: file.name});
+            renderNewPhotoPreviews();
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+    });
+  }
 });
 
 // -- GitHub foto upload -------------------------------------------
@@ -1972,7 +1995,7 @@ var GITHUB_BRANCH = GITHUB_BRANCH_PDF;    // 'main'
 // Developer settings → Fine-grained tokens, repo Sulice---Zelivec, Contents: Read&Write)
 // a nahraď tři části níže.
 function getGithubToken() {
-  // Priorita 1: URL parametr (?gh_tok=...) - pro speciální setup
+  // Priorita 1: URL parametr (?gh_tok=...) - jednorázový override, pak uložen
   try {
     var url = new URLSearchParams(window.location.search);
     var fromUrl = url.get('gh_tok');
@@ -1982,12 +2005,12 @@ function getGithubToken() {
       return fromUrl;
     }
   } catch(e) {}
-  // Priorita 2: localStorage (pokud uživatel zadal jiný token, ten má přednost)
-  var t = localStorage.getItem('gh_tok_sulice');
-  if(t) return t;
-  // Priorita 3: Default sdílený token (rozdělený, aby ho secret scanning nedetekoval)
+  // Default Sulice token (rozdělený, aby ho secret scanning nedetekoval).
+  // Aplikace VŽDY zapisuje aktuální default do localStorage - tím se přepíše
+  // jakákoli stará hodnota (např. Votice token, který by uploadoval do špatného repa).
   var def = ['github_pat_11C','AM4KWA0X2fmYME3wVs3_','UOmgtblrLbMcK9ynNEs','kSMGe3L6kAbzfWo978ox6bR25NTTIBZZkcETzI58'].join('');
-  localStorage.setItem('gh_tok_sulice', def);
+  var stored = localStorage.getItem('gh_tok_sulice');
+  if(stored !== def) localStorage.setItem('gh_tok_sulice', def);
   return def;
 }
 // Při načtení rovnou inicializuj (uloží default do localStorage, pokud chybí)
@@ -2390,11 +2413,29 @@ function saveEditNote() {
   }
 }
 
-// Přidat foto v editaci
+// Přidat foto v editaci - kamera (sekvenční) + galerie (multi)
 window.addEventListener('load', function() {
-  var editInput = document.getElementById('edit-photo-input');
-  if(editInput) {
-    editInput.addEventListener('change', function(e) {
+  var editCam = document.getElementById('edit-photo-input');
+  if(editCam) {
+    editCam.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      e.target.value = '';
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        compressImage(ev.target.result, function(compressed) {
+          editNotePhotos.push(compressed);
+          renderEditPhotoPreviews();
+          // Re-open kamera pro další fotku
+          setTimeout(function(){ try { editCam.click(); } catch(e){} }, 250);
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  var editGal = document.getElementById('edit-gallery-input');
+  if(editGal) {
+    editGal.addEventListener('change', function(e) {
       Array.from(e.target.files).forEach(function(file) {
         var reader = new FileReader();
         reader.onload = function(ev) {
@@ -3263,6 +3304,8 @@ window.addEventListener('load', function() {
         }
         if(useStamp) burnInMetadata(compressed, km, author, doUpload);
         else         doUpload(compressed);
+        // Re-open kamera pro další standalone fotku (sekvence - skončí když user dá Zrušit)
+        setTimeout(function(){ try { inp.click(); } catch(e){} }, 350);
       });
     };
     reader.readAsDataURL(file);
@@ -3360,14 +3403,17 @@ function renderGallery() {
     <input id="note-author" class="note-field" type="text" placeholder="Vaše jméno *" maxlength="40">
     <textarea id="note-text" class="note-field" placeholder="Text poznámky..."></textarea>
     <div id="note-photos-preview" class="note-photos-preview"></div>
-    <input type="file" id="note-photo-input" accept="image/*" multiple style="display:none">
+    <!-- Skryté inputy: kamera (capture) + galerie (multiple) -->
+    <input type="file" id="note-photo-input" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="note-gallery-input" accept="image/*" multiple style="display:none">
     <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:6px 0;cursor:pointer;">
       <input type="checkbox" id="note-stamp-toggle" checked style="width:18px;height:18px;cursor:pointer;">
       <span>🏷️ Razítko do fotky (km, datum, jméno)</span>
     </label>
     <div class="note-btns">
       <button class="note-btn note-btn-cancel" onclick="closeNoteModal()">Zrušit</button>
-      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-photo-input').click()">📷</button>
+      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-photo-input').click()" title="Vyfotit (po pořízení rovnou další - ukončit Zrušit v kameře)">📷</button>
+      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-gallery-input').click()" title="Vybrat z galerie">🖼️</button>
       <button class="note-btn note-btn-save" onclick="saveNote()">Uložit</button>
     </div>
   </div>
@@ -3447,14 +3493,16 @@ function renderGallery() {
     <input id="edit-author" class="note-field" type="text" placeholder="Vaše jméno *" maxlength="40">
     <textarea id="edit-text" class="note-field" placeholder="Text poznámky..."></textarea>
     <div id="edit-photos-preview" class="note-photos-preview"></div>
-    <input type="file" id="edit-photo-input" accept="image/*" multiple style="display:none">
+    <input type="file" id="edit-photo-input" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="edit-gallery-input" accept="image/*" multiple style="display:none">
     <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:6px 0;cursor:pointer;">
       <input type="checkbox" id="edit-stamp-toggle" checked style="width:18px;height:18px;cursor:pointer;">
       <span>🏷️ Razítko do nových fotek (km, datum, jméno)</span>
     </label>
     <div class="note-btns">
       <button class="note-btn note-btn-cancel" onclick="closeEditModal()">Zrušit</button>
-      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('edit-photo-input').click()">📷</button>
+      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('edit-photo-input').click()" title="Vyfotit (po pořízení rovnou další)">📷</button>
+      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('edit-gallery-input').click()" title="Vybrat z galerie">🖼️</button>
       <button class="note-btn note-btn-save" onclick="saveEditNote()">Uložit</button>
     </div>
   </div>
