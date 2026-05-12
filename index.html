@@ -977,7 +977,9 @@ document.addEventListener('touchend', function(e){
     <div id="pdf-title">Situace</div>
     <div id="pdf-counter"></div>
     <button id="btn-pdf-next" onclick="docNav(1)">&#8250;</button>
-    <button onclick="if(currentPdfSrc)window.open(currentPdfSrc,'_blank')" title="Otevřít v novém okně" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
+    <button id="btn-pdf-zoom-out" onclick="pdfZoom(-1)" title="Zmenšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">−</button>
+    <button id="btn-pdf-zoom-in"  onclick="pdfZoom(+1)" title="Zvětšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">+</button>
+    <button onclick="if(currentPdfSrc)window.open(currentPdfSrc,'_blank')" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
     <button id="btn-pdf-fs" onclick="togglePdfFs()">⛶</button>
     <button id="btn-pdf-close" onclick="closePdf()">✕</button>
   </div>
@@ -1648,13 +1650,9 @@ function isPWA() {
 
 function openPdfExternal() {
   if(!currentPdfSrc) return;
-  // V PWA módu na iOS otevírá window.open _blank PDF v Safari mimo aplikaci
-  // → uživatel se nemůže vrátit zpět. Místo toho zaktivnit interní fullscreen.
-  if(isPWA() && isIOS()) {
-    var panel = document.getElementById('pdf-panel');
-    if(panel) panel.classList.add('fullscreen');
-    return;
-  }
+  // Vždy otevřít externě v Safari - tam dostane plný PDF prohlížeč
+  // s toolbarem, pinch-zoom a navigací mezi stranami.
+  // (V PWA módu na iOS jiný způsob neexistuje, iframe je vykreslen bez toolbarů.)
   window.open(currentPdfSrc, '_blank');
 }
 
@@ -1689,14 +1687,49 @@ function renderDocPage(realKm) {
   nosit.style.display = 'none';
   currentPdfSrc = p.soubor;
 
-  // Stejně jako ve Votici – vždy iframe, iOS 16+ Safari to už zvládá nativně
-  // (PDF.js canvas fallback se nepoužívá, ale ponechán v kódu pro případnou potřebu)
+  // V PWA módu (iOS) iframe nedostane nativní PDF toolbar/zoom → použijeme
+  // PDF.js canvas s vlastními zoom tlačítky. V Safari (mimo PWA) jede iframe
+  // s nativním iOS PDF prohlížečem (toolbar + pinch-zoom).
   var canvasWrap = document.getElementById('pdf-canvas-wrap');
-  if(canvasWrap) canvasWrap.style.display='none';
-  if(openWrap)   openWrap.style.display='none';
-  if(frameWrap)  frameWrap.style.display='flex';
-  var frame = document.getElementById('pdf-frame');
-  if(frame) frame.src = p.soubor;
+  var zoomIn  = document.getElementById('btn-pdf-zoom-in');
+  var zoomOut = document.getElementById('btn-pdf-zoom-out');
+  if(isPWA() && isIOS()) {
+    if(frameWrap) frameWrap.style.display='none';
+    if(openWrap)  openWrap.style.display='none';
+    if(canvasWrap) {
+      canvasWrap.style.display='flex';
+      renderPdfOnCanvas(p.soubor);
+    }
+    if(zoomIn)  zoomIn.style.display  = '';
+    if(zoomOut) zoomOut.style.display = '';
+  } else {
+    if(canvasWrap) canvasWrap.style.display='none';
+    if(openWrap)   openWrap.style.display='none';
+    if(frameWrap)  frameWrap.style.display='flex';
+    var frame = document.getElementById('pdf-frame');
+    if(frame) frame.src = p.soubor;
+    if(zoomIn)  zoomIn.style.display  = 'none';
+    if(zoomOut) zoomOut.style.display = 'none';
+  }
+}
+
+// Zoom úroveň pro PDF.js canvas. 1.0 = fit-to-width, 1.25, 1.5, 2.0, …
+window._pdfZoom = 1.0;
+function pdfZoom(dir) {
+  var levels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0];
+  var cur = levels.indexOf(window._pdfZoom);
+  if(cur === -1) cur = 2;
+  cur = Math.max(0, Math.min(levels.length - 1, cur + dir));
+  window._pdfZoom = levels[cur];
+  // Re-render aktuálně otevřeného PDF (staničení nebo propustek)
+  var pdfPanelOpen  = document.getElementById('pdf-panel');
+  var propPanelOpen = document.getElementById('prop-panel');
+  if(pdfPanelOpen && pdfPanelOpen.classList.contains('open') && currentPdfSrc) {
+    renderPdfOnCanvas(currentPdfSrc);
+  } else if(propPanelOpen && propPanelOpen.classList.contains('open') && typeof currentPropSrc !== 'undefined' && currentPropSrc) {
+    renderPropPdfOnCanvas(currentPropSrc);
+  }
+  showToast('🔍 Zoom ' + Math.round(window._pdfZoom * 100) + '%', 1000);
 }
 
 // ── PDF.js renderer (pro iOS Safari, kde iframe PDF nezobrazí) ────────────
@@ -1718,18 +1751,21 @@ function renderPdfOnCanvas(pdfUrl) {
   } catch(e){}
   pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
     if(token !== _pdfRenderToken) return;  // mezitím se otevřel jiný PDF
-    if(status) status.textContent = 'Stránek: ' + pdf.numPages + ' (pinch zoom = přiblížit)';
+    var z = window._pdfZoom || 1.0;
+    if(status) status.textContent = 'Stránek: ' + pdf.numPages + ' · Zoom ' + Math.round(z*100) + '% (použij +/− v hlavičce)';
     var renderNext = function(pageNum) {
       if(token !== _pdfRenderToken) return;
       if(pageNum > pdf.numPages) {
-        if(status) status.textContent = '✓ Hotovo (' + pdf.numPages + ' str.). Pinch = zoom.';
+        if(status) status.textContent = '✓ Hotovo · ' + pdf.numPages + ' str. · Zoom ' + Math.round(z*100) + '%';
         return;
       }
       pdf.getPage(pageNum).then(function(page) {
         if(token !== _pdfRenderToken) return;
         var maxW = container.clientWidth - 12 || 360;
         var v0 = page.getViewport({scale: 1});
-        var scale = Math.min(2.5, Math.max(1.0, maxW / v0.width));
+        // Základní fit-to-width × uživatelův zoom multiplikátor
+        var baseFit = maxW / v0.width;
+        var scale = Math.max(0.3, baseFit * z);
         var viewport = page.getViewport({scale: scale});
         var canvas = document.createElement('canvas');
         canvas.width = viewport.width;
@@ -3224,11 +3260,26 @@ function renderPropPage(idx) {
   // Aktualizuj titulek a label
   var title = document.getElementById('prop-title');
   if(title) title.textContent = p.nazev || p.typ || 'Propustek';
-  // Stejně jako ve Votici – vždy iframe, iOS 16+ Safari PDF zobrazí nativně se zoomem
+  // V PWA módu PDF.js canvas + vlastní zoom; v Safari iframe (nativní iOS PDF viewer)
   var canvasWrap = document.getElementById('prop-canvas-wrap');
-  if(canvasWrap) canvasWrap.style.display = 'none';
-  if(openWrap)   openWrap.style.display = 'none';
-  if(frameEl)    { frameEl.style.display = 'flex'; frameEl.src = p.soubor; }
+  var propZoomIn  = document.getElementById('btn-prop-zoom-in');
+  var propZoomOut = document.getElementById('btn-prop-zoom-out');
+  if(isPWA() && isIOS()) {
+    if(frameEl) { frameEl.style.display = 'none'; frameEl.src = 'about:blank'; }
+    if(openWrap) openWrap.style.display = 'none';
+    if(canvasWrap) {
+      canvasWrap.style.display = 'flex';
+      renderPropPdfOnCanvas(p.soubor);
+    }
+    if(propZoomIn)  propZoomIn.style.display  = '';
+    if(propZoomOut) propZoomOut.style.display = '';
+  } else {
+    if(canvasWrap) canvasWrap.style.display = 'none';
+    if(openWrap)   openWrap.style.display = 'none';
+    if(frameEl)    { frameEl.style.display = 'flex'; frameEl.src = p.soubor; }
+    if(propZoomIn)  propZoomIn.style.display  = 'none';
+    if(propZoomOut) propZoomOut.style.display = 'none';
+  }
 }
 
 // PDF.js renderer pro panel propustků (analogicky k renderPdfOnCanvas)
@@ -3250,18 +3301,20 @@ function renderPropPdfOnCanvas(pdfUrl) {
   } catch(e){}
   pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
     if(token !== _propPdfRenderToken) return;
-    if(status) status.textContent = 'Stránek: ' + pdf.numPages + ' (pinch zoom = přiblížit)';
+    var z = window._pdfZoom || 1.0;
+    if(status) status.textContent = 'Stránek: ' + pdf.numPages + ' · Zoom ' + Math.round(z*100) + '%';
     var renderNext = function(pageNum) {
       if(token !== _propPdfRenderToken) return;
       if(pageNum > pdf.numPages) {
-        if(status) status.textContent = '✓ Hotovo (' + pdf.numPages + ' str.).';
+        if(status) status.textContent = '✓ Hotovo · ' + pdf.numPages + ' str. · Zoom ' + Math.round(z*100) + '%';
         return;
       }
       pdf.getPage(pageNum).then(function(page) {
         if(token !== _propPdfRenderToken) return;
         var maxW = container.clientWidth - 12 || 360;
         var v0 = page.getViewport({scale: 1});
-        var scale = Math.min(2.5, Math.max(1.0, maxW / v0.width));
+        var baseFit = maxW / v0.width;
+        var scale = Math.max(0.3, baseFit * z);
         var viewport = page.getViewport({scale: scale});
         var canvas = document.createElement('canvas');
         canvas.width = viewport.width;
@@ -4903,7 +4956,9 @@ if('serviceWorker' in navigator) {
 <div id="prop-panel" style="touch-action:pan-x pan-y pinch-zoom;">
   <div id="prop-header">
     <div id="prop-title">Propustek</div>
-    <button onclick="if(currentPropSrc)window.open(currentPropSrc,'_blank')" title="Otevřít v novém okně" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
+    <button id="btn-prop-zoom-out" onclick="pdfZoom(-1)" title="Zmenšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">−</button>
+    <button id="btn-prop-zoom-in"  onclick="pdfZoom(+1)" title="Zvětšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">+</button>
+    <button onclick="if(currentPropSrc)window.open(currentPropSrc,'_blank')" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
     <button id="btn-prop-fs" onclick="togglePropFs()">⛶</button>
     <button id="btn-prop-close" onclick="closePropPanel()">✕</button>
   </div>
