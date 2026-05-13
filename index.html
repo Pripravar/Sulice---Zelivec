@@ -1451,7 +1451,7 @@ function openPRPanel(realKm, pr) {
   if(openWrap) openWrap.style.display='none';
   if(frameWrap) frameWrap.style.display='flex';
   var frame = document.getElementById('pdf-frame');
-  if(frame) frame.src = pr.soubor;
+  if(frame) frame.src = pdfFrameSrcFor(pr.soubor);
 }
 
 // Azimut úseku mezi dvěma body (stupně, 0=N, 90=E)
@@ -1640,6 +1640,16 @@ var currentPdfSrc = '';
 function isMobile() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
 }
+
+// Na mobilu (zvlášť iOS PWA) iframe nedostane nativní PDF prohlížeč.
+// Použijeme proto hostovaný Mozilla PDF.js viewer, který má vlastní toolbar
+// (strany, lupa, kreslicí nástroje, vyhledávání) a uvnitř funguje pinch-zoom.
+function pdfFrameSrcFor(src) {
+  if(!src) return 'about:blank';
+  if(!isMobile()) return src;
+  var absUrl = new URL(src, window.location.href).href;
+  return 'https://mozilla.github.io/pdf.js/web/viewer.html?file=' + encodeURIComponent(absUrl);
+}
 // iOS Safari NEZOBRAZÍ PDF v iframu - vždy ho stáhne. Detekce, abychom mu nabídli tlačítko místo iframu.
 function isIOS() {
   return (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) ||
@@ -1700,7 +1710,7 @@ function renderDocPage(realKm) {
   if(openWrap)   openWrap.style.display   = 'none';
   if(frameWrap)  frameWrap.style.display  = 'flex';
   var frame = document.getElementById('pdf-frame');
-  if(frame) frame.src = p.soubor;
+  if(frame) frame.src = pdfFrameSrcFor(p.soubor);
   if(zoomIn)  zoomIn.style.display  = 'none';
   if(zoomOut) zoomOut.style.display = 'none';
 }
@@ -3264,7 +3274,7 @@ function renderPropPage(idx) {
   var propZoomOut = document.getElementById('btn-prop-zoom-out');
   if(canvasWrap) canvasWrap.style.display = 'none';
   if(openWrap)   openWrap.style.display   = 'none';
-  if(frameEl)    { frameEl.style.display = 'flex'; frameEl.src = p.soubor; }
+  if(frameEl)    { frameEl.style.display = 'flex'; frameEl.src = pdfFrameSrcFor(p.soubor); }
   if(propZoomIn)  propZoomIn.style.display  = 'none';
   if(propZoomOut) propZoomOut.style.display = 'none';
 }
