@@ -1617,6 +1617,9 @@ function openDocPanel(pages, realKm, startIdx) {
   var panel  = document.getElementById('pdf-panel');
   panel.classList.add('open');
 
+  // Odemkni viewport, ať iOS Safari může na iframu pinch-zoomovat PDF
+  unlockViewport();
+
   // Sestav záložky
   var tabs = document.getElementById('pdf-tabs');
   tabs.innerHTML = '';
@@ -3221,6 +3224,9 @@ function openPropPanel(prop) {
   var title = document.getElementById('prop-title');
   panel.classList.add('open');
   title.textContent = prop.nazev;
+
+  // Odemkni viewport, ať iOS Safari může na iframu pinch-zoomovat PDF
+  unlockViewport();
 
   // Záložky
   var tabs = document.getElementById('prop-tabs');
