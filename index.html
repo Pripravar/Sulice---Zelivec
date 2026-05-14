@@ -4077,6 +4077,7 @@ function completeLogin(user, nameOverride) {
   loadAllUsers();
   loadTasks();
   loadPracovnici();
+  loadStroje();
   setupFcmIfPossible();
   maybeShowIosHint();
 }
@@ -4957,26 +4958,33 @@ window.diaryMode        = 'den';   // 'den' nebo 'seznam'
 window.diaryFilter      = { od:null, do:null, osoba:'', text:'' };
 window.allPracovnici    = {};      // /pracovnici/{id} – manuální dělníci (bez Auth)
 
-// Sjednocený seznam {id, name, firma, type:'user'|'manual'} pro šichtovku
-function getAllWorkers(){
+// Sjednocený seznam {id, name, firma, so, aktivniOd, vSichtovce, type:'user'|'manual'} pro šichtovku
+function getAllWorkers(includeHidden){
   var list = [];
   Object.keys(window.allUsers || {}).forEach(function(uid){
     var u = window.allUsers[uid];
     if(!u || !u.name) return;
-    list.push({ id: uid, name: u.name, firma: u.firma || '', type: 'user' });
+    var vS = (u.vSichtovce === false) ? false : true; // default true (zobrazit)
+    list.push({ id: uid, name: u.name, firma: u.firma || '', so: u.so || '', aktivniOd: u.aktivniOd || '', vSichtovce: vS, type: 'user' });
   });
   Object.keys(window.allPracovnici || {}).forEach(function(pid){
     var p = window.allPracovnici[pid];
     if(!p || !p.name) return;
-    list.push({ id: pid, name: p.name, firma: p.firma || '', type: 'manual' });
+    var vS = (p.vSichtovce === false) ? false : true;
+    list.push({ id: pid, name: p.name, firma: p.firma || '', so: p.so || '', aktivniOd: p.aktivniOd || '', vSichtovce: vS, type: 'manual' });
   });
+  if(!includeHidden) {
+    list = list.filter(function(w){ return w.vSichtovce !== false; });
+  }
   list.sort(function(a,b){ return (a.name || '').localeCompare(b.name || '', 'cs'); });
   return list;
 }
 // Najdi pracovníka v obou pollech (přihlášený / manuální)
 function lookupWorker(id){
-  if(window.allUsers && window.allUsers[id])     return { name: window.allUsers[id].name, firma: window.allUsers[id].firma || '', type: 'user' };
-  if(window.allPracovnici && window.allPracovnici[id]) return { name: window.allPracovnici[id].name, firma: window.allPracovnici[id].firma || '', type: 'manual' };
+  var u = window.allUsers && window.allUsers[id];
+  if(u) return { name: u.name, firma: u.firma || '', so: u.so || '', type: 'user' };
+  var p = window.allPracovnici && window.allPracovnici[id];
+  if(p) return { name: p.name, firma: p.firma || '', so: p.so || '', type: 'manual' };
   return null;
 }
 
@@ -4986,6 +4994,201 @@ function loadPracovnici(){
     if(document.getElementById('diary-panel') && document.getElementById('diary-panel').classList.contains('open')) {
       renderSichtovka();
     }
+  });
+}
+
+// ── STROJE ──────────────────────────────────────────────────────────
+window.allStroje = {};
+
+function loadStroje(){
+  db.ref('stroje').on('value', function(snap){
+    window.allStroje = snap.val() || {};
+    if(document.getElementById('diary-panel') && document.getElementById('diary-panel').classList.contains('open')) {
+      renderStrojeList();
+    }
+    if(document.getElementById('stroje-modal') && document.getElementById('stroje-modal').style.display === 'flex') {
+      openStrojeModal();
+    }
+  });
+}
+
+function getAllStroje(includeHidden){
+  var arr = [];
+  Object.keys(window.allStroje || {}).forEach(function(id){
+    var s = window.allStroje[id];
+    if(!s || !s.nazev) return;
+    var vS = (s.vSichtovce === false) ? false : true;
+    arr.push({ id: id, nazev: s.nazev, typ: s.typ || '', firma: s.firma || '', so: s.so || '', aktivniOd: s.aktivniOd || '', vSichtovce: vS });
+  });
+  if(!includeHidden) arr = arr.filter(function(s){ return s.vSichtovce !== false; });
+  arr.sort(function(a,b){ return (a.nazev || '').localeCompare(b.nazev || '', 'cs'); });
+  return arr;
+}
+function lookupStroj(id){
+  var s = window.allStroje && window.allStroje[id];
+  if(s) return { nazev: s.nazev, typ: s.typ || '', firma: s.firma || '', so: s.so || '' };
+  return null;
+}
+
+function renderStrojeList(){
+  var list = document.getElementById('str-list');
+  if(!list) return;
+  var hod   = (window.diaryCurrentData && window.diaryCurrentData.stroje) || {};
+  var pozn  = (window.diaryCurrentData && window.diaryCurrentData.stroje_pozn) || {};
+  var currentDt = window.diaryCurrentDate || '';
+  var arr = getAllStroje().filter(function(s){
+    if(s.aktivniOd && currentDt && s.aktivniOd > currentDt) return false;
+    return true;
+  });
+  if(arr.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádné aktivní stroje na tento den. Přidej stroj přes 🚜 Spravovat stroje.</div>';
+    document.getElementById('str-total').innerHTML = 'Celkem <b>0 h</b>';
+    document.getElementById('str-total-count').textContent = '0 strojů · 0 h';
+    return;
+  }
+  list.innerHTML = arr.map(function(s){
+    var h = hod[s.id];
+    var hVal = (h === undefined || h === null || h === '') ? '' : h;
+    var pVal = pozn[s.id] || '';
+    var firmaHtml = s.firma ? '<span class="firma-badge">' + escapeHtml(s.firma) + '</span>' : '';
+    var soBadge = s.so ? '<span style="background:rgba(72,187,120,0.18);color:#48bb78;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;">' + escapeHtml(s.so) + '</span>' : '';
+    var typBadge = s.typ ? '<span style="color:var(--text2);font-size:10px;margin-left:4px;">(' + escapeHtml(s.typ) + ')</span>' : '';
+    return '<div class="sht-row">'
+      + '<div class="sht-left">'
+      +   '<div class="sht-name">🚜 ' + escapeHtml(s.nazev) + typBadge + firmaHtml + soBadge + '</div>'
+      +   '<input type="text" class="sht-note" placeholder="poznámka (např. porucha, plnění)" value="' + escapeHtml(pVal) + '" onchange="strojSetNote(\'' + s.id + '\', this.value)">'
+      + '</div>'
+      + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" onchange="strojSetHours(\'' + s.id + '\', this.value)">'
+      + '<span class="sht-suffix">h</span>'
+      + '</div>';
+  }).join('');
+  var total = 0, count = 0;
+  arr.forEach(function(s){
+    var h = parseFloat(hod[s.id]);
+    if(!isNaN(h) && h > 0) { total += h; count++; }
+  });
+  document.getElementById('str-total').innerHTML = 'Celkem <b>' + total.toFixed(1) + ' h</b> · ' + count + ' ' + (count === 1 ? 'stroj' : (count < 5 ? 'stroje' : 'strojů'));
+  document.getElementById('str-total-count').textContent = count + ' ' + (count === 1 ? 'stroj' : (count < 5 ? 'stroje' : 'strojů')) + ' · ' + total.toFixed(1) + ' h';
+}
+
+function strojSetHours(id, val){
+  if(!window.diaryCurrentData) return;
+  if(!window.diaryCurrentData.stroje) window.diaryCurrentData.stroje = {};
+  var v = parseFloat(val);
+  if(isNaN(v) || v <= 0) delete window.diaryCurrentData.stroje[id];
+  else window.diaryCurrentData.stroje[id] = v;
+  diarySaveDay();
+  renderStrojeList();
+}
+function strojSetNote(id, val){
+  if(!window.diaryCurrentData) return;
+  if(!window.diaryCurrentData.stroje_pozn) window.diaryCurrentData.stroje_pozn = {};
+  var v = (val || '').trim();
+  if(!v) delete window.diaryCurrentData.stroje_pozn[id];
+  else window.diaryCurrentData.stroje_pozn[id] = v;
+  diarySaveDay();
+}
+
+function strojeFillAll(){
+  var inp = document.getElementById('str-bulk-input');
+  var h = parseFloat(inp.value);
+  if(isNaN(h) || h <= 0) { showToast('Zadej počet hodin', 1500); return; }
+  if(!window.diaryCurrentData.stroje) window.diaryCurrentData.stroje = {};
+  getAllStroje().forEach(function(s){ window.diaryCurrentData.stroje[s.id] = h; });
+  diarySaveDay();
+  renderStrojeList();
+  showToast('✓ Všem strojům nastaveno ' + h + ' h', 1500);
+}
+
+function openStrojeModal(){
+  var list = document.getElementById('stroje-list');
+  var arr = getAllStroje(true);
+  if(arr.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Zatím žádné stroje. Přidej dole.</div>';
+  } else {
+    list.innerHTML = arr.map(function(s){
+      var hidden = (s.vSichtovce === false) ? ' <span style="color:var(--text2);font-size:10px;">(skryto)</span>' : '';
+      var firmaB = s.firma ? ' <span style="background:var(--panel2);color:var(--accent2);font-size:10px;padding:1px 6px;border-radius:8px;">' + escapeHtml(s.firma) + '</span>' : '';
+      var soB = s.so ? ' <span style="background:rgba(72,187,120,0.18);color:#48bb78;font-size:10px;padding:1px 6px;border-radius:8px;">' + escapeHtml(s.so) + '</span>' : '';
+      var typB = s.typ ? ' <span style="color:var(--text2);font-size:10px;">(' + escapeHtml(s.typ) + ')</span>' : '';
+      return '<div class="firma-row" style="flex-wrap:wrap;">'
+        + '<div class="firma-name" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">🚜 ' + escapeHtml(s.nazev) + typB + firmaB + soB + hidden + '</div>'
+        + '<button onclick="openStrojEditModal(\'' + s.id + '\')" title="Upravit" style="background:transparent;border:none;color:var(--accent2);cursor:pointer;font-size:14px;padding:2px 4px;">✏️</button>'
+        + '</div>';
+    }).join('');
+  }
+  document.getElementById('stroje-modal').style.display = 'flex';
+}
+function closeStrojeModal(){
+  document.getElementById('stroje-modal').style.display = 'none';
+  renderStrojeList();
+}
+
+function addStroj(){
+  var n = (document.getElementById('new-stroj-nazev').value || '').trim();
+  if(!n || n.length < 2) { showToast('Zadej název stroje', 1500); return; }
+  var t = (document.getElementById('new-stroj-typ').value || '').trim();
+  var f = (document.getElementById('new-stroj-firma').value || '').trim();
+  var so = (document.getElementById('new-stroj-so').value || '').trim();
+  var id = 's_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  var today = ymd(new Date());
+  var stroj = {
+    id: id, nazev: n, typ: t, firma: f, so: so,
+    aktivniOd: today, vSichtovce: true,
+    vytvoreno: Date.now(),
+    vytvoril_uid: window.currentUser ? window.currentUser.uid : ''
+  };
+  db.ref('stroje/' + id).set(stroj).then(function(){
+    document.getElementById('new-stroj-nazev').value = '';
+    document.getElementById('new-stroj-typ').value = '';
+    document.getElementById('new-stroj-firma').value = '';
+    document.getElementById('new-stroj-so').value = '';
+    showToast('✓ Stroj přidán: ' + n + ' (aktivní od ' + today + ')', 2200);
+    setTimeout(openStrojeModal, 300);
+  });
+}
+
+function openStrojEditModal(id){
+  var s = window.allStroje && window.allStroje[id];
+  if(!s) return;
+  document.getElementById('se-id').value          = id;
+  document.getElementById('se-nazev').value       = s.nazev || '';
+  document.getElementById('se-typ').value         = s.typ || '';
+  document.getElementById('se-firma').value       = s.firma || '';
+  document.getElementById('se-so').value          = s.so || '';
+  document.getElementById('se-aktivniOd').value   = s.aktivniOd || '';
+  document.getElementById('se-vSichtovce').checked = (s.vSichtovce === false) ? false : true;
+  document.getElementById('stroj-edit-modal').style.display = 'flex';
+}
+function closeStrojEdit(){ document.getElementById('stroj-edit-modal').style.display = 'none'; }
+function saveStrojEdit(){
+  var id = document.getElementById('se-id').value;
+  if(!id) return;
+  var updates = {
+    nazev:      (document.getElementById('se-nazev').value || '').trim(),
+    typ:        (document.getElementById('se-typ').value || '').trim() || null,
+    firma:      (document.getElementById('se-firma').value || '').trim() || null,
+    so:         (document.getElementById('se-so').value || '').trim() || null,
+    aktivniOd:  (document.getElementById('se-aktivniOd').value || '').trim() || null,
+    vSichtovce: !!document.getElementById('se-vSichtovce').checked
+  };
+  if(!updates.nazev) { showToast('Název je povinný', 1500); return; }
+  db.ref('stroje/' + id).update(updates).then(function(){
+    showToast('✅ Uloženo', 1500);
+    closeStrojEdit();
+    setTimeout(openStrojeModal, 200);
+  });
+}
+function deleteStroj(){
+  var id = document.getElementById('se-id').value;
+  if(!id) return;
+  var s = window.allStroje && window.allStroje[id];
+  var nm = s ? s.nazev : id;
+  if(!confirm('Smazat stroj "' + nm + '"? Hodiny v deníku zůstanou, ale název zmizí.')) return;
+  db.ref('stroje/' + id).remove().then(function(){
+    showToast('🗑 Smazáno', 1500);
+    closeStrojEdit();
+    setTimeout(openStrojeModal, 200);
   });
 }
 
@@ -5091,6 +5294,7 @@ function renderDiaryDay(){
   document.getElementById('dn-materialy').value = d.materialy || '';
   document.getElementById('dn-zaver').value     = d.zaver || '';
   renderSichtovka();
+  renderStrojeList();
   renderZaznamy();
 }
 
@@ -5100,9 +5304,14 @@ function renderSichtovka(){
   if(!list) return;
   var sicht = (window.diaryCurrentData && window.diaryCurrentData.sichtovka) || {};
   var pozn  = (window.diaryCurrentData && window.diaryCurrentData.sichtovka_pozn) || {};
-  var arr = getAllWorkers();
+  var currentDt = window.diaryCurrentDate || '';
+  var arr = getAllWorkers().filter(function(w){
+    // Skryj osoby, kterým ještě nezačala aktivita (aktivniOd > otevřený den)
+    if(w.aktivniOd && currentDt && w.aktivniOd > currentDt) return false;
+    return true;
+  });
   if(arr.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádní pracovníci. Přidej manuálního dělníka přes 🏢 Firmy.</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádní aktivní pracovníci na tento den. Přidej dělníka přes 👷 Lidé / firmy nebo přepni na pozdější den.</div>';
     return;
   }
   list.innerHTML = arr.map(function(u){
@@ -5227,13 +5436,14 @@ function zaznamDelete(id){
 var _diarySaveTimer = null;
 function diarySaveDay(){
   if(!window.diaryCurrentDate || !window.diaryCurrentData) return;
-  // Aktualizuj data z UI elementů
+  // Aktualizuj data z UI elementů (sichtovka/stroje/pozn už jsou v objektu)
+  var el;
+  if((el = document.getElementById('dn-pocasi')))    window.diaryCurrentData.pocasi    = el.value || '';
+  if((el = document.getElementById('dn-tds')))       window.diaryCurrentData.tds       = !!el.checked;
+  if((el = document.getElementById('dn-bozp')))      window.diaryCurrentData.bozp      = !!el.checked;
+  if((el = document.getElementById('dn-materialy'))) window.diaryCurrentData.materialy = el.value || '';
+  if((el = document.getElementById('dn-zaver')))     window.diaryCurrentData.zaver     = el.value || '';
   window.diaryCurrentData.datum     = window.diaryCurrentDate;
-  window.diaryCurrentData.pocasi    = document.getElementById('dn-pocasi').value || '';
-  window.diaryCurrentData.tds       = !!document.getElementById('dn-tds').checked;
-  window.diaryCurrentData.bozp      = !!document.getElementById('dn-bozp').checked;
-  window.diaryCurrentData.materialy = document.getElementById('dn-materialy').value || '';
-  window.diaryCurrentData.zaver     = document.getElementById('dn-zaver').value || '';
   window.diaryCurrentData.upraveno  = Date.now();
   // Debounce - 500 ms
   if(_diarySaveTimer) clearTimeout(_diarySaveTimer);
@@ -5377,20 +5587,23 @@ function closeDiaryExport(){ document.getElementById('diary-export-modal').class
 // ── Modal: Pracovníci & firmy ──────────────────────────────────────
 function openFirmyModal(){
   var list = document.getElementById('firmy-list');
-  var workers = getAllWorkers();
+  var workers = getAllWorkers(true); // include hidden = true (chceme vidět i schované)
   if(workers.length === 0) {
     list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Zatím žádní pracovníci. Přidej dělníka dole, nebo nech ostatní přihlásit se Googlem/telefonem.</div>';
   } else {
     list.innerHTML = workers.map(function(w){
       var typeIcon = w.type === 'manual' ? '👷' : '🔐';
       var typeTitle = w.type === 'manual' ? 'Manuální dělník (bez přihlášení)' : 'Přihlášený uživatel';
+      var hiddenBadge = (w.vSichtovce === false) ? ' <span style="color:var(--text2);font-size:10px;">(skryto)</span>' : '';
+      var soBadge = w.so ? ' <span style="background:rgba(72,187,120,0.18);color:#48bb78;font-size:10px;padding:1px 6px;border-radius:8px;">' + escapeHtml(w.so) + '</span>' : '';
+      var firmaBadge = w.firma ? ' <span style="background:var(--panel2);color:var(--accent2);font-size:10px;padding:1px 6px;border-radius:8px;">' + escapeHtml(w.firma) + '</span>' : '';
+      var editBtn = '<button onclick="openOsobaEditModal(\'' + w.id + '\', \'' + w.type + '\')" title="Upravit" style="background:transparent;border:none;color:var(--accent2);cursor:pointer;font-size:14px;padding:2px 4px;">✏️</button>';
       var delBtn = w.type === 'manual'
         ? '<button onclick="deleteManualWorker(\'' + w.id + '\')" title="Smazat dělníka" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:2px 4px;">🗑</button>'
         : '';
-      return '<div class="firma-row">'
-        + '<div class="firma-name" title="' + typeTitle + '">' + typeIcon + ' ' + escapeHtml(w.name) + '</div>'
-        + '<input type="text" placeholder="Firma" value="' + escapeHtml(w.firma) + '" data-id="' + w.id + '" data-type="' + w.type + '" onchange="firmaSet(\'' + w.id + '\', this.value, \'' + w.type + '\')">'
-        + delBtn
+      return '<div class="firma-row" style="flex-wrap:wrap;">'
+        + '<div class="firma-name" title="' + typeTitle + '" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">' + typeIcon + ' ' + escapeHtml(w.name) + firmaBadge + soBadge + hiddenBadge + '</div>'
+        + editBtn + delBtn
         + '</div>';
     }).join('');
   }
@@ -5417,19 +5630,67 @@ function addManualWorker(){
   var firma = (firmaInp.value || '').trim();
   if(!name || name.length < 2) { showToast('Zadej jméno', 1500); return; }
   var id = 'w_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  var today = ymd(new Date());
   var worker = {
     id: id,
     name: name,
     firma: firma,
+    so: '',
+    aktivniOd: today,   // platí od dnešního dne (zpětně se neukáže)
+    vSichtovce: true,
     vytvoreno: Date.now(),
     vytvoril_uid: window.currentUser ? window.currentUser.uid : ''
   };
   db.ref('pracovnici/' + id).set(worker).then(function(){
     nameInp.value = '';
     firmaInp.value = '';
-    showToast('✓ Dělník přidán: ' + name, 1500);
-    // openFirmyModal se obnoví automaticky díky listeneru
+    showToast('✓ Dělník přidán: ' + name + ' (aktivní od ' + today + ')', 2200);
     setTimeout(openFirmyModal, 300);
+  }).catch(function(e){
+    showToast('❌ Chyba: ' + (e.message || e), 2500);
+  });
+}
+
+// ── Edit modal pro libovolnou osobu (přihlášenou i manuální) ───────
+function openOsobaEditModal(id, type){
+  var w = (type === 'manual')
+        ? (window.allPracovnici && window.allPracovnici[id])
+        : (window.allUsers && window.allUsers[id]);
+  if(!w) { showToast('Osoba nenalezena', 2000); return; }
+  document.getElementById('osoba-edit-title').textContent = (type === 'manual' ? '✏️ Upravit dělníka' : '✏️ Upravit uživatele');
+  document.getElementById('oe-id').value          = id;
+  document.getElementById('oe-type').value        = type;
+  document.getElementById('oe-name').value        = w.name || '';
+  document.getElementById('oe-firma').value       = w.firma || '';
+  document.getElementById('oe-so').value          = w.so || '';
+  document.getElementById('oe-aktivniOd').value   = w.aktivniOd || '';
+  document.getElementById('oe-vSichtovce').checked = (w.vSichtovce === false) ? false : true;
+  document.getElementById('osoba-edit-modal').style.display = 'flex';
+}
+
+function closeOsobaEdit(){ document.getElementById('osoba-edit-modal').style.display = 'none'; }
+
+function saveOsobaEdit(){
+  var id   = document.getElementById('oe-id').value;
+  var type = document.getElementById('oe-type').value;
+  var name      = (document.getElementById('oe-name').value || '').trim();
+  var firma     = (document.getElementById('oe-firma').value || '').trim();
+  var so        = (document.getElementById('oe-so').value || '').trim();
+  var aktivniOd = (document.getElementById('oe-aktivniOd').value || '').trim();
+  var vSichtovce = !!document.getElementById('oe-vSichtovce').checked;
+  if(!name || name.length < 2) { showToast('Jméno je povinné', 1800); return; }
+  var path = (type === 'manual') ? ('pracovnici/' + id) : ('uzivatele/' + id);
+  var updates = {
+    name: name,
+    firma: firma || null,
+    so: so || null,
+    aktivniOd: aktivniOd || null,
+    vSichtovce: vSichtovce
+  };
+  db.ref(path).update(updates).then(function(){
+    showToast('✅ Uloženo', 1500);
+    closeOsobaEdit();
+    setTimeout(openFirmyModal, 200);
   }).catch(function(e){
     showToast('❌ Chyba: ' + (e.message || e), 2500);
   });
@@ -5449,7 +5710,12 @@ function deleteManualWorker(id){
 function generateDiaryExport(){
   var typ = document.getElementById('exp-type').value || 'full';
   if(typ === 'sichtovka') return generateSichtovkaExport();
+  if(typ === 'stroje')    return generateStrojeExport();
   return generateFullExport();
+}
+
+function _expSoFilter(){
+  return (document.getElementById('exp-so').value || '').trim();
 }
 
 function generateFullExport(){
@@ -5546,8 +5812,9 @@ function generateSichtovkaExport(){
     document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)';
     return;
   }
-  // Agregace: firma → uid → { name, dny:{datum:{h,pozn}}, total }
-  var firmy = {}; // klíč = firma (nebo '_no_firma'), hodnota = { název: '...', osoby: {uid:{...}} }
+  var soFilter = _expSoFilter();
+  // Agregace: firma → uid → { name, so, dny:{datum:{h,pozn}}, total }
+  var firmy = {};
   keys.forEach(function(dt){
     var d = window.diaryAllDays[dt];
     if(!d || !d.sichtovka) return;
@@ -5556,10 +5823,11 @@ function generateSichtovkaExport(){
       var h = parseFloat(d.sichtovka[uid]);
       if(isNaN(h) || h <= 0) return;
       var w = lookupWorker(uid);
-      if(!w) w = { name: 'id:' + uid, firma: '', type: '?' };
+      if(!w) w = { name: 'id:' + uid, firma: '', so: '', type: '?' };
+      if(soFilter && (w.so || '').toLowerCase() !== soFilter.toLowerCase()) return;
       var firmaKey = (w.firma || '').trim() || '_no_firma';
       if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (w.firma || firmaKey), osoby: {} };
-      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, dny: {}, total: 0 };
+      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, so: w.so, dny: {}, total: 0 };
       firmy[firmaKey].osoby[uid].dny[dt] = { h: (firmy[firmaKey].osoby[uid].dny[dt] ? firmy[firmaKey].osoby[uid].dny[dt].h : 0) + h, pozn: poznDne[uid] || '' };
       firmy[firmaKey].osoby[uid].total += h;
     });
@@ -5594,7 +5862,7 @@ function generateSichtovkaExport(){
       var o = f.osoby[uid];
       celkemOsobCount++;
       out.push('');
-      out.push(o.name + '  (celkem ' + o.total.toFixed(1) + ' h)');
+      out.push(o.name + (o.so ? '  [' + o.so + ']' : '') + '  (celkem ' + o.total.toFixed(1) + ' h)');
       // Seznam dní
       var dnyKeys = Object.keys(o.dny).sort();
       dnyKeys.forEach(function(dt){
@@ -5954,6 +6222,96 @@ function importKzpSeed(){
       console.error('Import KZP error:', e);
       showToast('❌ Chyba importu: ' + (e.message || e), 4000);
     });
+}
+
+// ── Export: Stroje po firmách ──────────────────────────────────────
+function generateStrojeExport(){
+  var od = document.getElementById('exp-od').value;
+  var doDate = document.getElementById('exp-do').value;
+  if(!od || !doDate) { showToast('Vyber rozsah dat', 1500); return; }
+  if(od > doDate) { showToast('Datum od je větší než do', 2000); return; }
+  var soFilter = _expSoFilter();
+  var keys = Object.keys(window.diaryAllDays || {}).filter(function(dt){ return dt >= od && dt <= doDate; });
+  keys.sort();
+  if(keys.length === 0) { document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)'; return; }
+
+  var firmy = {};
+  keys.forEach(function(dt){
+    var d = window.diaryAllDays[dt];
+    if(!d || !d.stroje) return;
+    var poznDne = d.stroje_pozn || {};
+    Object.keys(d.stroje).forEach(function(sid){
+      var h = parseFloat(d.stroje[sid]);
+      if(isNaN(h) || h <= 0) return;
+      var s = lookupStroj(sid);
+      if(!s) s = { nazev: 'id:' + sid, typ: '', firma: '', so: '' };
+      if(soFilter && (s.so || '').toLowerCase() !== soFilter.toLowerCase()) return;
+      var firmaKey = (s.firma || '').trim() || '_no_firma';
+      if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (s.firma || firmaKey), stroje: {} };
+      if(!firmy[firmaKey].stroje[sid]) firmy[firmaKey].stroje[sid] = { nazev: s.nazev, typ: s.typ, so: s.so, dny: {}, total: 0 };
+      firmy[firmaKey].stroje[sid].dny[dt] = { h: (firmy[firmaKey].stroje[sid].dny[dt] ? firmy[firmaKey].stroje[sid].dny[dt].h : 0) + h, pozn: poznDne[sid] || '' };
+      firmy[firmaKey].stroje[sid].total += h;
+    });
+  });
+
+  var firmaKeys = Object.keys(firmy).sort(function(a,b){
+    if(a === '_no_firma') return 1;
+    if(b === '_no_firma') return -1;
+    return a.localeCompare(b, 'cs');
+  });
+
+  var out = [];
+  out.push('STROJE — II/603 Sulice – Želivec');
+  out.push('Rozsah: ' + od + ' – ' + doDate);
+  if(soFilter) out.push('Filtr SO: ' + soFilter);
+  out.push('Vygenerováno: ' + new Date().toLocaleString('cs-CZ'));
+  out.push('Podklad pro kontrolu fakturace strojů');
+  out.push('═══════════════════════════════════════════');
+  out.push('');
+
+  var celkemHodin = 0, celkemStrojuCount = 0;
+  firmaKeys.forEach(function(fkey){
+    var f = firmy[fkey];
+    var strKeys = Object.keys(f.stroje);
+    strKeys.sort(function(a,b){ return (f.stroje[a].nazev || '').localeCompare(f.stroje[b].nazev || '', 'cs'); });
+    var firmaTotal = 0;
+    out.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    out.push('🏢 ' + f.name);
+    out.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    strKeys.forEach(function(sid){
+      var s = f.stroje[sid];
+      celkemStrojuCount++;
+      out.push('');
+      var hdr = '🚜 ' + s.nazev + (s.typ ? ' (' + s.typ + ')' : '') + (s.so ? '  [' + s.so + ']' : '') + '  (celkem ' + s.total.toFixed(1) + ' h)';
+      out.push(hdr);
+      var dnyKeys = Object.keys(s.dny).sort();
+      dnyKeys.forEach(function(dt){
+        var dateObj = ymd_to_date(dt);
+        var dow = dayOfWeekCs(dateObj).substring(0,2);
+        var sv  = svatekFor(dateObj);
+        var wf = isWeekend(dateObj) ? ' (víkend)' : (sv ? ' (svátek: ' + sv + ')' : '');
+        var dStr = dateObj.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric'});
+        var entry = s.dny[dt];
+        var poznVal = entry.pozn ? ('   pozn: ' + entry.pozn) : '';
+        out.push('  ' + dow + ' ' + dStr + '   ' + entry.h.toFixed(1) + ' h' + wf + poznVal);
+      });
+      firmaTotal += s.total;
+    });
+    out.push('');
+    out.push('  ─────────────────────────────');
+    out.push('  Firma celkem: ' + firmaTotal.toFixed(1) + ' h  (' + strKeys.length + ' ' + (strKeys.length === 1 ? 'stroj' : (strKeys.length < 5 ? 'stroje' : 'strojů')) + ')');
+    out.push('');
+    celkemHodin += firmaTotal;
+  });
+
+  out.push('═══════════════════════════════════════════');
+  out.push('SOUHRN ZA OBDOBÍ');
+  out.push('  Celkem hodin: ' + celkemHodin.toFixed(1) + ' h');
+  out.push('  Počet strojů: ' + celkemStrojuCount);
+  out.push('  Počet firem:  ' + firmaKeys.filter(function(k){ return k !== '_no_firma'; }).length);
+  out.push('═══════════════════════════════════════════');
+
+  document.getElementById('diary-export-text').value = out.join('\n');
 }
 
 function copyDiaryExport(){
@@ -6348,6 +6706,20 @@ function copyDiaryExport(){
       <div class="sht-total" id="sht-total">Celkem <b>0 h</b></div>
     </div>
 
+    <!-- Stroje -->
+    <div class="diary-section">
+      <h3>🚜 Stroje <span class="ds-cnt" id="str-total-count">0 strojů · 0 h</span></h3>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Hodiny provozu (motohodiny / odpracované hodiny)</div>
+      <div class="sht-bulk">
+        <input type="number" id="str-bulk-input" placeholder="8" min="0" max="24" step="0.5">
+        <button onclick="strojeFillAll()">Vyplnit všem</button>
+        <button onclick="openStrojeModal()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">🚜 Spravovat stroje</button>
+        <span class="lbl" style="flex:0;">např. všem 8 h</span>
+      </div>
+      <div id="str-list" style="margin-top:8px;"></div>
+      <div class="sht-total" id="str-total">Celkem <b>0 h</b></div>
+    </div>
+
     <!-- Záznamy -->
     <div class="diary-section">
       <h3>📝 Záznamy během dne <span class="ds-cnt" id="zaz-count">0</span></h3>
@@ -6403,8 +6775,9 @@ function copyDiaryExport(){
     <h3 style="font-size:15px;color:var(--accent2);">📤 Export deníku</h3>
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Co exportovat</label>
     <select class="diary-field" id="exp-type">
-      <option value="full">📓 Plný deník (vše: počasí, šichtovka, záznamy, materiály, závěr)</option>
+      <option value="full">📓 Plný deník (vše: počasí, šichtovka, stroje, záznamy, materiály, závěr)</option>
       <option value="sichtovka">🏢 Jen šichtovka po firmách (podklad pro fakturaci)</option>
+      <option value="stroje">🚜 Jen stroje po firmách</option>
     </select>
     <div class="diary-row-2">
       <div>
@@ -6416,6 +6789,8 @@ function copyDiaryExport(){
         <input type="date" class="diary-field" id="exp-do">
       </div>
     </div>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Filtr SO (volitelné, omezí export jen na tento objekt)</label>
+    <input type="text" class="diary-field" id="exp-so" placeholder="např. SO 101 (nech prázdné = všechny SO)">
     <button class="btn-primary" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="generateDiaryExport()">📋 Vygenerovat</button>
     <textarea id="diary-export-text" placeholder="Tady se objeví vygenerovaný text…" readonly></textarea>
     <div style="display:flex;gap:8px;">
@@ -6427,9 +6802,9 @@ function copyDiaryExport(){
 
 <!-- Modal: Pracovníci & firmy -->
 <div id="firmy-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4700;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:14px;">
-  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,520px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,560px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
     <h3 style="font-size:15px;color:var(--accent2);">👷 Pracovníci & firmy</h3>
-    <div style="font-size:12px;color:var(--text2);">Přiřaď každému jeho firmu. Manuální dělníky (kteří se nepřihlašují) přidej dole.</div>
+    <div style="font-size:12px;color:var(--text2);">Klepni na ✏️ pro úpravu osoby. Můžeš nastavit firmu, SO a zda se zobrazí v šichtovce.</div>
     <div id="firmy-list" style="display:flex;flex-direction:column;gap:6px;"></div>
 
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
@@ -6437,10 +6812,99 @@ function copyDiaryExport(){
       <input type="text" id="new-worker-name" placeholder="Jméno a příjmení" style="background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;width:100%;margin-bottom:6px;">
       <input type="text" id="new-worker-firma" placeholder="Firma (volitelné)" style="background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;width:100%;margin-bottom:6px;">
       <button class="btn-primary" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;" onclick="addManualWorker()">+ Přidat</button>
+      <div style="font-size:10px;color:var(--text2);margin-top:6px;">Dělník bude aktivní od dnešního dne (zpětně se nepropíše do předchozích záznamů).</div>
     </div>
 
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="closeFirmyModal()">✓ Hotovo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Stroje (seznam + přidat) -->
+<div id="stroje-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4700;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,560px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="font-size:15px;color:var(--accent2);">🚜 Stroje a mechanizace</h3>
+    <div style="font-size:12px;color:var(--text2);">Stroje, autodomíchávače, bagry atd. — klepni ✏️ pro úpravu.</div>
+    <div id="stroje-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px;">+ Přidat stroj</div>
+      <input type="text" id="new-stroj-nazev" placeholder="Název / označení (např. CAT 320, autodomíchávač DAF)" style="background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;width:100%;margin-bottom:6px;">
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        <input type="text" id="new-stroj-typ" placeholder="Typ (bagr, válec, …)" style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;">
+        <input type="text" id="new-stroj-firma" placeholder="Firma" style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;">
+      </div>
+      <input type="text" id="new-stroj-so" placeholder="SO (např. SO 101 — volitelné)" style="background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;width:100%;margin-bottom:6px;">
+      <button class="btn-primary" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;" onclick="addStroj()">+ Přidat stroj</button>
+      <div style="font-size:10px;color:var(--text2);margin-top:6px;">Stroj bude aktivní od dnešního dne.</div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="closeStrojeModal()">✓ Hotovo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: edit stroje -->
+<div id="stroj-edit-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4800;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,460px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="font-size:15px;color:var(--accent2);">✏️ Upravit stroj</h3>
+    <input type="hidden" id="se-id">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Název / označení</label>
+    <input type="text" class="diary-field" id="se-nazev" placeholder="CAT 320 / autodomíchávač DAF…">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Typ</label>
+    <input type="text" class="diary-field" id="se-typ" placeholder="bagr / válec / domíchávač / …">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Firma</label>
+    <input type="text" class="diary-field" id="se-firma" placeholder="Vlastník / nájem">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">SO</label>
+    <input type="text" class="diary-field" id="se-so" placeholder="např. SO 101, SO 102 (volitelné)">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Aktivní od</label>
+    <input type="date" class="diary-field" id="se-aktivniOd">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="se-vSichtovce" checked> Zobrazovat v sekci Stroje
+    </label>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveStrojEdit()">💾 Uložit</button>
+      <button class="btn-secondary" style="background:#ff6b6b;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;" onclick="deleteStroj()">🗑</button>
+      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeStrojEdit()">Zrušit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: edit osoby (přihlášený nebo manuální) -->
+<div id="osoba-edit-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4800;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,460px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="font-size:15px;color:var(--accent2);" id="osoba-edit-title">✏️ Upravit osobu</h3>
+    <input type="hidden" id="oe-id">
+    <input type="hidden" id="oe-type">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jméno a příjmení</label>
+    <input type="text" class="diary-field" id="oe-name" placeholder="Jméno Příjmení">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Firma</label>
+    <input type="text" class="diary-field" id="oe-firma" placeholder="Název firmy (volitelné)">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">SO (stavební objekt, ke kterému osoba patří)</label>
+    <input type="text" class="diary-field" id="oe-so" placeholder="např. SO 101, SO 102… (volitelné)">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Aktivní od</label>
+    <input type="date" class="diary-field" id="oe-aktivniOd">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="oe-vSichtovce"> Zobrazovat v šichtovce
+    </label>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveOsobaEdit()">💾 Uložit</button>
+      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeOsobaEdit()">Zrušit</button>
     </div>
   </div>
 </div>
