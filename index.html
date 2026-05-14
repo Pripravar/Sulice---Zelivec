@@ -818,6 +818,8 @@ textarea.diary-field { resize:none; min-height:60px; }
 .firma-row .firma-name { flex:1; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .firma-row input { flex:0 0 200px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 8px; font-size:12px; }
 .sht-hours { width:60px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 6px; font-size:14px; font-weight:700; text-align:center; }
+.sht-so-sel { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--accent2); padding:4px 6px; font-size:11px; font-weight:700; max-width:90px; cursor:pointer; }
+.sht-so-sel:focus { outline:none; border-color:var(--accent2); }
 .sht-hours::placeholder { color:var(--text2); font-weight:400; }
 .sht-suffix { font-size:11px; color:var(--text2); }
 .sht-bulk { display:flex; gap:6px; margin-top:8px; align-items:center; }
@@ -4988,6 +4990,110 @@ function lookupWorker(id){
   return null;
 }
 
+// ── Efektivní SO pro daný den ──────────────────────────────────────
+// Vrací poslední zaznamenané SO (osoba/stroj) přiřazené ke dni <= datum.
+// Pokud nic nenalezne, fallback na default 'so' z profilu osoby/stroje.
+function effectiveSOForId(id, datum, kind){
+  // kind: 'osoby' | 'stroje'
+  var nodeKey = (kind === 'stroje') ? 'so_stroje' : 'so_osoby';
+  var days = window.diaryAllDays || {};
+  // Najdi všechny dny <= datum kde je záznam pro tohle id
+  var matchingDays = [];
+  Object.keys(days).forEach(function(dt){
+    if(dt > datum) return;
+    var d = days[dt];
+    if(d && d[nodeKey] && Object.prototype.hasOwnProperty.call(d[nodeKey], id)) {
+      matchingDays.push(dt);
+    }
+  });
+  // Také zahrň aktuálně otevřený den (může mít neuložené změny v memory)
+  if(window.diaryCurrentDate && window.diaryCurrentDate <= datum &&
+     window.diaryCurrentData && window.diaryCurrentData[nodeKey] &&
+     Object.prototype.hasOwnProperty.call(window.diaryCurrentData[nodeKey], id)) {
+    matchingDays.push(window.diaryCurrentDate);
+  }
+  matchingDays.sort();
+  if(matchingDays.length > 0) {
+    var lastDt = matchingDays[matchingDays.length - 1];
+    if(lastDt === window.diaryCurrentDate) {
+      return window.diaryCurrentData[nodeKey][id] || '';
+    }
+    return days[lastDt][nodeKey][id] || '';
+  }
+  // Fallback na profilové so (default)
+  if(kind === 'stroje') {
+    var s = lookupStroj(id);
+    return (s && s.so) || '';
+  }
+  var w = lookupWorker(id);
+  return (w && w.so) || '';
+}
+
+function setSOForDay(id, kind, val){
+  if(!window.diaryCurrentDate || !window.diaryCurrentData) return;
+  var nodeKey = (kind === 'stroje') ? 'so_stroje' : 'so_osoby';
+  if(!window.diaryCurrentData[nodeKey]) window.diaryCurrentData[nodeKey] = {};
+  var v = (val || '').trim();
+  if(!v) {
+    // Smaž = "od tohohle dne SO neřešíme" (předchozí pokračuje, pokud existoval)
+    delete window.diaryCurrentData[nodeKey][id];
+  } else {
+    window.diaryCurrentData[nodeKey][id] = v;
+  }
+  diarySaveDay();
+}
+
+// Vrátí všechna SO známá v projektu (z KZP seedu, profilů osob/strojů a historii v deníku).
+function getAllProjectSOs(){
+  var set = new Set();
+  // Z KZP
+  if(window.kzpSeed) window.kzpSeed.forEach(function(k){ if(k.so) set.add(k.so); });
+  if(window.allKzp) Object.keys(window.allKzp).forEach(function(id){ var k = window.allKzp[id]; if(k && k.so) set.add(k.so); });
+  // Z profilů
+  if(window.allUsers)     Object.keys(window.allUsers).forEach(function(id){ if(window.allUsers[id] && window.allUsers[id].so) set.add(window.allUsers[id].so); });
+  if(window.allPracovnici)Object.keys(window.allPracovnici).forEach(function(id){ if(window.allPracovnici[id] && window.allPracovnici[id].so) set.add(window.allPracovnici[id].so); });
+  if(window.allStroje)    Object.keys(window.allStroje).forEach(function(id){ if(window.allStroje[id] && window.allStroje[id].so) set.add(window.allStroje[id].so); });
+  // Z denní historie
+  Object.keys(window.diaryAllDays || {}).forEach(function(dt){
+    var d = window.diaryAllDays[dt];
+    if(d && d.so_osoby)  Object.keys(d.so_osoby) .forEach(function(k){ var v = d.so_osoby[k];  if(v) set.add(v); });
+    if(d && d.so_stroje) Object.keys(d.so_stroje).forEach(function(k){ var v = d.so_stroje[k]; if(v) set.add(v); });
+  });
+  return Array.from(set).sort();
+}
+
+// Inline select: po změně se uloží SO pro otevřený den (od dnešního dne dál).
+function changeSOForDay(id, kind, val){
+  setSOForDay(id, kind, val);
+  if(kind === 'stroje') renderStrojeList();
+  else renderSichtovka();
+}
+
+function _soSelectHtml(id, kind, currentValue){
+  var sos = getAllProjectSOs();
+  // Doplň current pokud chybí
+  if(currentValue && sos.indexOf(currentValue) === -1) sos.unshift(currentValue);
+  var opts = '<option value="">— SO —</option>';
+  sos.forEach(function(so){
+    opts += '<option value="' + escapeHtml(so) + '"' + (so === currentValue ? ' selected' : '') + '>' + escapeHtml(so) + '</option>';
+  });
+  opts += '<option value="__custom__">+ jiné…</option>';
+  return '<select class="sht-so-sel" data-id="' + id + '" data-kind="' + kind + '" onchange="handleSOSelectChange(this)" onclick="event.stopPropagation()" title="SO platí od tohohle dne dál">' + opts + '</select>';
+}
+
+function handleSOSelectChange(sel){
+  var id   = sel.getAttribute('data-id');
+  var kind = sel.getAttribute('data-kind');
+  var v = sel.value;
+  if(v === '__custom__') {
+    var current = effectiveSOForId(id, window.diaryCurrentDate, kind);
+    var custom = prompt('Zadej nové SO (např. SO 108 nebo "DZ 101"):', current || '');
+    if(custom === null) { sel.value = current || ''; return; }
+    v = (custom || '').trim();
+  }
+  changeSOForDay(id, kind, v);
+}
+
 function loadPracovnici(){
   db.ref('pracovnici').on('value', function(snap){
     window.allPracovnici = snap.val() || {};
@@ -5051,13 +5157,15 @@ function renderStrojeList(){
     var hVal = (h === undefined || h === null || h === '') ? '' : h;
     var pVal = pozn[s.id] || '';
     var firmaHtml = s.firma ? '<span class="firma-badge">' + escapeHtml(s.firma) + '</span>' : '';
-    var soBadge = s.so ? '<span style="background:rgba(72,187,120,0.18);color:#48bb78;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;">' + escapeHtml(s.so) + '</span>' : '';
     var typBadge = s.typ ? '<span style="color:var(--text2);font-size:10px;margin-left:4px;">(' + escapeHtml(s.typ) + ')</span>' : '';
+    var effSo = effectiveSOForId(s.id, currentDt, 'stroje');
+    var soSelect = _soSelectHtml(s.id, 'stroje', effSo);
     return '<div class="sht-row">'
       + '<div class="sht-left">'
-      +   '<div class="sht-name">🚜 ' + escapeHtml(s.nazev) + typBadge + firmaHtml + soBadge + '</div>'
+      +   '<div class="sht-name">🚜 ' + escapeHtml(s.nazev) + typBadge + firmaHtml + '</div>'
       +   '<input type="text" class="sht-note" placeholder="poznámka (např. porucha, plnění)" value="' + escapeHtml(pVal) + '" onchange="strojSetNote(\'' + s.id + '\', this.value)">'
       + '</div>'
+      + soSelect
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" onchange="strojSetHours(\'' + s.id + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
       + '</div>';
@@ -5320,11 +5428,14 @@ function renderSichtovka(){
     var pVal = pozn[u.id] || '';
     var firmaHtml = u.firma ? '<span class="firma-badge">' + escapeHtml(u.firma) + '</span>' : '';
     var typIcon = u.type === 'manual' ? ' <span style="color:var(--text2);font-size:10px;">👷</span>' : '';
+    var effSo = effectiveSOForId(u.id, currentDt, 'osoby');
+    var soSelect = _soSelectHtml(u.id, 'osoby', effSo);
     return '<div class="sht-row">'
       + '<div class="sht-left">'
       +   '<div class="sht-name">' + escapeHtml(u.name) + typIcon + firmaHtml + '</div>'
       +   '<input type="text" class="sht-note" placeholder="poznámka (např. odešel k zubaři 13:00)" value="' + escapeHtml(pVal) + '" onchange="sichtovkaSetNote(\'' + u.id + '\', this.value)">'
       + '</div>'
+      + soSelect
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.id + '" onchange="sichtovkaSet(\'' + u.id + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
       + '</div>';
@@ -5891,7 +6002,7 @@ function generateSichtovkaExport(){
   var soFilter    = _expSoFilter();
   var osobyFilter = _getExpOsobyFilter();
   var firmyFilter = _getExpFirmyFilter();
-  // Agregace: firma → uid → { name, so, dny:{datum:{h,pozn}}, total }
+  // Agregace: firma → uid → { name, dny:{datum:{h,pozn,so}}, total }
   var firmy = {};
   keys.forEach(function(dt){
     var d = window.diaryAllDays[dt];
@@ -5902,13 +6013,15 @@ function generateSichtovkaExport(){
       if(isNaN(h) || h <= 0) return;
       var w = lookupWorker(uid);
       if(!w) w = { name: 'id:' + uid, firma: '', so: '', type: '?' };
-      if(soFilter && (w.so || '').toLowerCase() !== soFilter.toLowerCase()) return;
+      // Efektivní SO pro tento konkrétní den
+      var dailySo = effectiveSOForId(uid, dt, 'osoby');
+      if(soFilter && (dailySo || '').toLowerCase() !== soFilter.toLowerCase()) return;
       if(osobyFilter.length > 0 && osobyFilter.indexOf(uid) === -1) return;
       if(firmyFilter.length > 0 && firmyFilter.indexOf((w.firma || '').toLowerCase()) === -1) return;
       var firmaKey = (w.firma || '').trim() || '_no_firma';
       if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (w.firma || firmaKey), osoby: {} };
-      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, so: w.so, dny: {}, total: 0 };
-      firmy[firmaKey].osoby[uid].dny[dt] = { h: (firmy[firmaKey].osoby[uid].dny[dt] ? firmy[firmaKey].osoby[uid].dny[dt].h : 0) + h, pozn: poznDne[uid] || '' };
+      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, dny: {}, total: 0 };
+      firmy[firmaKey].osoby[uid].dny[dt] = { h: (firmy[firmaKey].osoby[uid].dny[dt] ? firmy[firmaKey].osoby[uid].dny[dt].h : 0) + h, pozn: poznDne[uid] || '', so: dailySo };
       firmy[firmaKey].osoby[uid].total += h;
     });
   });
@@ -5942,8 +6055,7 @@ function generateSichtovkaExport(){
       var o = f.osoby[uid];
       celkemOsobCount++;
       out.push('');
-      out.push(o.name + (o.so ? '  [' + o.so + ']' : '') + '  (celkem ' + o.total.toFixed(1) + ' h)');
-      // Seznam dní
+      out.push(o.name + '  (celkem ' + o.total.toFixed(1) + ' h)');
       var dnyKeys = Object.keys(o.dny).sort();
       dnyKeys.forEach(function(dt){
         var dateObj = ymd_to_date(dt);
@@ -5953,8 +6065,9 @@ function generateSichtovkaExport(){
         var dStr = dateObj.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric'});
         var entry = o.dny[dt];
         var hodVal = (typeof entry === 'number') ? entry : entry.h;
+        var soVal  = (typeof entry === 'object' && entry.so) ? ('  [' + entry.so + ']') : '';
         var poznVal = (typeof entry === 'object' && entry.pozn) ? ('   pozn: ' + entry.pozn) : '';
-        out.push('  ' + dow + ' ' + dStr + '   ' + hodVal.toFixed(1) + ' h' + weekendFlag + poznVal);
+        out.push('  ' + dow + ' ' + dStr + '   ' + hodVal.toFixed(1) + ' h' + soVal + weekendFlag + poznVal);
       });
       firmaTotal += o.total;
     });
@@ -6355,13 +6468,14 @@ function generateStrojeExport(){
       if(isNaN(h) || h <= 0) return;
       var s = lookupStroj(sid);
       if(!s) s = { nazev: 'id:' + sid, typ: '', firma: '', so: '' };
-      if(soFilter && (s.so || '').toLowerCase() !== soFilter.toLowerCase()) return;
+      var dailySo = effectiveSOForId(sid, dt, 'stroje');
+      if(soFilter && (dailySo || '').toLowerCase() !== soFilter.toLowerCase()) return;
       if(strojeFilter.length > 0 && strojeFilter.indexOf(sid) === -1) return;
       if(firmyFilter.length > 0 && firmyFilter.indexOf((s.firma || '').toLowerCase()) === -1) return;
       var firmaKey = (s.firma || '').trim() || '_no_firma';
       if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (s.firma || firmaKey), stroje: {} };
-      if(!firmy[firmaKey].stroje[sid]) firmy[firmaKey].stroje[sid] = { nazev: s.nazev, typ: s.typ, so: s.so, dny: {}, total: 0 };
-      firmy[firmaKey].stroje[sid].dny[dt] = { h: (firmy[firmaKey].stroje[sid].dny[dt] ? firmy[firmaKey].stroje[sid].dny[dt].h : 0) + h, pozn: poznDne[sid] || '' };
+      if(!firmy[firmaKey].stroje[sid]) firmy[firmaKey].stroje[sid] = { nazev: s.nazev, typ: s.typ, dny: {}, total: 0 };
+      firmy[firmaKey].stroje[sid].dny[dt] = { h: (firmy[firmaKey].stroje[sid].dny[dt] ? firmy[firmaKey].stroje[sid].dny[dt].h : 0) + h, pozn: poznDne[sid] || '', so: dailySo };
       firmy[firmaKey].stroje[sid].total += h;
     });
   });
@@ -6394,7 +6508,7 @@ function generateStrojeExport(){
       var s = f.stroje[sid];
       celkemStrojuCount++;
       out.push('');
-      var hdr = '🚜 ' + s.nazev + (s.typ ? ' (' + s.typ + ')' : '') + (s.so ? '  [' + s.so + ']' : '') + '  (celkem ' + s.total.toFixed(1) + ' h)';
+      var hdr = '🚜 ' + s.nazev + (s.typ ? ' (' + s.typ + ')' : '') + '  (celkem ' + s.total.toFixed(1) + ' h)';
       out.push(hdr);
       var dnyKeys = Object.keys(s.dny).sort();
       dnyKeys.forEach(function(dt){
@@ -6404,8 +6518,9 @@ function generateStrojeExport(){
         var wf = isWeekend(dateObj) ? ' (víkend)' : (sv ? ' (svátek: ' + sv + ')' : '');
         var dStr = dateObj.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric'});
         var entry = s.dny[dt];
+        var soVal = entry.so ? ('  [' + entry.so + ']') : '';
         var poznVal = entry.pozn ? ('   pozn: ' + entry.pozn) : '';
-        out.push('  ' + dow + ' ' + dStr + '   ' + entry.h.toFixed(1) + ' h' + wf + poznVal);
+        out.push('  ' + dow + ' ' + dStr + '   ' + entry.h.toFixed(1) + ' h' + soVal + wf + poznVal);
       });
       firmaTotal += s.total;
     });
