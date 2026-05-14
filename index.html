@@ -859,6 +859,38 @@ textarea.diary-field { resize:none; min-height:60px; }
 #diary-export-modal .em-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,540px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
 #diary-export-text { width:100%; min-height:280px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px; font-size:12px; font-family:'Menlo','Monaco',monospace; white-space:pre-wrap; resize:vertical; }
 
+/* ═══════════════════════════════════════════════════════
+   KVALITA / KZP (přidáno 2026-05-12)
+   ═══════════════════════════════════════════════════════ */
+#kzp-panel { position:fixed; top:0; left:0; right:0; bottom:0; z-index:3700; background:var(--bg); display:none; flex-direction:column; }
+#kzp-panel.open { display:flex; }
+#kzp-header { background:var(--panel); border-bottom:1px solid var(--border); padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; flex-shrink:0; }
+#kzp-header h2 { flex:1; font-size:15px; color:var(--accent2); }
+#kzp-header button { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:13px; cursor:pointer; }
+#kzp-filter-bar { display:flex; gap:6px; padding:10px 12px; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; align-items:center; flex-wrap:wrap; }
+#kzp-filter-bar select, #kzp-filter-bar input[type=text] { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px 8px; font-size:12px; }
+#kzp-filter-bar select { max-width:180px; }
+#kzp-filter-bar input[type=text] { flex:1; min-width:140px; }
+#kzp-filter-bar button.clear { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text2); padding:5px 8px; font-size:12px; cursor:pointer; }
+#kzp-list { flex:1; overflow-y:auto; padding:8px; -webkit-overflow-scrolling:touch; }
+.kzp-card { background:var(--panel); border:1px solid var(--border); border-left:4px solid #48bb78; border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+.kzp-card:hover { background:var(--panel2); }
+.kzp-card .kc-so { display:inline-block; background:rgba(72,187,120,0.15); color:#48bb78; font-size:10px; font-weight:700; padding:2px 8px; border-radius:8px; margin-right:6px; }
+.kzp-card .kc-cinnost { font-size:14px; font-weight:700; color:var(--text); margin-top:4px; word-break:break-word; }
+.kzp-card .kc-zkouska { font-size:12px; color:var(--text2); margin-top:3px; }
+.kzp-card .kc-meta { font-size:11px; color:var(--text2); margin-top:5px; display:flex; gap:8px; flex-wrap:wrap; }
+.kzp-card .kc-meta span { background:var(--panel2); padding:2px 6px; border-radius:4px; }
+#kzp-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:13px; }
+
+/* KZP new/edit modal */
+#kzp-modal { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4500; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
+#kzp-modal.open { display:flex; }
+#kzp-modal .km-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,520px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+#kzp-modal h3 { font-size:15px; color:var(--accent2); }
+.kzp-field { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 10px; font-size:14px; font-family:inherit; width:100%; box-sizing:border-box; }
+.kzp-field:focus { outline:none; border-color:var(--accent2); }
+textarea.kzp-field { resize:none; min-height:60px; }
+
 /* Long-press chooser - poznámka vs. úkol */
 #lp-chooser { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4600; background:rgba(0,0,0,.65); align-items:center; justify-content:center; }
 #lp-chooser.open { display:flex; }
@@ -955,6 +987,7 @@ document.addEventListener('touchend', function(e){
   <div id="km-display">km –</div>
   <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
   <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
+  <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
@@ -4039,6 +4072,7 @@ function completeLogin(user, nameOverride) {
   // Načíst data
   loadAllUsers();
   loadTasks();
+  loadPracovnici();
   setupFcmIfPossible();
   maybeShowIosHint();
 }
@@ -4917,6 +4951,39 @@ window.diaryCurrentData = null;    // záznam z /denik/{datum}
 window.diaryAllDays     = {};      // všechny dny v cache (pro list/filter mode)
 window.diaryMode        = 'den';   // 'den' nebo 'seznam'
 window.diaryFilter      = { od:null, do:null, osoba:'', text:'' };
+window.allPracovnici    = {};      // /pracovnici/{id} – manuální dělníci (bez Auth)
+
+// Sjednocený seznam {id, name, firma, type:'user'|'manual'} pro šichtovku
+function getAllWorkers(){
+  var list = [];
+  Object.keys(window.allUsers || {}).forEach(function(uid){
+    var u = window.allUsers[uid];
+    if(!u || !u.name) return;
+    list.push({ id: uid, name: u.name, firma: u.firma || '', type: 'user' });
+  });
+  Object.keys(window.allPracovnici || {}).forEach(function(pid){
+    var p = window.allPracovnici[pid];
+    if(!p || !p.name) return;
+    list.push({ id: pid, name: p.name, firma: p.firma || '', type: 'manual' });
+  });
+  list.sort(function(a,b){ return (a.name || '').localeCompare(b.name || '', 'cs'); });
+  return list;
+}
+// Najdi pracovníka v obou pollech (přihlášený / manuální)
+function lookupWorker(id){
+  if(window.allUsers && window.allUsers[id])     return { name: window.allUsers[id].name, firma: window.allUsers[id].firma || '', type: 'user' };
+  if(window.allPracovnici && window.allPracovnici[id]) return { name: window.allPracovnici[id].name, firma: window.allPracovnici[id].firma || '', type: 'manual' };
+  return null;
+}
+
+function loadPracovnici(){
+  db.ref('pracovnici').on('value', function(snap){
+    window.allPracovnici = snap.val() || {};
+    if(document.getElementById('diary-panel') && document.getElementById('diary-panel').classList.contains('open')) {
+      renderSichtovka();
+    }
+  });
+}
 
 // České svátky 2026 (statické pole - lze rozšiřovat)
 var CESKY_SVATKY = {
@@ -5028,28 +5095,26 @@ function renderSichtovka(){
   var list = document.getElementById('sht-list');
   if(!list) return;
   var sicht = (window.diaryCurrentData && window.diaryCurrentData.sichtovka) || {};
-  var users = window.allUsers || {};
-  // Seznam uživatelů abecedně dle jména
-  var arr = Object.keys(users).map(function(uid){ return users[uid]; }).filter(function(u){ return u && u.name; });
-  arr.sort(function(a,b){ return (a.name || '').localeCompare(b.name || '', 'cs'); });
+  var arr = getAllWorkers();
   if(arr.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádní uživatelé v systému. Až se někdo přihlásí, objeví se zde.</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádní pracovníci. Přidej manuálního dělníka přes 🏢 Firmy.</div>';
     return;
   }
   list.innerHTML = arr.map(function(u){
-    var h = sicht[u.uid];
+    var h = sicht[u.id];
     var hVal = (h === undefined || h === null || h === '') ? '' : h;
     var firmaHtml = u.firma ? '<span class="firma-badge">' + escapeHtml(u.firma) + '</span>' : '';
+    var typIcon = u.type === 'manual' ? ' <span style="color:var(--text2);font-size:10px;">👷</span>' : '';
     return '<div class="sht-row">'
-      + '<div class="sht-name">' + escapeHtml(u.name) + firmaHtml + '</div>'
-      + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.uid + '" onchange="sichtovkaSet(\'' + u.uid + '\', this.value)">'
+      + '<div class="sht-name">' + escapeHtml(u.name) + typIcon + firmaHtml + '</div>'
+      + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.id + '" onchange="sichtovkaSet(\'' + u.id + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
       + '</div>';
   }).join('');
   // Total
   var total = 0, persons = 0;
   arr.forEach(function(u){
-    var h = parseFloat(sicht[u.uid]);
+    var h = parseFloat(sicht[u.id]);
     if(!isNaN(h) && h > 0) { total += h; persons++; }
   });
   document.getElementById('sht-total').innerHTML = 'Celkem <b>' + total.toFixed(1) + ' h</b> · ' + persons + ' ' + (persons === 1 ? 'osoba' : (persons < 5 ? 'osoby' : 'osob'));
@@ -5077,10 +5142,8 @@ function sichtovkaFillAll(){
     return;
   }
   if(!window.diaryCurrentData.sichtovka) window.diaryCurrentData.sichtovka = {};
-  Object.keys(window.allUsers).forEach(function(uid){
-    if(window.allUsers[uid] && window.allUsers[uid].name) {
-      window.diaryCurrentData.sichtovka[uid] = h;
-    }
+  getAllWorkers().forEach(function(w){
+    window.diaryCurrentData.sichtovka[w.id] = h;
   });
   diarySaveDay();
   renderSichtovka();
@@ -5233,13 +5296,11 @@ function openDiaryFilter(){
   document.getElementById('filt-text').value  = window.diaryFilter.text || '';
   var sel = document.getElementById('filt-osoba');
   sel.innerHTML = '<option value="">— libovolný —</option>';
-  Object.keys(window.allUsers || {}).forEach(function(uid){
-    var u = window.allUsers[uid];
-    if(!u || !u.name) return;
+  getAllWorkers().forEach(function(w){
     var opt = document.createElement('option');
-    opt.value = uid;
-    opt.textContent = u.name;
-    if(uid === window.diaryFilter.osoba) opt.selected = true;
+    opt.value = w.id;
+    opt.textContent = w.name + (w.firma ? ' (' + w.firma + ')' : '');
+    if(w.id === window.diaryFilter.osoba) opt.selected = true;
     sel.appendChild(opt);
   });
   document.getElementById('diary-filter-modal').classList.add('open');
@@ -5291,19 +5352,23 @@ function openDiaryExport(){
 }
 function closeDiaryExport(){ document.getElementById('diary-export-modal').classList.remove('open'); }
 
-// ── Modal: Firmy pracovníků ─────────────────────────────────────────
+// ── Modal: Pracovníci & firmy ──────────────────────────────────────
 function openFirmyModal(){
   var list = document.getElementById('firmy-list');
-  var users = Object.keys(window.allUsers || {}).map(function(uid){ return window.allUsers[uid]; }).filter(function(u){ return u && u.name; });
-  users.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'', 'cs'); });
-  if(users.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Žádní přihlášení uživatelé.</div>';
+  var workers = getAllWorkers();
+  if(workers.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Zatím žádní pracovníci. Přidej dělníka dole, nebo nech ostatní přihlásit se Googlem/telefonem.</div>';
   } else {
-    list.innerHTML = users.map(function(u){
-      var f = u.firma || '';
+    list.innerHTML = workers.map(function(w){
+      var typeIcon = w.type === 'manual' ? '👷' : '🔐';
+      var typeTitle = w.type === 'manual' ? 'Manuální dělník (bez přihlášení)' : 'Přihlášený uživatel';
+      var delBtn = w.type === 'manual'
+        ? '<button onclick="deleteManualWorker(\'' + w.id + '\')" title="Smazat dělníka" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:2px 4px;">🗑</button>'
+        : '';
       return '<div class="firma-row">'
-        + '<div class="firma-name">' + escapeHtml(u.name) + '</div>'
-        + '<input type="text" placeholder="Firma (např. SaM s.r.o.)" value="' + escapeHtml(f) + '" data-uid="' + u.uid + '" onchange="firmaSet(\'' + u.uid + '\', this.value)">'
+        + '<div class="firma-name" title="' + typeTitle + '">' + typeIcon + ' ' + escapeHtml(w.name) + '</div>'
+        + '<input type="text" placeholder="Firma" value="' + escapeHtml(w.firma) + '" data-id="' + w.id + '" data-type="' + w.type + '" onchange="firmaSet(\'' + w.id + '\', this.value, \'' + w.type + '\')">'
+        + delBtn
         + '</div>';
     }).join('');
   }
@@ -5313,13 +5378,49 @@ function closeFirmyModal(){
   document.getElementById('firmy-modal').style.display = 'none';
   renderSichtovka(); // refresh badges
 }
-function firmaSet(uid, val){
+function firmaSet(id, val, type){
   var firma = (val || '').trim();
+  var path = (type === 'manual') ? ('pracovnici/' + id + '/firma') : ('uzivatele/' + id + '/firma');
   if(!firma) {
-    db.ref('uzivatele/' + uid + '/firma').remove();
+    db.ref(path).remove();
   } else {
-    db.ref('uzivatele/' + uid + '/firma').set(firma);
+    db.ref(path).set(firma);
   }
+}
+
+function addManualWorker(){
+  var nameInp  = document.getElementById('new-worker-name');
+  var firmaInp = document.getElementById('new-worker-firma');
+  var name  = (nameInp.value  || '').trim();
+  var firma = (firmaInp.value || '').trim();
+  if(!name || name.length < 2) { showToast('Zadej jméno', 1500); return; }
+  var id = 'w_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  var worker = {
+    id: id,
+    name: name,
+    firma: firma,
+    vytvoreno: Date.now(),
+    vytvoril_uid: window.currentUser ? window.currentUser.uid : ''
+  };
+  db.ref('pracovnici/' + id).set(worker).then(function(){
+    nameInp.value = '';
+    firmaInp.value = '';
+    showToast('✓ Dělník přidán: ' + name, 1500);
+    // openFirmyModal se obnoví automaticky díky listeneru
+    setTimeout(openFirmyModal, 300);
+  }).catch(function(e){
+    showToast('❌ Chyba: ' + (e.message || e), 2500);
+  });
+}
+
+function deleteManualWorker(id){
+  var p = window.allPracovnici && window.allPracovnici[id];
+  var nm = p ? p.name : id;
+  if(!confirm('Smazat dělníka "' + nm + '"? Hodiny v deníku zůstanou, ale jméno zmizí.')) return;
+  db.ref('pracovnici/' + id).remove().then(function(){
+    showToast('🗑 Smazáno', 1200);
+    setTimeout(openFirmyModal, 200);
+  });
 }
 
 // ── Export: hlavní router ───────────────────────────────────────────
@@ -5429,11 +5530,11 @@ function generateSichtovkaExport(){
     Object.keys(d.sichtovka).forEach(function(uid){
       var h = parseFloat(d.sichtovka[uid]);
       if(isNaN(h) || h <= 0) return;
-      var u = window.allUsers && window.allUsers[uid];
-      if(!u) u = { name: 'uid:' + uid, firma: '' };
-      var firmaKey = (u.firma || '').trim() || '_no_firma';
-      if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (u.firma || firmaKey), osoby: {} };
-      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: u.name, dny: {}, total: 0 };
+      var w = lookupWorker(uid);
+      if(!w) w = { name: 'id:' + uid, firma: '', type: '?' };
+      var firmaKey = (w.firma || '').trim() || '_no_firma';
+      if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (w.firma || firmaKey), osoby: {} };
+      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, dny: {}, total: 0 };
       firmy[firmaKey].osoby[uid].dny[dt] = (firmy[firmaKey].osoby[uid].dny[dt] || 0) + h;
       firmy[firmaKey].osoby[uid].total += h;
     });
@@ -5496,6 +5597,192 @@ function generateSichtovkaExport(){
   out.push('═══════════════════════════════════════════');
 
   document.getElementById('diary-export-text').value = out.join('\n');
+}
+
+// ════════════════════════════════════════════════════════════════════
+//   KVALITA / KZP (přidáno 2026-05-12)
+// ════════════════════════════════════════════════════════════════════
+window.allKzp = {};       // /kvalita/{id} → položka
+window.editingKzpId = null;
+
+function openKzpPanel(){
+  if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  document.getElementById('kzp-panel').classList.add('open');
+  loadKzp();
+}
+function closeKzpPanel(){ document.getElementById('kzp-panel').classList.remove('open'); }
+
+function loadKzp(){
+  db.ref('kvalita').on('value', function(snap){
+    window.allKzp = snap.val() || {};
+    rebuildKzpFilters();
+    renderKzpList();
+  });
+}
+
+function rebuildKzpFilters(){
+  var sel = document.getElementById('kzp-filter-so');
+  if(!sel) return;
+  var current = sel.value;
+  var soSet = new Set();
+  Object.keys(window.allKzp).forEach(function(id){
+    var k = window.allKzp[id];
+    if(k && k.so) soSet.add(k.so);
+  });
+  var arr = Array.from(soSet).sort();
+  sel.innerHTML = '<option value="">Všechny SO</option>';
+  arr.forEach(function(so){
+    var opt = document.createElement('option');
+    opt.value = so;
+    opt.textContent = so;
+    if(so === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // Také naplnit datalist pro nový/edit formulář
+  var dl = document.getElementById('kzp-so-list');
+  if(dl) {
+    dl.innerHTML = '';
+    arr.forEach(function(so){
+      var o = document.createElement('option');
+      o.value = so;
+      dl.appendChild(o);
+    });
+  }
+}
+
+function clearKzpFilters(){
+  document.getElementById('kzp-filter-so').value = '';
+  document.getElementById('kzp-filter-text').value = '';
+  renderKzpList();
+}
+
+function renderKzpList(){
+  var box = document.getElementById('kzp-list');
+  if(!box) return;
+  var soFilt   = document.getElementById('kzp-filter-so').value;
+  var textFilt = (document.getElementById('kzp-filter-text').value || '').trim().toLowerCase();
+  var items = Object.keys(window.allKzp).map(function(id){ var v = window.allKzp[id]; v._id = id; return v; });
+  // Filtrace
+  items = items.filter(function(k){
+    if(soFilt && k.so !== soFilt) return false;
+    if(textFilt) {
+      var hay = ((k.so || '') + ' ' + (k.cinnost || '') + ' ' + (k.zkouska || '') + ' ' + (k.popis || '')).toLowerCase();
+      if(hay.indexOf(textFilt) === -1) return false;
+    }
+    return true;
+  });
+  // Sortuj: SO → činnost
+  items.sort(function(a,b){
+    var s = (a.so || '').localeCompare(b.so || '', 'cs');
+    if(s !== 0) return s;
+    return (a.cinnost || '').localeCompare(b.cinnost || '', 'cs');
+  });
+  if(items.length === 0) {
+    box.innerHTML = '<div id="kzp-empty">Žádné položky KZP. Klepni <b>+ Položka</b> nahoře, nebo nech mi nahrát PDF s KZP a já z toho vytáhnu data.</div>';
+    return;
+  }
+  box.innerHTML = items.map(function(k){
+    var pdfBadge = k.pdfUrl ? '<span>📄 PDF' + (k.pdfStrana ? ' str. ' + k.pdfStrana : '') + '</span>' : '';
+    return '<div class="kzp-card" onclick="openKzpItem(\'' + k._id + '\')">'
+      + '<div><span class="kc-so">' + escapeHtml(k.so || '–') + '</span>' + (k.zkouska ? '<span style="font-size:11px;color:var(--text2);">' + escapeHtml(k.zkouska) + '</span>' : '') + '</div>'
+      + '<div class="kc-cinnost">' + escapeHtml(k.cinnost || '(bez činnosti)') + '</div>'
+      + (k.popis ? '<div class="kc-zkouska">' + escapeHtml(k.popis) + '</div>' : '')
+      + (pdfBadge ? '<div class="kc-meta">' + pdfBadge + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+function openKzpItem(id){
+  var k = window.allKzp[id];
+  if(!k) return;
+  if(k.pdfUrl) {
+    // Otevři PDF v existujícím PDF panelu
+    var page = {
+      soubor: k.pdfUrl,
+      nazev: (k.so ? k.so + ' · ' : '') + (k.cinnost || 'KZP'),
+      typ: '🧪 KZP'
+    };
+    if(typeof openDocPanel === 'function') {
+      openDocPanel([page], null, 0);
+    } else {
+      window.open(k.pdfUrl, '_blank');
+    }
+  } else {
+    // Žádné PDF - otevři edit modal pro úpravu
+    openKzpEditModal(id);
+  }
+}
+
+function openKzpAddModal(){
+  window.editingKzpId = null;
+  document.getElementById('kzp-modal-title').textContent = '➕ Nová položka KZP';
+  document.getElementById('kzp-id').value = '';
+  document.getElementById('kzp-so').value = '';
+  document.getElementById('kzp-cinnost').value = '';
+  document.getElementById('kzp-zkouska').value = '';
+  document.getElementById('kzp-popis').value = '';
+  document.getElementById('kzp-pdf-url').value = '';
+  document.getElementById('kzp-pdf-strana').value = '';
+  document.getElementById('kzp-modal-delete').style.display = 'none';
+  document.getElementById('kzp-modal').classList.add('open');
+}
+
+function openKzpEditModal(id){
+  var k = window.allKzp[id];
+  if(!k) return;
+  window.editingKzpId = id;
+  document.getElementById('kzp-modal-title').textContent = '✏️ Upravit položku KZP';
+  document.getElementById('kzp-id').value = id;
+  document.getElementById('kzp-so').value      = k.so || '';
+  document.getElementById('kzp-cinnost').value = k.cinnost || '';
+  document.getElementById('kzp-zkouska').value = k.zkouska || '';
+  document.getElementById('kzp-popis').value   = k.popis || '';
+  document.getElementById('kzp-pdf-url').value = k.pdfUrl || '';
+  document.getElementById('kzp-pdf-strana').value = k.pdfStrana || '';
+  document.getElementById('kzp-modal-delete').style.display = 'inline-block';
+  document.getElementById('kzp-modal').classList.add('open');
+}
+
+function closeKzpAddModal(){ document.getElementById('kzp-modal').classList.remove('open'); }
+
+function saveKzpFromForm(){
+  var so      = (document.getElementById('kzp-so').value || '').trim();
+  var cinnost = (document.getElementById('kzp-cinnost').value || '').trim();
+  var zkouska = (document.getElementById('kzp-zkouska').value || '').trim();
+  if(!so || !cinnost) { showToast('Vyplň aspoň SO a Činnost', 2000); return; }
+  var popis    = (document.getElementById('kzp-popis').value || '').trim();
+  var pdfUrl   = (document.getElementById('kzp-pdf-url').value || '').trim();
+  var pdfStranaRaw = document.getElementById('kzp-pdf-strana').value;
+  var pdfStrana = pdfStranaRaw ? parseInt(pdfStranaRaw, 10) : null;
+  var id = window.editingKzpId || ('kzp_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+  var k = {
+    id: id,
+    so: so,
+    cinnost: cinnost,
+    zkouska: zkouska,
+    popis: popis,
+    pdfUrl: pdfUrl,
+    pdfStrana: pdfStrana,
+    vytvoreno: window.editingKzpId ? (window.allKzp[id] && window.allKzp[id].vytvoreno) || Date.now() : Date.now(),
+    upraveno: Date.now()
+  };
+  db.ref('kvalita/' + id).set(k).then(function(){
+    showToast('✅ Uloženo', 1500);
+    closeKzpAddModal();
+  }).catch(function(e){
+    showToast('❌ Chyba: ' + (e.message || e), 2500);
+  });
+}
+
+function deleteKzpItem(){
+  if(!window.editingKzpId) return;
+  var k = window.allKzp[window.editingKzpId];
+  if(!k) return;
+  if(!confirm('Smazat položku "' + (k.cinnost || '') + '"?')) return;
+  db.ref('kvalita/' + window.editingKzpId).remove().then(function(){
+    showToast('🗑 Smazáno', 1500);
+    closeKzpAddModal();
+  });
 }
 
 function copyDiaryExport(){
@@ -5967,14 +6254,71 @@ function copyDiaryExport(){
   </div>
 </div>
 
-<!-- Modal: Firmy pracovníků -->
+<!-- Modal: Pracovníci & firmy -->
 <div id="firmy-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4700;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:14px;">
-  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,500px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
-    <h3 style="font-size:15px;color:var(--accent2);">🏢 Firmy pracovníků</h3>
-    <div style="font-size:12px;color:var(--text2);">Přiřaď každému jeho firmu. Použije se pro export šichtovky pro fakturaci.</div>
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,520px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="font-size:15px;color:var(--accent2);">👷 Pracovníci & firmy</h3>
+    <div style="font-size:12px;color:var(--text2);">Přiřaď každému jeho firmu. Manuální dělníky (kteří se nepřihlašují) přidej dole.</div>
     <div id="firmy-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px;">+ Přidat dělníka (bez přihlášení)</div>
+      <input type="text" id="new-worker-name" placeholder="Jméno a příjmení" style="background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;width:100%;margin-bottom:6px;">
+      <input type="text" id="new-worker-firma" placeholder="Firma (volitelné)" style="background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;width:100%;margin-bottom:6px;">
+      <button class="btn-primary" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;" onclick="addManualWorker()">+ Přidat</button>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="closeFirmyModal()">✓ Hotovo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════════════════ KVALITA / KZP ═════════════════════════ -->
+<div id="kzp-panel">
+  <div id="kzp-header">
+    <h2>🧪 Kvalita / KZP</h2>
+    <button onclick="openKzpAddModal()" style="background:var(--accent);color:#fff;">+ Položka</button>
+    <button onclick="closeKzpPanel()">✕</button>
+  </div>
+  <div id="kzp-filter-bar">
+    <select id="kzp-filter-so" onchange="renderKzpList()">
+      <option value="">Všechny SO</option>
+    </select>
+    <input type="text" id="kzp-filter-text" placeholder="Hledat (činnost, zkouška…)" oninput="renderKzpList()">
+    <button class="clear" onclick="clearKzpFilters()">⌫ Vynulovat</button>
+  </div>
+  <div id="kzp-list"></div>
+</div>
+
+<!-- KZP add/edit modal -->
+<div id="kzp-modal">
+  <div class="km-box">
+    <h3 id="kzp-modal-title">➕ Nová položka KZP</h3>
+    <input type="hidden" id="kzp-id">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Stavební objekt (SO)</label>
+    <input type="text" class="kzp-field" id="kzp-so" placeholder="např. SO 101 / SO 102 / SO 103 …" list="kzp-so-list">
+    <datalist id="kzp-so-list"></datalist>
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Činnost na stavbě</label>
+    <input type="text" class="kzp-field" id="kzp-cinnost" placeholder="např. Pokládka asfaltu, Sanace podloží, Betonáž…">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Zkouška / kontrola</label>
+    <input type="text" class="kzp-field" id="kzp-zkouska" placeholder="např. Marshall, Hutnění lehkou deskou, Statická zkouška…">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Popis (detail, četnost, kdy provést)</label>
+    <textarea class="kzp-field" id="kzp-popis" placeholder="např. Před pokládkou ložní vrstvy, každých 100 m, vzorek velikosti 0,5 kg…"></textarea>
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Odkaz na PDF (URL)</label>
+    <input type="text" class="kzp-field" id="kzp-pdf-url" placeholder="https://… nebo relativní cesta v repu (pdf/KZP/...)">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Strana v PDF (volitelné)</label>
+    <input type="number" class="kzp-field" id="kzp-pdf-strana" min="1" placeholder="1">
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveKzpFromForm()">💾 Uložit</button>
+      <button class="btn-secondary" style="background:#ff6b6b;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;display:none;" id="kzp-modal-delete" onclick="deleteKzpItem()">🗑</button>
+      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeKzpAddModal()">Zrušit</button>
     </div>
   </div>
 </div>
