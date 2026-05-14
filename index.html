@@ -776,6 +776,84 @@ textarea.task-field { resize:none; min-height:80px; }
 .pp-no  { background:var(--panel2); color:var(--text2); border:1px solid var(--border); }
 .pp-no:hover  { background:#1a3a6e; }
 
+/* ═══════════════════════════════════════════════════════
+   DENÍK STAVBY (přidáno 2026-05-12)
+   ═══════════════════════════════════════════════════════ */
+#diary-panel { position:fixed; top:0; left:0; right:0; bottom:0; z-index:3600; background:var(--bg); display:none; flex-direction:column; }
+#diary-panel.open { display:flex; }
+#diary-header { background:var(--panel); border-bottom:1px solid var(--border); padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; flex-shrink:0; }
+#diary-header h2 { flex:1; font-size:15px; color:var(--accent2); }
+#diary-header button { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:13px; cursor:pointer; }
+#diary-date-bar { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; }
+#diary-date-bar button { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:14px; cursor:pointer; }
+#diary-date-label { flex:1; font-size:14px; font-weight:700; text-align:center; color:var(--text); }
+#diary-date-label .day-of-week { color:var(--text2); font-size:11px; display:block; font-weight:400; margin-top:2px; }
+#diary-date-label.is-weekend { color:var(--accent); }
+#diary-date-label.is-weekend .day-of-week { color:var(--accent); }
+#diary-date-bar input[type=date] { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:4px 6px; font-size:12px; max-width:140px; }
+
+#diary-body { flex:1; overflow-y:auto; padding:10px 12px; -webkit-overflow-scrolling:touch; }
+.diary-section { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+.diary-section h3 { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+.diary-section h3 .ds-cnt { color:var(--accent2); font-size:10px; font-weight:700; }
+.diary-field { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px 10px; font-size:14px; font-family:inherit; width:100%; box-sizing:border-box; }
+.diary-field:focus { outline:none; border-color:var(--accent2); }
+textarea.diary-field { resize:none; min-height:60px; }
+.diary-row-2 { display:flex; gap:8px; }
+.diary-row-2 > * { flex:1; }
+.diary-checkbox-row { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); padding:4px 0; }
+.diary-checkbox-row input[type=checkbox] { width:18px; height:18px; }
+
+/* Šichtovka */
+.sht-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); }
+.sht-row:last-child { border-bottom:none; }
+.sht-name { flex:1; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sht-hours { width:60px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 6px; font-size:14px; font-weight:700; text-align:center; }
+.sht-hours::placeholder { color:var(--text2); font-weight:400; }
+.sht-suffix { font-size:11px; color:var(--text2); }
+.sht-bulk { display:flex; gap:6px; margin-top:8px; align-items:center; }
+.sht-bulk input { flex:0 0 60px; background:var(--panel2); border:1px solid var(--accent2); border-radius:6px; color:var(--text); padding:5px 6px; font-size:14px; text-align:center; }
+.sht-bulk button { background:var(--accent2); color:#0f3460; border:none; border-radius:6px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+.sht-bulk .lbl { font-size:11px; color:var(--text2); flex:1; }
+.sht-total { display:flex; justify-content:space-between; font-size:12px; color:var(--text2); margin-top:6px; padding-top:6px; border-top:1px solid var(--border); }
+.sht-total b { color:var(--accent2); }
+
+/* Záznamy */
+.zaz-item { background:var(--panel2); border-radius:8px; padding:8px 10px; margin-bottom:6px; }
+.zaz-head { font-size:11px; color:var(--text2); margin-bottom:3px; display:flex; justify-content:space-between; }
+.zaz-time { color:var(--accent2); font-weight:700; }
+.zaz-text { font-size:14px; line-height:1.4; white-space:pre-wrap; word-break:break-word; }
+.zaz-photo { width:60px; height:60px; object-fit:cover; border-radius:6px; margin-top:6px; cursor:pointer; }
+.zaz-actions { display:flex; gap:6px; margin-top:6px; }
+.zaz-actions button { background:transparent; border:none; color:var(--text2); font-size:11px; cursor:pointer; padding:2px 4px; }
+.zaz-actions button:hover { color:var(--accent); }
+#zaz-input-row { display:flex; gap:6px; margin-top:6px; }
+#zaz-input { flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px 10px; font-size:13px; font-family:inherit; resize:none; min-height:38px; }
+#zaz-add-btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+
+/* Diary - filter & seznam módu */
+#diary-filter-bar { display:flex; gap:6px; padding:6px 12px; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; }
+#diary-filter-bar .ft { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text2); padding:4px 8px; font-size:11px; cursor:pointer; white-space:nowrap; }
+#diary-filter-bar .ft.active { background:var(--accent2); color:#0f3460; border-color:var(--accent2); }
+
+#diary-list { display:none; padding:8px 12px; overflow-y:auto; flex:1; }
+#diary-list.show { display:block; }
+.diary-list-item { background:var(--panel); border-left:4px solid var(--accent2); border-radius:8px; padding:8px 10px; margin-bottom:6px; cursor:pointer; }
+.diary-list-item.weekend { border-left-color:var(--accent); }
+.diary-list-item .dli-date { font-size:13px; font-weight:700; color:var(--text); }
+.diary-list-item .dli-meta { font-size:11px; color:var(--text2); margin-top:2px; }
+
+/* Filter modal */
+#diary-filter-modal { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4700; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
+#diary-filter-modal.open { display:flex; }
+#diary-filter-modal .fm-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,440px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+
+/* Export modal */
+#diary-export-modal { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4700; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
+#diary-export-modal.open { display:flex; }
+#diary-export-modal .em-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,540px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+#diary-export-text { width:100%; min-height:280px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px; font-size:12px; font-family:'Menlo','Monaco',monospace; white-space:pre-wrap; resize:vertical; }
+
 /* Long-press chooser - poznámka vs. úkol */
 #lp-chooser { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4600; background:rgba(0,0,0,.65); align-items:center; justify-content:center; }
 #lp-chooser.open { display:flex; }
@@ -871,6 +949,7 @@ document.addEventListener('touchend', function(e){
   <h1><span class="title-prefix">II/603 </span><span class="title-name">Sulice</span><span class="title-suffix"> – Želivec</span></h1>
   <div id="km-display">km –</div>
   <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
+  <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
@@ -4825,6 +4904,491 @@ if('serviceWorker' in navigator) {
   window.addEventListener('load', function(){ registerServiceWorker(); });
 }
 
+// ════════════════════════════════════════════════════════════════════
+//   DENÍK STAVBY (přidáno 2026-05-12)
+// ════════════════════════════════════════════════════════════════════
+window.diaryCurrentDate = null;    // 'YYYY-MM-DD'
+window.diaryCurrentData = null;    // záznam z /denik/{datum}
+window.diaryAllDays     = {};      // všechny dny v cache (pro list/filter mode)
+window.diaryMode        = 'den';   // 'den' nebo 'seznam'
+window.diaryFilter      = { od:null, do:null, osoba:'', text:'' };
+
+// České svátky 2026 (statické pole - lze rozšiřovat)
+var CESKY_SVATKY = {
+  '01-01':'Nový rok',     '03-30':'Velký pátek 2026', '04-02':'Velikonoční pondělí 2026',
+  '05-01':'Svátek práce', '05-08':'Den vítězství',    '07-05':'Cyril a Metoděj',
+  '07-06':'Jan Hus',      '09-28':'Sv. Václav',       '10-28':'Vznik ČSR',
+  '11-17':'Boj za svobodu','12-24':'Štědrý den',     '12-25':'1. svátek vánoční',
+  '12-26':'2. svátek vánoční'
+};
+
+function ymd(d){
+  var y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + dd;
+}
+function ymd_to_date(s){
+  var p = s.split('-');
+  return new Date(+p[0], +p[1]-1, +p[2]);
+}
+function dayOfWeekCs(d){
+  return ['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'][d.getDay()];
+}
+function isWeekend(d){ return d.getDay() === 0 || d.getDay() === 6; }
+function svatekFor(d){
+  var key = String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return CESKY_SVATKY[key] || null;
+}
+
+function openDiaryPanel(){
+  if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  document.getElementById('diary-panel').classList.add('open');
+  if(!window.diaryCurrentDate) diaryDateToday();
+  else loadDiaryDay(window.diaryCurrentDate);
+  preloadAllDiaryDays();
+}
+function closeDiaryPanel(){
+  document.getElementById('diary-panel').classList.remove('open');
+}
+
+// ── Navigace dne ────────────────────────────────────────────────────
+function diaryDateToday(){
+  var t = new Date();
+  window.diaryCurrentDate = ymd(t);
+  document.getElementById('diary-date-picker').value = window.diaryCurrentDate;
+  updateDateLabel();
+  loadDiaryDay(window.diaryCurrentDate);
+}
+function diaryDateNav(dir){
+  if(!window.diaryCurrentDate) return diaryDateToday();
+  var d = ymd_to_date(window.diaryCurrentDate);
+  d.setDate(d.getDate() + dir);
+  window.diaryCurrentDate = ymd(d);
+  document.getElementById('diary-date-picker').value = window.diaryCurrentDate;
+  updateDateLabel();
+  loadDiaryDay(window.diaryCurrentDate);
+}
+function diaryDatePick(val){
+  if(!val) return;
+  window.diaryCurrentDate = val;
+  updateDateLabel();
+  loadDiaryDay(val);
+}
+function updateDateLabel(){
+  if(!window.diaryCurrentDate) return;
+  var d = ymd_to_date(window.diaryCurrentDate);
+  var lbl = document.getElementById('diary-date-label');
+  var formatted = d.toLocaleDateString('cs-CZ', {day:'numeric', month:'long', year:'numeric'});
+  var dow = dayOfWeekCs(d);
+  var sv  = svatekFor(d);
+  var meta = dow + (sv ? ' · ' + sv : '') + (isWeekend(d) ? ' · víkend' : '');
+  lbl.innerHTML = formatted + '<span class="day-of-week">' + meta + '</span>';
+  lbl.classList.toggle('is-weekend', isWeekend(d) || !!sv);
+}
+
+// ── Načtení dne z Firebase ──────────────────────────────────────────
+function loadDiaryDay(datum){
+  showSync('⏳ Načítám deník…');
+  db.ref('denik/' + datum).once('value').then(function(snap){
+    hideSync();
+    window.diaryCurrentData = snap.val() || {
+      datum: datum,
+      pocasi: '',
+      tds: false,
+      bozp: false,
+      sichtovka: {},
+      zaznamy: {},
+      materialy: '',
+      zaver: ''
+    };
+    renderDiaryDay();
+  }).catch(function(e){
+    hideSync();
+    console.error('Diary load err:', e);
+  });
+}
+
+function renderDiaryDay(){
+  var d = window.diaryCurrentData || {};
+  document.getElementById('dn-pocasi').value    = d.pocasi || '';
+  document.getElementById('dn-tds').checked     = !!d.tds;
+  document.getElementById('dn-bozp').checked    = !!d.bozp;
+  document.getElementById('dn-materialy').value = d.materialy || '';
+  document.getElementById('dn-zaver').value     = d.zaver || '';
+  renderSichtovka();
+  renderZaznamy();
+}
+
+// ── Šichtovka ───────────────────────────────────────────────────────
+function renderSichtovka(){
+  var list = document.getElementById('sht-list');
+  if(!list) return;
+  var sicht = (window.diaryCurrentData && window.diaryCurrentData.sichtovka) || {};
+  var users = window.allUsers || {};
+  // Seznam uživatelů abecedně dle jména
+  var arr = Object.keys(users).map(function(uid){ return users[uid]; }).filter(function(u){ return u && u.name; });
+  arr.sort(function(a,b){ return (a.name || '').localeCompare(b.name || '', 'cs'); });
+  if(arr.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádní uživatelé v systému. Až se někdo přihlásí, objeví se zde.</div>';
+    return;
+  }
+  list.innerHTML = arr.map(function(u){
+    var h = sicht[u.uid];
+    var hVal = (h === undefined || h === null || h === '') ? '' : h;
+    return '<div class="sht-row">'
+      + '<div class="sht-name">' + escapeHtml(u.name) + '</div>'
+      + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.uid + '" onchange="sichtovkaSet(\'' + u.uid + '\', this.value)">'
+      + '<span class="sht-suffix">h</span>'
+      + '</div>';
+  }).join('');
+  // Total
+  var total = 0, persons = 0;
+  arr.forEach(function(u){
+    var h = parseFloat(sicht[u.uid]);
+    if(!isNaN(h) && h > 0) { total += h; persons++; }
+  });
+  document.getElementById('sht-total').innerHTML = 'Celkem <b>' + total.toFixed(1) + ' h</b> · ' + persons + ' ' + (persons === 1 ? 'osoba' : (persons < 5 ? 'osoby' : 'osob'));
+  document.getElementById('sht-total-count').textContent = persons + ' ' + (persons === 1 ? 'osoba' : (persons < 5 ? 'osoby' : 'osob')) + ' · ' + total.toFixed(1) + ' h';
+}
+
+function sichtovkaSet(uid, val){
+  if(!window.diaryCurrentData) return;
+  if(!window.diaryCurrentData.sichtovka) window.diaryCurrentData.sichtovka = {};
+  var v = parseFloat(val);
+  if(isNaN(v) || v <= 0) {
+    delete window.diaryCurrentData.sichtovka[uid];
+  } else {
+    window.diaryCurrentData.sichtovka[uid] = v;
+  }
+  diarySaveDay();
+  renderSichtovka();
+}
+
+function sichtovkaFillAll(){
+  var inp = document.getElementById('sht-bulk-input');
+  var h = parseFloat(inp.value);
+  if(isNaN(h) || h <= 0) {
+    showToast('Zadej počet hodin', 1500);
+    return;
+  }
+  if(!window.diaryCurrentData.sichtovka) window.diaryCurrentData.sichtovka = {};
+  Object.keys(window.allUsers).forEach(function(uid){
+    if(window.allUsers[uid] && window.allUsers[uid].name) {
+      window.diaryCurrentData.sichtovka[uid] = h;
+    }
+  });
+  diarySaveDay();
+  renderSichtovka();
+  showToast('✓ Všem nastaveno ' + h + ' h', 1500);
+}
+
+// ── Záznamy během dne ───────────────────────────────────────────────
+function renderZaznamy(){
+  var list = document.getElementById('zaz-list');
+  if(!list) return;
+  var zaz = (window.diaryCurrentData && window.diaryCurrentData.zaznamy) || {};
+  var arr = Object.keys(zaz).map(function(id){ var v = zaz[id]; v._id = id; return v; });
+  arr.sort(function(a,b){ return (a.time || 0) - (b.time || 0); });
+  document.getElementById('zaz-count').textContent = arr.length;
+  if(arr.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádné záznamy. Napiš první níže.</div>';
+    return;
+  }
+  list.innerHTML = arr.map(function(z){
+    var t = z.time ? new Date(z.time) : null;
+    var hh = t ? (String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0')) : '';
+    return '<div class="zaz-item">'
+      + '<div class="zaz-head"><span class="zaz-time">' + hh + '</span><span>' + escapeHtml(z.name || '') + '</span></div>'
+      + '<div class="zaz-text">' + escapeHtml(z.text || '') + '</div>'
+      + '<div class="zaz-actions"><button onclick="zaznamDelete(\'' + z._id + '\')">🗑 Smazat</button></div>'
+      + '</div>';
+  }).join('');
+}
+
+function zaznamAdd(){
+  if(!window.currentUser) return;
+  var input = document.getElementById('zaz-input');
+  var txt = (input.value || '').trim();
+  if(!txt) return;
+  var id = 'z_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  var entry = {
+    id: id,
+    text: txt,
+    time: Date.now(),
+    uid: window.currentUser.uid,
+    name: window.currentUser.name
+  };
+  if(!window.diaryCurrentData.zaznamy) window.diaryCurrentData.zaznamy = {};
+  window.diaryCurrentData.zaznamy[id] = entry;
+  diarySaveDay();
+  renderZaznamy();
+  input.value = '';
+}
+
+function zaznamDelete(id){
+  if(!window.diaryCurrentData || !window.diaryCurrentData.zaznamy) return;
+  if(!confirm('Smazat tento záznam?')) return;
+  delete window.diaryCurrentData.zaznamy[id];
+  diarySaveDay();
+  renderZaznamy();
+}
+
+// ── Ukládání dne ────────────────────────────────────────────────────
+var _diarySaveTimer = null;
+function diarySaveDay(){
+  if(!window.diaryCurrentDate || !window.diaryCurrentData) return;
+  // Aktualizuj data z UI elementů
+  window.diaryCurrentData.datum     = window.diaryCurrentDate;
+  window.diaryCurrentData.pocasi    = document.getElementById('dn-pocasi').value || '';
+  window.diaryCurrentData.tds       = !!document.getElementById('dn-tds').checked;
+  window.diaryCurrentData.bozp      = !!document.getElementById('dn-bozp').checked;
+  window.diaryCurrentData.materialy = document.getElementById('dn-materialy').value || '';
+  window.diaryCurrentData.zaver     = document.getElementById('dn-zaver').value || '';
+  window.diaryCurrentData.upraveno  = Date.now();
+  // Debounce - 500 ms
+  if(_diarySaveTimer) clearTimeout(_diarySaveTimer);
+  _diarySaveTimer = setTimeout(function(){
+    showSync('⏳ Ukládám deník…');
+    db.ref('denik/' + window.diaryCurrentDate).set(window.diaryCurrentData)
+      .then(function(){ hideSync(); })
+      .catch(function(e){ hideSync(); console.error('Diary save err:', e); showToast('❌ Chyba uložení', 2500); });
+  }, 500);
+}
+
+// ── Předlnacačtení všech dní pro list/filter mode ───────────────────
+function preloadAllDiaryDays(){
+  db.ref('denik').on('value', function(snap){
+    window.diaryAllDays = snap.val() || {};
+    if(window.diaryMode === 'seznam') renderDiaryList();
+  });
+}
+
+// ── Mode switch (Den / Seznam) ──────────────────────────────────────
+function setDiaryMode(mode){
+  window.diaryMode = mode;
+  document.querySelectorAll('#diary-filter-bar .ft').forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('data-mode') === mode);
+  });
+  if(mode === 'den') {
+    document.getElementById('diary-date-bar').style.display = 'flex';
+    document.getElementById('diary-body').style.display = 'block';
+    document.getElementById('diary-list').classList.remove('show');
+  } else {
+    document.getElementById('diary-date-bar').style.display = 'none';
+    document.getElementById('diary-body').style.display = 'none';
+    document.getElementById('diary-list').classList.add('show');
+    renderDiaryList();
+  }
+}
+
+function renderDiaryList(){
+  var box = document.getElementById('diary-list');
+  if(!box) return;
+  var all = window.diaryAllDays || {};
+  var keys = Object.keys(all).filter(function(dt){ return matchesFilter(dt, all[dt]); });
+  keys.sort(function(a,b){ return b.localeCompare(a); }); // od nejnovějšího
+  if(keys.length === 0) {
+    box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px 20px;font-size:13px;">Žádné dny neodpovídají filtru.</div>';
+    return;
+  }
+  box.innerHTML = keys.map(function(dt){
+    var d = all[dt];
+    var dateObj = ymd_to_date(dt);
+    var dow = dayOfWeekCs(dateObj);
+    var sv = svatekFor(dateObj);
+    var total = 0, persons = 0;
+    if(d.sichtovka) {
+      Object.keys(d.sichtovka).forEach(function(uid){
+        var h = parseFloat(d.sichtovka[uid]);
+        if(!isNaN(h) && h > 0) { total += h; persons++; }
+      });
+    }
+    var zCount = d.zaznamy ? Object.keys(d.zaznamy).length : 0;
+    var cls = 'diary-list-item' + (isWeekend(dateObj) || sv ? ' weekend' : '');
+    var weekendBadge = isWeekend(dateObj) ? ' 🌴' : (sv ? ' 🏛️' : '');
+    return '<div class="' + cls + '" onclick="diaryListOpen(\'' + dt + '\')">'
+      + '<div class="dli-date">' + dateObj.toLocaleDateString('cs-CZ', {day:'numeric', month:'long', year:'numeric'}) + weekendBadge + ' · ' + dow + (sv ? ' · ' + sv : '') + '</div>'
+      + '<div class="dli-meta">👷 ' + persons + ' osob · ' + total.toFixed(1) + ' h · 📝 ' + zCount + ' záznamů' + (d.pocasi ? ' · ☀️ ' + escapeHtml(d.pocasi.slice(0,40)) : '') + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function diaryListOpen(datum){
+  window.diaryCurrentDate = datum;
+  document.getElementById('diary-date-picker').value = datum;
+  updateDateLabel();
+  loadDiaryDay(datum);
+  setDiaryMode('den');
+}
+
+// ── Filtry ──────────────────────────────────────────────────────────
+function openDiaryFilter(){
+  document.getElementById('filt-od').value    = window.diaryFilter.od || '';
+  document.getElementById('filt-do').value    = window.diaryFilter.do || '';
+  document.getElementById('filt-text').value  = window.diaryFilter.text || '';
+  var sel = document.getElementById('filt-osoba');
+  sel.innerHTML = '<option value="">— libovolný —</option>';
+  Object.keys(window.allUsers || {}).forEach(function(uid){
+    var u = window.allUsers[uid];
+    if(!u || !u.name) return;
+    var opt = document.createElement('option');
+    opt.value = uid;
+    opt.textContent = u.name;
+    if(uid === window.diaryFilter.osoba) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  document.getElementById('diary-filter-modal').classList.add('open');
+}
+function closeDiaryFilter(){ document.getElementById('diary-filter-modal').classList.remove('open'); }
+function applyDiaryFilter(){
+  window.diaryFilter = {
+    od:    document.getElementById('filt-od').value || null,
+    do:    document.getElementById('filt-do').value || null,
+    osoba: document.getElementById('filt-osoba').value || '',
+    text:  document.getElementById('filt-text').value || ''
+  };
+  closeDiaryFilter();
+  setDiaryMode('seznam');
+  showToast('✓ Filtr aplikován', 1500);
+}
+function resetDiaryFilter(){
+  window.diaryFilter = { od:null, do:null, osoba:'', text:'' };
+  document.getElementById('filt-od').value = '';
+  document.getElementById('filt-do').value = '';
+  document.getElementById('filt-text').value = '';
+  document.getElementById('filt-osoba').value = '';
+}
+function matchesFilter(dt, d){
+  var f = window.diaryFilter;
+  if(f.od && dt < f.od) return false;
+  if(f.do && dt > f.do) return false;
+  if(f.osoba) {
+    var h = d.sichtovka && d.sichtovka[f.osoba];
+    if(!h || parseFloat(h) <= 0) return false;
+  }
+  if(f.text) {
+    var q = f.text.toLowerCase();
+    var hay = (d.pocasi || '') + ' ' + (d.materialy || '') + ' ' + (d.zaver || '');
+    if(d.zaznamy) Object.keys(d.zaznamy).forEach(function(zid){ hay += ' ' + (d.zaznamy[zid].text || ''); });
+    if(hay.toLowerCase().indexOf(q) === -1) return false;
+  }
+  return true;
+}
+
+// ── Export ──────────────────────────────────────────────────────────
+function openDiaryExport(){
+  // Default: aktuální den
+  var today = window.diaryCurrentDate || ymd(new Date());
+  document.getElementById('exp-od').value = today;
+  document.getElementById('exp-do').value = today;
+  document.getElementById('diary-export-text').value = '';
+  document.getElementById('diary-export-modal').classList.add('open');
+}
+function closeDiaryExport(){ document.getElementById('diary-export-modal').classList.remove('open'); }
+
+function generateDiaryExport(){
+  var od = document.getElementById('exp-od').value;
+  var doDate = document.getElementById('exp-do').value;
+  if(!od || !doDate) { showToast('Vyber rozsah dat', 1500); return; }
+  if(od > doDate) { showToast('Datum od je větší než do', 2000); return; }
+  var keys = Object.keys(window.diaryAllDays || {}).filter(function(dt){ return dt >= od && dt <= doDate; });
+  keys.sort();
+  if(keys.length === 0) {
+    document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)';
+    return;
+  }
+  var out = [];
+  out.push('STAVEBNÍ DENÍK — II/603 Sulice – Želivec');
+  out.push('Rozsah: ' + od + ' – ' + doDate);
+  out.push('Vygenerováno: ' + new Date().toLocaleString('cs-CZ'));
+  out.push('═══════════════════════════════════════════');
+  out.push('');
+  keys.forEach(function(dt){
+    var d = window.diaryAllDays[dt];
+    var dateObj = ymd_to_date(dt);
+    var dow = dayOfWeekCs(dateObj);
+    var sv = svatekFor(dateObj);
+    out.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    out.push(dateObj.toLocaleDateString('cs-CZ', {day:'numeric', month:'long', year:'numeric'}) + '  (' + dow + (sv ? ', ' + sv : '') + (isWeekend(dateObj) ? ', víkend' : '') + ')');
+    out.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    if(d.pocasi) out.push('Počasí: ' + d.pocasi);
+    var kontroly = [];
+    if(d.tds)  kontroly.push('TDS');
+    if(d.bozp) kontroly.push('BOZP');
+    if(kontroly.length) out.push('Kontroly: ' + kontroly.join(', '));
+    // Šichtovka
+    if(d.sichtovka) {
+      var rows = Object.keys(d.sichtovka).map(function(uid){
+        var u = window.allUsers && window.allUsers[uid];
+        var h = parseFloat(d.sichtovka[uid]);
+        if(isNaN(h) || h <= 0) return null;
+        return { name: (u && u.name) || ('uid:' + uid), h: h };
+      }).filter(Boolean);
+      rows.sort(function(a,b){ return a.name.localeCompare(b.name, 'cs'); });
+      if(rows.length) {
+        out.push('');
+        out.push('Šichtovka (hodiny bez pauz):');
+        var total = 0;
+        rows.forEach(function(r){
+          out.push('  · ' + r.name + ' — ' + r.h.toFixed(1) + ' h');
+          total += r.h;
+        });
+        out.push('  ─────────────');
+        out.push('  Celkem: ' + total.toFixed(1) + ' h · ' + rows.length + ' osob');
+      }
+    }
+    // Záznamy
+    if(d.zaznamy) {
+      var zs = Object.keys(d.zaznamy).map(function(zid){ return d.zaznamy[zid]; });
+      zs.sort(function(a,b){ return (a.time || 0) - (b.time || 0); });
+      if(zs.length) {
+        out.push('');
+        out.push('Záznamy:');
+        zs.forEach(function(z){
+          var t = z.time ? new Date(z.time) : null;
+          var hh = t ? (String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0')) : '';
+          out.push('  ' + hh + '  (' + (z.name || '?') + ')  ' + (z.text || ''));
+        });
+      }
+    }
+    if(d.materialy) {
+      out.push('');
+      out.push('Materiály / mechanizace:');
+      out.push('  ' + d.materialy.split('\n').join('\n  '));
+    }
+    if(d.zaver) {
+      out.push('');
+      out.push('Závěr dne:');
+      out.push('  ' + d.zaver.split('\n').join('\n  '));
+    }
+    out.push('');
+  });
+  document.getElementById('diary-export-text').value = out.join('\n');
+}
+
+function copyDiaryExport(){
+  var txt = document.getElementById('diary-export-text').value;
+  if(!txt) { showToast('Nejdřív vygeneruj', 1500); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function(){
+      showToast('✅ Zkopírováno do schránky', 1800);
+    }).catch(function(){ fallbackCopy(); });
+  } else {
+    fallbackCopy();
+  }
+  function fallbackCopy(){
+    var ta = document.getElementById('diary-export-text');
+    ta.removeAttribute('readonly');
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showToast('✅ Zkopírováno', 1800);
+    } catch(e) {
+      showToast('❌ Kopírování selhalo, vyber ručně', 2500);
+    }
+    ta.setAttribute('readonly', 'readonly');
+  }
+}
+
 </script>
 
 <!-- Nová poznámka -->
@@ -5139,6 +5703,129 @@ if('serviceWorker' in navigator) {
     <div id="pp-counter">📸 0 fotek</div>
     <button id="pp-yes" class="pp-btn pp-yes" onclick="ppAnswer(true)">Ano</button>
     <button id="pp-no" class="pp-btn pp-no" onclick="ppAnswer(false)">Ne</button>
+  </div>
+</div>
+
+<!-- ═════════════════════════ DENÍK STAVBY ═════════════════════════ -->
+<div id="diary-panel">
+  <div id="diary-header">
+    <h2>📓 Deník stavby</h2>
+    <button onclick="openDiaryFilter()" title="Filtry">🔍 Filtr</button>
+    <button onclick="openDiaryExport()" title="Export do textu">📤 Export</button>
+    <button onclick="closeDiaryPanel()" title="Zavřít">✕</button>
+  </div>
+
+  <div id="diary-filter-bar">
+    <div class="ft active" data-mode="den" onclick="setDiaryMode('den')">📅 Den</div>
+    <div class="ft" data-mode="seznam" onclick="setDiaryMode('seznam')">📋 Seznam</div>
+  </div>
+
+  <div id="diary-date-bar">
+    <button onclick="diaryDateNav(-1)">‹</button>
+    <button onclick="diaryDateToday()">Dnes</button>
+    <div id="diary-date-label">…</div>
+    <input type="date" id="diary-date-picker" onchange="diaryDatePick(this.value)">
+    <button onclick="diaryDateNav(+1)">›</button>
+  </div>
+
+  <!-- Mode "Den" - jeden den s veškerým obsahem -->
+  <div id="diary-body">
+    <!-- Hlavička dne -->
+    <div class="diary-section">
+      <h3>☀️ Hlavička dne</h3>
+      <input type="text" class="diary-field" id="dn-pocasi" placeholder="Počasí (např. 12 °C, polojasno, slabý vítr)" onchange="diarySaveDay()">
+      <div style="height:8px;"></div>
+      <div class="diary-checkbox-row">
+        <input type="checkbox" id="dn-tds" onchange="diarySaveDay()"> <label for="dn-tds">Kontrola TDS</label>
+      </div>
+      <div class="diary-checkbox-row">
+        <input type="checkbox" id="dn-bozp" onchange="diarySaveDay()"> <label for="dn-bozp">Kontrola BOZP</label>
+      </div>
+    </div>
+
+    <!-- Šichtovka -->
+    <div class="diary-section">
+      <h3>👷 Šichtovka <span class="ds-cnt" id="sht-total-count">0 osob · 0 h</span></h3>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Hodiny <b>bez pauz</b> (čistá odpracovaná doba)</div>
+      <div class="sht-bulk">
+        <input type="number" id="sht-bulk-input" placeholder="8" min="0" max="24" step="0.5">
+        <button onclick="sichtovkaFillAll()">Vyplnit všem</button>
+        <span class="lbl">např. všem 8 h</span>
+      </div>
+      <div id="sht-list" style="margin-top:8px;"></div>
+      <div class="sht-total" id="sht-total">Celkem <b>0 h</b></div>
+    </div>
+
+    <!-- Záznamy -->
+    <div class="diary-section">
+      <h3>📝 Záznamy během dne <span class="ds-cnt" id="zaz-count">0</span></h3>
+      <div id="zaz-list"></div>
+      <div id="zaz-input-row">
+        <textarea id="zaz-input" placeholder="Co se dělo? (klepni Enter pro odeslání)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();zaznamAdd();}"></textarea>
+        <button id="zaz-add-btn" onclick="zaznamAdd()">+ Přidat</button>
+      </div>
+    </div>
+
+    <!-- Materiály / mechanizace -->
+    <div class="diary-section">
+      <h3>🚛 Materiály / mechanizace</h3>
+      <textarea class="diary-field" id="dn-materialy" placeholder="Např. 5 t kameniva, autodomíchávač 2× …" onchange="diarySaveDay()"></textarea>
+    </div>
+
+    <!-- Závěr dne -->
+    <div class="diary-section">
+      <h3>📌 Závěr dne</h3>
+      <textarea class="diary-field" id="dn-zaver" placeholder="Souhrn dne, komentář pro investora, úkoly na zítra…" onchange="diarySaveDay()"></textarea>
+    </div>
+  </div>
+
+  <!-- Mode "Seznam" - kompletní seznam dní -->
+  <div id="diary-list"></div>
+</div>
+
+<!-- Diary filter modal -->
+<div id="diary-filter-modal">
+  <div class="fm-box">
+    <h3 style="font-size:15px;color:var(--accent2);">🔍 Filtr deníku</h3>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Od data</label>
+    <input type="date" class="diary-field" id="filt-od">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Do data</label>
+    <input type="date" class="diary-field" id="filt-do">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Osoba (kdo měl hodiny)</label>
+    <select class="diary-field" id="filt-osoba">
+      <option value="">— libovolný —</option>
+    </select>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Hledat v záznamech / komentářích</label>
+    <input type="text" class="diary-field" id="filt-text" placeholder="např. beton, geodet, …">
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="applyDiaryFilter()">✓ Použít</button>
+      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="resetDiaryFilter()">Vynulovat</button>
+      <button class="btn-secondary" style="flex:0;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;" onclick="closeDiaryFilter()">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Diary export modal -->
+<div id="diary-export-modal">
+  <div class="em-box">
+    <h3 style="font-size:15px;color:var(--accent2);">📤 Export deníku</h3>
+    <div style="font-size:12px;color:var(--text2);">Můžeš zkopírovat do schránky nebo vybrat rozsah dat dole.</div>
+    <div class="diary-row-2">
+      <div>
+        <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Od</label>
+        <input type="date" class="diary-field" id="exp-od">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Do</label>
+        <input type="date" class="diary-field" id="exp-do">
+      </div>
+    </div>
+    <button class="btn-primary" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="generateDiaryExport()">📋 Vygenerovat</button>
+    <textarea id="diary-export-text" placeholder="Tady se objeví vygenerovaný text…" readonly></textarea>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="copyDiaryExport()">📋 Zkopírovat</button>
+      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeDiaryExport()">Zavřít</button>
+    </div>
   </div>
 </div>
 
