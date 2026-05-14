@@ -5711,8 +5711,12 @@ function renderKzpList(){
   }
   box.innerHTML = items.map(function(k){
     var pdfBadge = k.pdfUrl ? '<span>📄 PDF' + (k.pdfStrana ? ' str. ' + k.pdfStrana : '') + '</span>' : '';
+    var matBadge = k.zkouska ? '<span style="background:var(--panel2);color:var(--accent2);font-size:10px;padding:2px 6px;border-radius:4px;">🧱 ' + escapeHtml(k.zkouska) + '</span>' : '';
+    var schvalenoBadge = (k.schvaleno === false) ? '<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">⚠️ neschváleno</span>' : '';
+    var actBtn = '<button onclick="event.stopPropagation();openKzpEditModal(\'' + k._id + '\')" title="Upravit" style="background:transparent;border:none;color:var(--text2);font-size:13px;cursor:pointer;padding:2px 6px;float:right;">✏️</button>';
     return '<div class="kzp-card" onclick="openKzpItem(\'' + k._id + '\')">'
-      + '<div><span class="kc-so">' + escapeHtml(k.so || '–') + '</span>' + (k.zkouska ? '<span style="font-size:11px;color:var(--text2);">' + escapeHtml(k.zkouska) + '</span>' : '') + '</div>'
+      + actBtn
+      + '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;"><span class="kc-so">' + escapeHtml(k.so || '–') + '</span>' + matBadge + schvalenoBadge + '</div>'
       + '<div class="kc-cinnost">' + escapeHtml(k.cinnost || '(bez činnosti)') + '</div>'
       + (k.popis ? '<div class="kc-zkouska">' + escapeHtml(k.popis) + '</div>' : '')
       + (pdfBadge ? '<div class="kc-meta">' + pdfBadge + '</div>' : '')
@@ -5811,6 +5815,53 @@ function deleteKzpItem(){
     showToast('🗑 Smazáno', 1500);
     closeKzpAddModal();
   });
+}
+
+// ── Hromadný import KZP ze souboru kzp-seed.json ───────────────────
+function importKzpSeed(){
+  if(!confirm('Importovat KZP z PDF souborů?\n\nTo načte ~50 položek (SO 101–107) a zapíše do databáze. Existující položky se stejným ID budou přepsány. Pokračovat?')) return;
+  showSync('⏳ Stahuji kzp-seed.json…');
+  fetch('kzp-seed.json?ts=' + Date.now())
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(seed){
+      if(!Array.isArray(seed) || seed.length === 0) {
+        hideSync();
+        showToast('⚠ Soubor kzp-seed.json je prázdný', 3000);
+        return;
+      }
+      showSync('⏳ Importuji ' + seed.length + ' položek…');
+      // Batch update do /kvalita pomocí jednoho objektu
+      var updates = {};
+      var now = Date.now();
+      seed.forEach(function(item){
+        if(!item.id) item.id = 'kzp_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+        updates[item.id] = {
+          id:        item.id,
+          so:        item.so || '',
+          cinnost:   item.cinnost || '',
+          zkouska:   item.zkouska || '',
+          popis:     item.popis || '',
+          pdfUrl:    item.pdfUrl || '',
+          pdfStrana: item.pdfStrana || null,
+          schvaleno: false,
+          poznamka:  'KZP v01 — neschválená verze',
+          vytvoreno: now,
+          upraveno:  now
+        };
+      });
+      return db.ref('kvalita').update(updates).then(function(){
+        hideSync();
+        showToast('✅ Importováno ' + seed.length + ' položek KZP', 2500);
+      });
+    })
+    .catch(function(e){
+      hideSync();
+      console.error('Import KZP error:', e);
+      showToast('❌ Chyba importu: ' + (e.message || e), 4000);
+    });
 }
 
 function copyDiaryExport(){
@@ -6306,14 +6357,19 @@ function copyDiaryExport(){
 <div id="kzp-panel">
   <div id="kzp-header">
     <h2>🧪 Kvalita / KZP</h2>
+    <button onclick="importKzpSeed()" title="Hromadný import KZP z PDF souborů" style="background:var(--accent2);color:#0f3460;">📥 Import KZP</button>
     <button onclick="openKzpAddModal()" style="background:var(--accent);color:#fff;">+ Položka</button>
     <button onclick="closeKzpPanel()">✕</button>
+  </div>
+  <div id="kzp-warning-banner" style="background:rgba(255,107,107,0.18);border-left:4px solid #ff6b6b;color:#ff8585;padding:10px 14px;font-size:13px;line-height:1.4;flex-shrink:0;">
+    ⚠️ <b>POZOR — KZP nejsou schválena</b>.<br>
+    Hodnoty jsou z neschválené verze v01. Pro skutečné kontroly použij vždy aktuální schválený výtisk od TDS / objednatele.
   </div>
   <div id="kzp-filter-bar">
     <select id="kzp-filter-so" onchange="renderKzpList()">
       <option value="">Všechny SO</option>
     </select>
-    <input type="text" id="kzp-filter-text" placeholder="Hledat (činnost, zkouška…)" oninput="renderKzpList()">
+    <input type="text" id="kzp-filter-text" placeholder="Hledat (činnost, materiál, zkouška…)" oninput="renderKzpList()">
     <button class="clear" onclick="clearKzpFilters()">⌫ Vynulovat</button>
   </div>
   <div id="kzp-list"></div>

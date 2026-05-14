@@ -1,0 +1,402 @@
+[
+  {
+    "id": "kzp_100e19698980a822",
+    "so": "SO 101",
+    "cinnost": "Zemní práce — Aktivní zóna / zemní pláň",
+    "zkouska": "Upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška",
+    "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf"
+  },
+  {
+    "id": "kzp_12a57f5e2ff995e3",
+    "so": "SO 101",
+    "cinnost": "Nestmelené podkladní vrstvy — Spodní podkladní vrstva - štěrkodrť",
+    "zkouska": "ŠD fr. 0/32 mm",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf"
+  },
+  {
+    "id": "kzp_7f47e15920c34f4f",
+    "so": "SO 101",
+    "cinnost": "Stmelené podkladní vrstvy — Recyklovaná vrstva",
+    "zkouska": "RS CA",
+    "popis": "Kontroluje se: Průkazní zkouška; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf"
+  },
+  {
+    "id": "kzp_6696341fcdc5ec23",
+    "so": "SO 101",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf"
+  },
+  {
+    "id": "kzp_94314310013eeb7c",
+    "so": "SO 101",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 22 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf"
+  },
+  {
+    "id": "kzp_650a98f6e9945408",
+    "so": "SO 101",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf"
+  },
+  {
+    "id": "kzp_8a8c1e8f6b4ce6c0",
+    "so": "SO 102",
+    "cinnost": "Zemní práce - lokální sanace — Aktivní zóna / zemní pláň",
+    "zkouska": "Původní případně upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška (v případě nutnosti upravit AZ)",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_1a3ba543e4a73817",
+    "so": "SO 102",
+    "cinnost": "Nestmelené podkladní vrstvy - lokální sanace — Spodní podkladní vrstva - štěrkodrť (náhrada MZ)",
+    "zkouska": "ŠD fr. 0/32 mm (náhrada MZ)",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_96bc5eb83374ee35",
+    "so": "SO 102",
+    "cinnost": "Stmelené podkladní vrstvy - lokální sanace — Směs stmelená cementem",
+    "zkouska": "SC C8/10",
+    "popis": "Kontroluje se: Vizuální kontorla zhutnění",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_62b76f1fb4ccf554",
+    "so": "SO 102",
+    "cinnost": "Asfaltové hutněné vrstvy - lokální sanace — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Mezerovitost směsi",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_304ad5d30295ed80",
+    "so": "SO 102",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 22 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_25b0d51df839285b",
+    "so": "SO 102",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 16 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_7fbb9bc3b40832f8",
+    "so": "SO 102",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf"
+  },
+  {
+    "id": "kzp_a111d25ad429f19b",
+    "so": "SO 103",
+    "cinnost": "Zemní práce — Aktivní zóna / zemní pláň",
+    "zkouska": "Upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_cc472b26f37916fa",
+    "so": "SO 103",
+    "cinnost": "Nestmelené podkladní vrstvy — Spodní podkladní vrstva - štěrkodrť",
+    "zkouska": "ŠD fr. 0/32 mm",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_d350ec6dc92c6375",
+    "so": "SO 103",
+    "cinnost": "Stmelené podkladní vrstvy — Recyklovaná vrstva",
+    "zkouska": "RS CA",
+    "popis": "Kontroluje se: Průkazní zkouška; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_e16ccdea5506ae2f",
+    "so": "SO 103",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_f269b6066b4cd42f",
+    "so": "SO 103",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 22 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_dbd2f3cc05f2a833",
+    "so": "SO 103",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_6d8eb383f71be9c8",
+    "so": "SO 103",
+    "cinnost": "Okružní křižovatka — Prstenec",
+    "zkouska": "C 30/37 XF4; Dmax 22 mm; S4",
+    "popis": "Kontroluje se: Čerstvý beton - objemová hmotnost; Čerstvý beton - obsah vzduchu; Zvrdlý beton - odolnost proti CHRL (28 dní)",
+    "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf"
+  },
+  {
+    "id": "kzp_dc0e186b018d34c6",
+    "so": "SO 104",
+    "cinnost": "Zemní práce — Aktivní zóna / zemní pláň",
+    "zkouska": "Upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_d6e2811c30299ebb",
+    "so": "SO 104",
+    "cinnost": "Nestmelené podkladní vrstvy — Spodní podkladní vrstva - štěrkodrť",
+    "zkouska": "ŠD fr. 0/32 mm",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_f8ca288890930f35",
+    "so": "SO 104",
+    "cinnost": "Stmelené podkladní vrstvy — Recyklovaná vrstva",
+    "zkouska": "RS CA",
+    "popis": "Kontroluje se: Průkazní zkouška; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_2c57f27501c7c150",
+    "so": "SO 104",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_d2a877e115f4f915",
+    "so": "SO 104",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 22 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_4976909a255960fd",
+    "so": "SO 104",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_0eea12283736ef71",
+    "so": "SO 104",
+    "cinnost": "Propustek — Základová spára",
+    "zkouska": "původní zemna",
+    "popis": "",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_4df68c7cc2d9f9dd",
+    "so": "SO 104",
+    "cinnost": "Propustek — Základy",
+    "zkouska": "C 30/37 XF3; Dmax 22 mm; S4",
+    "popis": "Kontroluje se: Čerstvý beton - konzistence; Čerstvý beton - objemová hmotnost; Čerstvý beton - teplota; Ztvrdlý beton - odolnost proti průsaku vody (28 dní)",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_5365986a591ca434",
+    "so": "SO 104",
+    "cinnost": "Propustek — Zásyp",
+    "zkouska": "min. podmínečně vhodný materiál dle ČSN 73 6133",
+    "popis": "Kontroluje se: Materiál; Zrnitost zeminy (případně meze plasticity); + vlhkost přirozená; Míra zhutnění (D) + vlhkost; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf"
+  },
+  {
+    "id": "kzp_b0fa1a8721977e4b",
+    "so": "SO 105",
+    "cinnost": "Zemní práce — Aktivní zóna / zemní pláň",
+    "zkouska": "Upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_8cad167469f052e2",
+    "so": "SO 105",
+    "cinnost": "Nestmelené podkladní vrstvy — Spodní podkladní vrstva - štěrkodrť",
+    "zkouska": "ŠD fr. 0/32 mm",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_ee059cd23c89cac5",
+    "so": "SO 105",
+    "cinnost": "Stmelené podkladní vrstvy — Recyklovaná vrstva",
+    "zkouska": "RS CA",
+    "popis": "Kontroluje se: Průkazní zkouška; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_951b18a50ca761de",
+    "so": "SO 105",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_d1af7796c25a0cc0",
+    "so": "SO 105",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 22 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_968b2ba91acd04c6",
+    "so": "SO 105",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_a3f2c92f425ea0eb",
+    "so": "SO 105",
+    "cinnost": "Propustek — Základová spára",
+    "zkouska": "původní zemna",
+    "popis": "",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_ed0e9971359165b2",
+    "so": "SO 105",
+    "cinnost": "Propustek — Základy",
+    "zkouska": "C 30/37 XF3; Dmax 22 mm; S4",
+    "popis": "Kontroluje se: Čerstvý beton - konzistence; Čerstvý beton - objemová hmotnost; Čerstvý beton - teplota; Ztvrdlý beton - odolnost proti průsaku vody (28 dní)",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_c10c39753449026c",
+    "so": "SO 105",
+    "cinnost": "Propustek — Zásyp",
+    "zkouska": "min. podmínečně vhodný materiál dle ČSN 73 6133",
+    "popis": "Kontroluje se: Materiál; Zrnitost zeminy (případně meze plasticity); + vlhkost přirozená; Míra zhutnění (D) + vlhkost; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf"
+  },
+  {
+    "id": "kzp_98d447dafda83b3f",
+    "so": "SO 106",
+    "cinnost": "Zemní práce — Aktivní zóna / zemní pláň",
+    "zkouska": "Upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška",
+    "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf"
+  },
+  {
+    "id": "kzp_80c5cb1775928887",
+    "so": "SO 106",
+    "cinnost": "Nestmelené podkladní vrstvy — Spodní podkladní vrstva - štěrkodrť",
+    "zkouska": "ŠD fr. 0/32 mm",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf"
+  },
+  {
+    "id": "kzp_56c02d5cbb3ec9d4",
+    "so": "SO 106",
+    "cinnost": "Stmelené podkladní vrstvy — Recyklovaná vrstva",
+    "zkouska": "RS CA",
+    "popis": "Kontroluje se: Průkazní zkouška; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf"
+  },
+  {
+    "id": "kzp_bc38a8d46f3c9de1",
+    "so": "SO 106",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf"
+  },
+  {
+    "id": "kzp_750c150f0df00c4e",
+    "so": "SO 106",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 22 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf"
+  },
+  {
+    "id": "kzp_7fc9338fe697b71a",
+    "so": "SO 106",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf"
+  },
+  {
+    "id": "kzp_2ab5a009fad5786c",
+    "so": "SO 107",
+    "cinnost": "Zemní práce — Aktivní zóna / zemní pláň",
+    "zkouska": "Upravená zemina",
+    "popis": "Kontroluje se: Průkazní zkouška",
+    "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf"
+  },
+  {
+    "id": "kzp_e868f3048bb43848",
+    "so": "SO 107",
+    "cinnost": "Nestmelené podkladní vrstvy — Spodní podkladní vrstva - štěrkodrť",
+    "zkouska": "ŠD fr. 0/32 mm",
+    "popis": "Kontroluje se: Zrnitost a obsah jemných částic",
+    "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf"
+  },
+  {
+    "id": "kzp_4c510b46bbc339d1",
+    "so": "SO 107",
+    "cinnost": "Stmelené podkladní vrstvy — Recyklovaná vrstva",
+    "zkouska": "RS CA",
+    "popis": "Kontroluje se: Průkazní zkouška; Modul přetvárnosti (Edef,2)",
+    "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf"
+  },
+  {
+    "id": "kzp_c7d586adeffc3d3c",
+    "so": "SO 107",
+    "cinnost": "Asfaltové hutněné vrstvy — Podkladní vrstva",
+    "zkouska": "ACP 16 S 50/70",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf"
+  },
+  {
+    "id": "kzp_f3b387164a03b2fc",
+    "so": "SO 107",
+    "cinnost": "Asfaltové hutněné vrstvy — Ložní vrstva",
+    "zkouska": "ACL 22 S PMB 25/55-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy",
+    "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf"
+  },
+  {
+    "id": "kzp_1d3e1c30b2e1261e",
+    "so": "SO 107",
+    "cinnost": "Asfaltové hutněné vrstvy — Obrusná vrstva",
+    "zkouska": "ACO 11 + PMB 45/80-65",
+    "popis": "Kontroluje se: Zrnitost směsi; Obsah pojiva; Mezerovitost směsi; Vývrt - mezerovitost vrstvy; Vývrt - míra zhutnění vrstvy; Vývrt - tloušťka vrstvy; Nerovnost povrchu - podélná; Nerovnost povrchu - příčná",
+    "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf"
+  }
+]
