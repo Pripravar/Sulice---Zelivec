@@ -805,9 +805,13 @@ textarea.diary-field { resize:none; min-height:60px; }
 .diary-checkbox-row input[type=checkbox] { width:18px; height:18px; }
 
 /* Šichtovka */
-.sht-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); }
+.sht-row { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
 .sht-row:last-child { border-bottom:none; }
-.sht-name { flex:1; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sht-left { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; padding-top:2px; }
+.sht-name { font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sht-note { font-size:11px; color:var(--text2); background:transparent; border:none; border-bottom:1px dashed var(--border); padding:2px 0; width:100%; font-family:inherit; font-style:italic; }
+.sht-note:focus { outline:none; border-bottom-color:var(--accent2); color:var(--text); }
+.sht-note::placeholder { color:rgba(160,174,192,0.5); font-style:italic; }
 .sht-name .firma-badge { display:inline-block; background:var(--panel2); color:var(--accent2); font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; margin-left:6px; }
 .firma-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
 .firma-row:last-child { border-bottom:none; }
@@ -5095,6 +5099,7 @@ function renderSichtovka(){
   var list = document.getElementById('sht-list');
   if(!list) return;
   var sicht = (window.diaryCurrentData && window.diaryCurrentData.sichtovka) || {};
+  var pozn  = (window.diaryCurrentData && window.diaryCurrentData.sichtovka_pozn) || {};
   var arr = getAllWorkers();
   if(arr.length === 0) {
     list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px 0;">Žádní pracovníci. Přidej manuálního dělníka přes 🏢 Firmy.</div>';
@@ -5103,10 +5108,14 @@ function renderSichtovka(){
   list.innerHTML = arr.map(function(u){
     var h = sicht[u.id];
     var hVal = (h === undefined || h === null || h === '') ? '' : h;
+    var pVal = pozn[u.id] || '';
     var firmaHtml = u.firma ? '<span class="firma-badge">' + escapeHtml(u.firma) + '</span>' : '';
     var typIcon = u.type === 'manual' ? ' <span style="color:var(--text2);font-size:10px;">👷</span>' : '';
     return '<div class="sht-row">'
-      + '<div class="sht-name">' + escapeHtml(u.name) + typIcon + firmaHtml + '</div>'
+      + '<div class="sht-left">'
+      +   '<div class="sht-name">' + escapeHtml(u.name) + typIcon + firmaHtml + '</div>'
+      +   '<input type="text" class="sht-note" placeholder="poznámka (např. odešel k zubaři 13:00)" value="' + escapeHtml(pVal) + '" onchange="sichtovkaSetNote(\'' + u.id + '\', this.value)">'
+      + '</div>'
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.id + '" onchange="sichtovkaSet(\'' + u.id + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
       + '</div>';
@@ -5132,6 +5141,19 @@ function sichtovkaSet(uid, val){
   }
   diarySaveDay();
   renderSichtovka();
+}
+
+function sichtovkaSetNote(uid, val){
+  if(!window.diaryCurrentData) return;
+  if(!window.diaryCurrentData.sichtovka_pozn) window.diaryCurrentData.sichtovka_pozn = {};
+  var v = (val || '').trim();
+  if(!v) {
+    delete window.diaryCurrentData.sichtovka_pozn[uid];
+  } else {
+    window.diaryCurrentData.sichtovka_pozn[uid] = v;
+  }
+  diarySaveDay();
+  // Záměrně NEvolám renderSichtovka() - mohlo by to ztratit focus uprostřed psaní
 }
 
 function sichtovkaFillAll(){
@@ -5462,11 +5484,12 @@ function generateFullExport(){
     if(kontroly.length) out.push('Kontroly: ' + kontroly.join(', '));
     // Šichtovka
     if(d.sichtovka) {
+      var poznDne = d.sichtovka_pozn || {};
       var rows = Object.keys(d.sichtovka).map(function(uid){
-        var u = window.allUsers && window.allUsers[uid];
+        var w = lookupWorker(uid);
         var h = parseFloat(d.sichtovka[uid]);
         if(isNaN(h) || h <= 0) return null;
-        return { name: (u && u.name) || ('uid:' + uid), h: h };
+        return { name: (w && w.name) || ('id:' + uid), h: h, pozn: poznDne[uid] || '' };
       }).filter(Boolean);
       rows.sort(function(a,b){ return a.name.localeCompare(b.name, 'cs'); });
       if(rows.length) {
@@ -5474,7 +5497,8 @@ function generateFullExport(){
         out.push('Šichtovka (hodiny bez pauz):');
         var total = 0;
         rows.forEach(function(r){
-          out.push('  · ' + r.name + ' — ' + r.h.toFixed(1) + ' h');
+          var ext = r.pozn ? ('   (pozn: ' + r.pozn + ')') : '';
+          out.push('  · ' + r.name + ' — ' + r.h.toFixed(1) + ' h' + ext);
           total += r.h;
         });
         out.push('  ─────────────');
@@ -5522,11 +5546,12 @@ function generateSichtovkaExport(){
     document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)';
     return;
   }
-  // Agregace: firma → uid → { name, dny:{datum:hodiny}, total }
+  // Agregace: firma → uid → { name, dny:{datum:{h,pozn}}, total }
   var firmy = {}; // klíč = firma (nebo '_no_firma'), hodnota = { název: '...', osoby: {uid:{...}} }
   keys.forEach(function(dt){
     var d = window.diaryAllDays[dt];
     if(!d || !d.sichtovka) return;
+    var poznDne = d.sichtovka_pozn || {};
     Object.keys(d.sichtovka).forEach(function(uid){
       var h = parseFloat(d.sichtovka[uid]);
       if(isNaN(h) || h <= 0) return;
@@ -5535,7 +5560,7 @@ function generateSichtovkaExport(){
       var firmaKey = (w.firma || '').trim() || '_no_firma';
       if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (w.firma || firmaKey), osoby: {} };
       if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, dny: {}, total: 0 };
-      firmy[firmaKey].osoby[uid].dny[dt] = (firmy[firmaKey].osoby[uid].dny[dt] || 0) + h;
+      firmy[firmaKey].osoby[uid].dny[dt] = { h: (firmy[firmaKey].osoby[uid].dny[dt] ? firmy[firmaKey].osoby[uid].dny[dt].h : 0) + h, pozn: poznDne[uid] || '' };
       firmy[firmaKey].osoby[uid].total += h;
     });
   });
@@ -5578,7 +5603,10 @@ function generateSichtovkaExport(){
         var sv  = svatekFor(dateObj);
         var weekendFlag = isWeekend(dateObj) ? ' (víkend)' : (sv ? ' (svátek: ' + sv + ')' : '');
         var dStr = dateObj.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric'});
-        out.push('  ' + dow + ' ' + dStr + '   ' + o.dny[dt].toFixed(1) + ' h' + weekendFlag);
+        var entry = o.dny[dt];
+        var hodVal = (typeof entry === 'number') ? entry : entry.h;
+        var poznVal = (typeof entry === 'object' && entry.pozn) ? ('   pozn: ' + entry.pozn) : '';
+        out.push('  ' + dow + ' ' + dStr + '   ' + hodVal.toFixed(1) + ' h' + weekendFlag + poznVal);
       });
       firmaTotal += o.total;
     });
@@ -6170,7 +6198,7 @@ function copyDiaryExport(){
       <div class="sht-bulk">
         <input type="number" id="sht-bulk-input" placeholder="8" min="0" max="24" step="0.5">
         <button onclick="sichtovkaFillAll()">Vyplnit všem</button>
-        <button onclick="openFirmyModal()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">🏢 Firmy</button>
+        <button onclick="openFirmyModal()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">👷 Lidé / firmy</button>
         <span class="lbl" style="flex:0;">např. všem 8 h</span>
       </div>
       <div id="sht-list" style="margin-top:8px;"></div>
