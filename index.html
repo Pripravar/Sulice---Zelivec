@@ -808,6 +808,11 @@ textarea.diary-field { resize:none; min-height:60px; }
 .sht-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); }
 .sht-row:last-child { border-bottom:none; }
 .sht-name { flex:1; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sht-name .firma-badge { display:inline-block; background:var(--panel2); color:var(--accent2); font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; margin-left:6px; }
+.firma-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); }
+.firma-row:last-child { border-bottom:none; }
+.firma-row .firma-name { flex:1; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.firma-row input { flex:0 0 200px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 8px; font-size:12px; }
 .sht-hours { width:60px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 6px; font-size:14px; font-weight:700; text-align:center; }
 .sht-hours::placeholder { color:var(--text2); font-weight:400; }
 .sht-suffix { font-size:11px; color:var(--text2); }
@@ -5034,8 +5039,9 @@ function renderSichtovka(){
   list.innerHTML = arr.map(function(u){
     var h = sicht[u.uid];
     var hVal = (h === undefined || h === null || h === '') ? '' : h;
+    var firmaHtml = u.firma ? '<span class="firma-badge">' + escapeHtml(u.firma) + '</span>' : '';
     return '<div class="sht-row">'
-      + '<div class="sht-name">' + escapeHtml(u.name) + '</div>'
+      + '<div class="sht-name">' + escapeHtml(u.name) + firmaHtml + '</div>'
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.uid + '" onchange="sichtovkaSet(\'' + u.uid + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
       + '</div>';
@@ -5285,7 +5291,45 @@ function openDiaryExport(){
 }
 function closeDiaryExport(){ document.getElementById('diary-export-modal').classList.remove('open'); }
 
+// ── Modal: Firmy pracovníků ─────────────────────────────────────────
+function openFirmyModal(){
+  var list = document.getElementById('firmy-list');
+  var users = Object.keys(window.allUsers || {}).map(function(uid){ return window.allUsers[uid]; }).filter(function(u){ return u && u.name; });
+  users.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'', 'cs'); });
+  if(users.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Žádní přihlášení uživatelé.</div>';
+  } else {
+    list.innerHTML = users.map(function(u){
+      var f = u.firma || '';
+      return '<div class="firma-row">'
+        + '<div class="firma-name">' + escapeHtml(u.name) + '</div>'
+        + '<input type="text" placeholder="Firma (např. SaM s.r.o.)" value="' + escapeHtml(f) + '" data-uid="' + u.uid + '" onchange="firmaSet(\'' + u.uid + '\', this.value)">'
+        + '</div>';
+    }).join('');
+  }
+  document.getElementById('firmy-modal').style.display = 'flex';
+}
+function closeFirmyModal(){
+  document.getElementById('firmy-modal').style.display = 'none';
+  renderSichtovka(); // refresh badges
+}
+function firmaSet(uid, val){
+  var firma = (val || '').trim();
+  if(!firma) {
+    db.ref('uzivatele/' + uid + '/firma').remove();
+  } else {
+    db.ref('uzivatele/' + uid + '/firma').set(firma);
+  }
+}
+
+// ── Export: hlavní router ───────────────────────────────────────────
 function generateDiaryExport(){
+  var typ = document.getElementById('exp-type').value || 'full';
+  if(typ === 'sichtovka') return generateSichtovkaExport();
+  return generateFullExport();
+}
+
+function generateFullExport(){
   var od = document.getElementById('exp-od').value;
   var doDate = document.getElementById('exp-do').value;
   if(!od || !doDate) { showToast('Vyber rozsah dat', 1500); return; }
@@ -5362,6 +5406,95 @@ function generateDiaryExport(){
     }
     out.push('');
   });
+  document.getElementById('diary-export-text').value = out.join('\n');
+}
+
+// ── Export: Jen šichtovka po firmách (podklad pro fakturaci) ───────
+function generateSichtovkaExport(){
+  var od = document.getElementById('exp-od').value;
+  var doDate = document.getElementById('exp-do').value;
+  if(!od || !doDate) { showToast('Vyber rozsah dat', 1500); return; }
+  if(od > doDate) { showToast('Datum od je větší než do', 2000); return; }
+  var keys = Object.keys(window.diaryAllDays || {}).filter(function(dt){ return dt >= od && dt <= doDate; });
+  keys.sort();
+  if(keys.length === 0) {
+    document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)';
+    return;
+  }
+  // Agregace: firma → uid → { name, dny:{datum:hodiny}, total }
+  var firmy = {}; // klíč = firma (nebo '_no_firma'), hodnota = { název: '...', osoby: {uid:{...}} }
+  keys.forEach(function(dt){
+    var d = window.diaryAllDays[dt];
+    if(!d || !d.sichtovka) return;
+    Object.keys(d.sichtovka).forEach(function(uid){
+      var h = parseFloat(d.sichtovka[uid]);
+      if(isNaN(h) || h <= 0) return;
+      var u = window.allUsers && window.allUsers[uid];
+      if(!u) u = { name: 'uid:' + uid, firma: '' };
+      var firmaKey = (u.firma || '').trim() || '_no_firma';
+      if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (u.firma || firmaKey), osoby: {} };
+      if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: u.name, dny: {}, total: 0 };
+      firmy[firmaKey].osoby[uid].dny[dt] = (firmy[firmaKey].osoby[uid].dny[dt] || 0) + h;
+      firmy[firmaKey].osoby[uid].total += h;
+    });
+  });
+  var firmaKeys = Object.keys(firmy);
+  // Sortuj: nejdřív firmy s názvem (abecedně), pak nepřiřazené
+  firmaKeys.sort(function(a,b){
+    if(a === '_no_firma') return 1;
+    if(b === '_no_firma') return -1;
+    return a.localeCompare(b, 'cs');
+  });
+
+  var out = [];
+  out.push('ŠICHTOVKA — II/603 Sulice – Želivec');
+  out.push('Rozsah: ' + od + ' – ' + doDate);
+  out.push('Vygenerováno: ' + new Date().toLocaleString('cs-CZ'));
+  out.push('Podklad pro kontrolu fakturace');
+  out.push('═══════════════════════════════════════════');
+  out.push('');
+
+  var celkemHodin = 0, celkemOsobCount = 0;
+  firmaKeys.forEach(function(fkey){
+    var f = firmy[fkey];
+    var osobKeys = Object.keys(f.osoby);
+    // Seřaď osoby abecedně
+    osobKeys.sort(function(a,b){ return (f.osoby[a].name || '').localeCompare(f.osoby[b].name || '', 'cs'); });
+    var firmaTotal = 0;
+    out.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    out.push('🏢 ' + f.name);
+    out.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    osobKeys.forEach(function(uid){
+      var o = f.osoby[uid];
+      celkemOsobCount++;
+      out.push('');
+      out.push(o.name + '  (celkem ' + o.total.toFixed(1) + ' h)');
+      // Seznam dní
+      var dnyKeys = Object.keys(o.dny).sort();
+      dnyKeys.forEach(function(dt){
+        var dateObj = ymd_to_date(dt);
+        var dow = dayOfWeekCs(dateObj).substring(0,2);
+        var sv  = svatekFor(dateObj);
+        var weekendFlag = isWeekend(dateObj) ? ' (víkend)' : (sv ? ' (svátek: ' + sv + ')' : '');
+        var dStr = dateObj.toLocaleDateString('cs-CZ', {day:'2-digit', month:'2-digit', year:'numeric'});
+        out.push('  ' + dow + ' ' + dStr + '   ' + o.dny[dt].toFixed(1) + ' h' + weekendFlag);
+      });
+      firmaTotal += o.total;
+    });
+    out.push('');
+    out.push('  ─────────────────────────────');
+    out.push('  Firma celkem: ' + firmaTotal.toFixed(1) + ' h  (' + osobKeys.length + ' ' + (osobKeys.length === 1 ? 'osoba' : (osobKeys.length < 5 ? 'osoby' : 'osob')) + ')');
+    out.push('');
+    celkemHodin += firmaTotal;
+  });
+
+  out.push('═══════════════════════════════════════════');
+  out.push('SOUHRN ZA OBDOBÍ');
+  out.push('  Celkem hodin: ' + celkemHodin.toFixed(1) + ' h');
+  out.push('  Počet osob:   ' + celkemOsobCount);
+  out.push('  Počet firem:  ' + firmaKeys.filter(function(k){ return k !== '_no_firma'; }).length);
+  out.push('═══════════════════════════════════════════');
+
   document.getElementById('diary-export-text').value = out.join('\n');
 }
 
@@ -5750,7 +5883,8 @@ function copyDiaryExport(){
       <div class="sht-bulk">
         <input type="number" id="sht-bulk-input" placeholder="8" min="0" max="24" step="0.5">
         <button onclick="sichtovkaFillAll()">Vyplnit všem</button>
-        <span class="lbl">např. všem 8 h</span>
+        <button onclick="openFirmyModal()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">🏢 Firmy</button>
+        <span class="lbl" style="flex:0;">např. všem 8 h</span>
       </div>
       <div id="sht-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="sht-total">Celkem <b>0 h</b></div>
@@ -5809,7 +5943,11 @@ function copyDiaryExport(){
 <div id="diary-export-modal">
   <div class="em-box">
     <h3 style="font-size:15px;color:var(--accent2);">📤 Export deníku</h3>
-    <div style="font-size:12px;color:var(--text2);">Můžeš zkopírovat do schránky nebo vybrat rozsah dat dole.</div>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Co exportovat</label>
+    <select class="diary-field" id="exp-type">
+      <option value="full">📓 Plný deník (vše: počasí, šichtovka, záznamy, materiály, závěr)</option>
+      <option value="sichtovka">🏢 Jen šichtovka po firmách (podklad pro fakturaci)</option>
+    </select>
     <div class="diary-row-2">
       <div>
         <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Od</label>
@@ -5825,6 +5963,18 @@ function copyDiaryExport(){
     <div style="display:flex;gap:8px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="copyDiaryExport()">📋 Zkopírovat</button>
       <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeDiaryExport()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Firmy pracovníků -->
+<div id="firmy-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4700;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,500px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="font-size:15px;color:var(--accent2);">🏢 Firmy pracovníků</h3>
+    <div style="font-size:12px;color:var(--text2);">Přiřaď každému jeho firmu. Použije se pro export šichtovky pro fakturaci.</div>
+    <div id="firmy-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="closeFirmyModal()">✓ Hotovo</button>
     </div>
   </div>
 </div>
