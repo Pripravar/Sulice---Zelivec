@@ -5649,37 +5649,44 @@ function loadKzp(){
 }
 
 function rebuildKzpFilters(){
-  var sel = document.getElementById('kzp-filter-so');
-  if(!sel) return;
-  var current = sel.value;
+  var selSo = document.getElementById('kzp-filter-so');
+  var selTc = document.getElementById('kzp-filter-tc');
+  if(!selSo || !selTc) return;
+  var curSo = selSo.value;
+  var curTc = selTc.value;
   var soSet = new Set();
+  var tcSet = new Set();
   Object.keys(window.allKzp).forEach(function(id){
     var k = window.allKzp[id];
     if(k && k.so) soSet.add(k.so);
+    if(k && k.technologickaCast) tcSet.add(k.technologickaCast);
   });
-  var arr = Array.from(soSet).sort();
-  sel.innerHTML = '<option value="">Všechny SO</option>';
-  arr.forEach(function(so){
+  var soArr = Array.from(soSet).sort();
+  var tcArr = Array.from(tcSet).sort();
+  selSo.innerHTML = '<option value="">Všechny SO</option>';
+  soArr.forEach(function(so){
     var opt = document.createElement('option');
-    opt.value = so;
-    opt.textContent = so;
-    if(so === current) opt.selected = true;
-    sel.appendChild(opt);
+    opt.value = so; opt.textContent = so;
+    if(so === curSo) opt.selected = true;
+    selSo.appendChild(opt);
   });
-  // Také naplnit datalist pro nový/edit formulář
-  var dl = document.getElementById('kzp-so-list');
-  if(dl) {
-    dl.innerHTML = '';
-    arr.forEach(function(so){
-      var o = document.createElement('option');
-      o.value = so;
-      dl.appendChild(o);
-    });
-  }
+  selTc.innerHTML = '<option value="">Všechny technologické části</option>';
+  tcArr.forEach(function(tc){
+    var opt = document.createElement('option');
+    opt.value = tc; opt.textContent = tc;
+    if(tc === curTc) opt.selected = true;
+    selTc.appendChild(opt);
+  });
+  // Datalisty pro formulář
+  var dlSo = document.getElementById('kzp-so-list');
+  if(dlSo) { dlSo.innerHTML = ''; soArr.forEach(function(so){ var o = document.createElement('option'); o.value = so; dlSo.appendChild(o); }); }
+  var dlTc = document.getElementById('kzp-tc-list');
+  if(dlTc) { dlTc.innerHTML = ''; tcArr.forEach(function(tc){ var o = document.createElement('option'); o.value = tc; dlTc.appendChild(o); }); }
 }
 
 function clearKzpFilters(){
   document.getElementById('kzp-filter-so').value = '';
+  document.getElementById('kzp-filter-tc').value = '';
   document.getElementById('kzp-filter-text').value = '';
   renderKzpList();
 }
@@ -5688,38 +5695,39 @@ function renderKzpList(){
   var box = document.getElementById('kzp-list');
   if(!box) return;
   var soFilt   = document.getElementById('kzp-filter-so').value;
+  var tcFilt   = document.getElementById('kzp-filter-tc').value;
   var textFilt = (document.getElementById('kzp-filter-text').value || '').trim().toLowerCase();
   var items = Object.keys(window.allKzp).map(function(id){ var v = window.allKzp[id]; v._id = id; return v; });
-  // Filtrace
   items = items.filter(function(k){
     if(soFilt && k.so !== soFilt) return false;
+    if(tcFilt && (k.technologickaCast || '') !== tcFilt) return false;
     if(textFilt) {
-      var hay = ((k.so || '') + ' ' + (k.cinnost || '') + ' ' + (k.zkouska || '') + ' ' + (k.popis || '')).toLowerCase();
+      var hay = ((k.so || '') + ' ' + (k.nazev || '') + ' ' + (k.technologickaCast || '') + ' ' + (k.verze || '')).toLowerCase();
       if(hay.indexOf(textFilt) === -1) return false;
     }
     return true;
   });
-  // Sortuj: SO → činnost
+  // Sortuj: SO → TC
   items.sort(function(a,b){
     var s = (a.so || '').localeCompare(b.so || '', 'cs');
     if(s !== 0) return s;
-    return (a.cinnost || '').localeCompare(b.cinnost || '', 'cs');
+    return (a.technologickaCast || '').localeCompare(b.technologickaCast || '', 'cs');
   });
   if(items.length === 0) {
-    box.innerHTML = '<div id="kzp-empty">Žádné položky KZP. Klepni <b>+ Položka</b> nahoře, nebo nech mi nahrát PDF s KZP a já z toho vytáhnu data.</div>';
+    box.innerHTML = '<div id="kzp-empty">Žádné PDF k zobrazení. Klepni <b>📥 Import KZP</b> nahoře pro nahrání z PDF souborů, nebo <b>+ Položka</b> pro ruční zápis.</div>';
     return;
   }
   box.innerHTML = items.map(function(k){
-    var pdfBadge = k.pdfUrl ? '<span>📄 PDF' + (k.pdfStrana ? ' str. ' + k.pdfStrana : '') + '</span>' : '';
-    var matBadge = k.zkouska ? '<span style="background:var(--panel2);color:var(--accent2);font-size:10px;padding:2px 6px;border-radius:4px;">🧱 ' + escapeHtml(k.zkouska) + '</span>' : '';
-    var schvalenoBadge = (k.schvaleno === false) ? '<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">⚠️ neschváleno</span>' : '';
+    var pdfBadge = k.pdfUrl ? '<span>📄 PDF</span>' : '<span style="color:#ff6b6b;">⚠ bez PDF</span>';
+    var tcBadge  = k.technologickaCast ? '<span style="background:var(--panel2);color:var(--accent2);font-size:10px;padding:2px 6px;border-radius:4px;">🔧 ' + escapeHtml(k.technologickaCast) + '</span>' : '';
+    var verzBadge = k.verze ? '<span style="background:var(--panel2);color:var(--text2);font-size:10px;padding:2px 6px;border-radius:4px;">' + escapeHtml(k.verze) + '</span>' : '';
+    var schvalenoBadge = (k.schvaleno === false) ? '<span style="background:rgba(255,107,107,0.2);color:#ff6b6b;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">⚠️ neschváleno</span>' : (k.schvaleno === true ? '<span style="background:rgba(72,187,120,0.2);color:#48bb78;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">✓ schváleno</span>' : '');
     var actBtn = '<button onclick="event.stopPropagation();openKzpEditModal(\'' + k._id + '\')" title="Upravit" style="background:transparent;border:none;color:var(--text2);font-size:13px;cursor:pointer;padding:2px 6px;float:right;">✏️</button>';
     return '<div class="kzp-card" onclick="openKzpItem(\'' + k._id + '\')">'
       + actBtn
-      + '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;"><span class="kc-so">' + escapeHtml(k.so || '–') + '</span>' + matBadge + schvalenoBadge + '</div>'
-      + '<div class="kc-cinnost">' + escapeHtml(k.cinnost || '(bez činnosti)') + '</div>'
-      + (k.popis ? '<div class="kc-zkouska">' + escapeHtml(k.popis) + '</div>' : '')
-      + (pdfBadge ? '<div class="kc-meta">' + pdfBadge + '</div>' : '')
+      + '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;"><span class="kc-so">' + escapeHtml(k.so || '–') + '</span>' + tcBadge + verzBadge + schvalenoBadge + '</div>'
+      + '<div class="kc-cinnost">' + escapeHtml(k.nazev || '(bez názvu)') + '</div>'
+      + '<div class="kc-meta">' + pdfBadge + '</div>'
       + '</div>';
   }).join('');
 }
@@ -5728,10 +5736,9 @@ function openKzpItem(id){
   var k = window.allKzp[id];
   if(!k) return;
   if(k.pdfUrl) {
-    // Otevři PDF v existujícím PDF panelu
     var page = {
       soubor: k.pdfUrl,
-      nazev: (k.so ? k.so + ' · ' : '') + (k.cinnost || 'KZP'),
+      nazev: (k.so ? k.so + ' · ' : '') + (k.nazev || 'KZP'),
       typ: '🧪 KZP'
     };
     if(typeof openDocPanel === 'function') {
@@ -5740,7 +5747,6 @@ function openKzpItem(id){
       window.open(k.pdfUrl, '_blank');
     }
   } else {
-    // Žádné PDF - otevři edit modal pro úpravu
     openKzpEditModal(id);
   }
 }
@@ -5748,13 +5754,13 @@ function openKzpItem(id){
 function openKzpAddModal(){
   window.editingKzpId = null;
   document.getElementById('kzp-modal-title').textContent = '➕ Nová položka KZP';
-  document.getElementById('kzp-id').value = '';
-  document.getElementById('kzp-so').value = '';
-  document.getElementById('kzp-cinnost').value = '';
-  document.getElementById('kzp-zkouska').value = '';
-  document.getElementById('kzp-popis').value = '';
+  document.getElementById('kzp-id').value      = '';
+  document.getElementById('kzp-so').value      = '';
+  document.getElementById('kzp-nazev').value   = '';
+  document.getElementById('kzp-tc').value      = '';
+  document.getElementById('kzp-verze').value   = '';
+  document.getElementById('kzp-schvaleno').checked = false;
   document.getElementById('kzp-pdf-url').value = '';
-  document.getElementById('kzp-pdf-strana').value = '';
   document.getElementById('kzp-modal-delete').style.display = 'none';
   document.getElementById('kzp-modal').classList.add('open');
 }
@@ -5763,14 +5769,14 @@ function openKzpEditModal(id){
   var k = window.allKzp[id];
   if(!k) return;
   window.editingKzpId = id;
-  document.getElementById('kzp-modal-title').textContent = '✏️ Upravit položku KZP';
-  document.getElementById('kzp-id').value = id;
-  document.getElementById('kzp-so').value      = k.so || '';
-  document.getElementById('kzp-cinnost').value = k.cinnost || '';
-  document.getElementById('kzp-zkouska').value = k.zkouska || '';
-  document.getElementById('kzp-popis').value   = k.popis || '';
-  document.getElementById('kzp-pdf-url').value = k.pdfUrl || '';
-  document.getElementById('kzp-pdf-strana').value = k.pdfStrana || '';
+  document.getElementById('kzp-modal-title').textContent = '✏️ Upravit KZP položku';
+  document.getElementById('kzp-id').value         = id;
+  document.getElementById('kzp-so').value         = k.so || '';
+  document.getElementById('kzp-nazev').value      = k.nazev || '';
+  document.getElementById('kzp-tc').value         = k.technologickaCast || '';
+  document.getElementById('kzp-verze').value      = k.verze || '';
+  document.getElementById('kzp-schvaleno').checked = !!k.schvaleno;
+  document.getElementById('kzp-pdf-url').value    = k.pdfUrl || '';
   document.getElementById('kzp-modal-delete').style.display = 'inline-block';
   document.getElementById('kzp-modal').classList.add('open');
 }
@@ -5778,24 +5784,24 @@ function openKzpEditModal(id){
 function closeKzpAddModal(){ document.getElementById('kzp-modal').classList.remove('open'); }
 
 function saveKzpFromForm(){
-  var so      = (document.getElementById('kzp-so').value || '').trim();
-  var cinnost = (document.getElementById('kzp-cinnost').value || '').trim();
-  var zkouska = (document.getElementById('kzp-zkouska').value || '').trim();
-  if(!so || !cinnost) { showToast('Vyplň aspoň SO a Činnost', 2000); return; }
-  var popis    = (document.getElementById('kzp-popis').value || '').trim();
-  var pdfUrl   = (document.getElementById('kzp-pdf-url').value || '').trim();
-  var pdfStranaRaw = document.getElementById('kzp-pdf-strana').value;
-  var pdfStrana = pdfStranaRaw ? parseInt(pdfStranaRaw, 10) : null;
+  var so    = (document.getElementById('kzp-so').value || '').trim();
+  var nazev = (document.getElementById('kzp-nazev').value || '').trim();
+  var tc    = (document.getElementById('kzp-tc').value || '').trim();
+  if(!so || !nazev) { showToast('Vyplň aspoň SO a Název', 2000); return; }
+  var verze     = (document.getElementById('kzp-verze').value || '').trim();
+  var schvaleno = !!document.getElementById('kzp-schvaleno').checked;
+  var pdfUrl    = (document.getElementById('kzp-pdf-url').value || '').trim();
   var id = window.editingKzpId || ('kzp_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+  var existing = window.allKzp[id];
   var k = {
     id: id,
     so: so,
-    cinnost: cinnost,
-    zkouska: zkouska,
-    popis: popis,
+    nazev: nazev,
+    technologickaCast: tc,
+    verze: verze,
+    schvaleno: schvaleno,
     pdfUrl: pdfUrl,
-    pdfStrana: pdfStrana,
-    vytvoreno: window.editingKzpId ? (window.allKzp[id] && window.allKzp[id].vytvoreno) || Date.now() : Date.now(),
+    vytvoreno: (existing && existing.vytvoreno) || Date.now(),
     upraveno: Date.now()
   };
   db.ref('kvalita/' + id).set(k).then(function(){
@@ -5839,17 +5845,16 @@ function importKzpSeed(){
       seed.forEach(function(item){
         if(!item.id) item.id = 'kzp_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
         updates[item.id] = {
-          id:        item.id,
-          so:        item.so || '',
-          cinnost:   item.cinnost || '',
-          zkouska:   item.zkouska || '',
-          popis:     item.popis || '',
-          pdfUrl:    item.pdfUrl || '',
-          pdfStrana: item.pdfStrana || null,
-          schvaleno: false,
-          poznamka:  'KZP v01 — neschválená verze',
-          vytvoreno: now,
-          upraveno:  now
+          id:                item.id,
+          so:                item.so || '',
+          nazev:             item.nazev || '',
+          technologickaCast: item.technologickaCast || '',
+          verze:             item.verze || '',
+          schvaleno:         (item.schvaleno === true) ? true : false,
+          poznamka:          item.poznamka || '',
+          pdfUrl:            item.pdfUrl || '',
+          vytvoreno:         item.vytvoreno || now,
+          upraveno:          now
         };
       });
       return db.ref('kvalita').update(updates).then(function(){
@@ -6369,7 +6374,10 @@ function copyDiaryExport(){
     <select id="kzp-filter-so" onchange="renderKzpList()">
       <option value="">Všechny SO</option>
     </select>
-    <input type="text" id="kzp-filter-text" placeholder="Hledat (činnost, materiál, zkouška…)" oninput="renderKzpList()">
+    <select id="kzp-filter-tc" onchange="renderKzpList()">
+      <option value="">Všechny technologické části</option>
+    </select>
+    <input type="text" id="kzp-filter-text" placeholder="Hledat v názvu…" oninput="renderKzpList()">
     <button class="clear" onclick="clearKzpFilters()">⌫ Vynulovat</button>
   </div>
   <div id="kzp-list"></div>
@@ -6385,19 +6393,22 @@ function copyDiaryExport(){
     <input type="text" class="kzp-field" id="kzp-so" placeholder="např. SO 101 / SO 102 / SO 103 …" list="kzp-so-list">
     <datalist id="kzp-so-list"></datalist>
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Činnost na stavbě</label>
-    <input type="text" class="kzp-field" id="kzp-cinnost" placeholder="např. Pokládka asfaltu, Sanace podloží, Betonáž…">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Název / popis</label>
+    <input type="text" class="kzp-field" id="kzp-nazev" placeholder="např. Silnice II/603 úsek 1 — intravilán">
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Zkouška / kontrola</label>
-    <input type="text" class="kzp-field" id="kzp-zkouska" placeholder="např. Marshall, Hutnění lehkou deskou, Statická zkouška…">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Technologická část</label>
+    <input type="text" class="kzp-field" id="kzp-tc" placeholder="např. Komunikace, Mosty, Veřejné osvětlení…" list="kzp-tc-list">
+    <datalist id="kzp-tc-list"></datalist>
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Popis (detail, četnost, kdy provést)</label>
-    <textarea class="kzp-field" id="kzp-popis" placeholder="např. Před pokládkou ložní vrstvy, každých 100 m, vzorek velikosti 0,5 kg…"></textarea>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Verze (volitelné)</label>
+    <input type="text" class="kzp-field" id="kzp-verze" placeholder="např. v01, v02 schváleno">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">
+      <input type="checkbox" id="kzp-schvaleno" style="margin-right:6px;"> Schválená verze
+    </label>
 
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Odkaz na PDF (URL)</label>
     <input type="text" class="kzp-field" id="kzp-pdf-url" placeholder="https://… nebo relativní cesta v repu (pdf/KZP/...)">
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Strana v PDF (volitelné)</label>
-    <input type="number" class="kzp-field" id="kzp-pdf-strana" min="1" placeholder="1">
 
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveKzpFromForm()">💾 Uložit</button>
