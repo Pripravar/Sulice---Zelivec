@@ -5575,12 +5575,88 @@ function matchesFilter(dt, d){
 
 // ── Export ──────────────────────────────────────────────────────────
 function openDiaryExport(){
-  // Default: aktuální den
   var today = window.diaryCurrentDate || ymd(new Date());
   document.getElementById('exp-od').value = today;
   document.getElementById('exp-do').value = today;
   document.getElementById('diary-export-text').value = '';
+  // Naplň checkbox seznamy
+  populateExpFilterLists();
   document.getElementById('diary-export-modal').classList.add('open');
+}
+
+function populateExpFilterLists(){
+  // Osoby
+  var osobyBox = document.getElementById('exp-osoby-list');
+  if(osobyBox) {
+    var workers = getAllWorkers(true); // include hidden
+    if(workers.length === 0) {
+      osobyBox.innerHTML = '<div style="font-size:11px;color:var(--text2);">Žádné osoby.</div>';
+    } else {
+      osobyBox.innerHTML = workers.map(function(w){
+        var fb = w.firma ? ' <span style="color:var(--text2);font-size:10px;">(' + escapeHtml(w.firma) + ')</span>' : '';
+        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;">'
+          + '<input type="checkbox" class="exp-fl-osoba" value="' + w.id + '">'
+          + '<span>' + escapeHtml(w.name) + fb + '</span>'
+          + '</label>';
+      }).join('');
+    }
+  }
+  // Firmy
+  var firmyBox = document.getElementById('exp-firmy-list');
+  if(firmyBox) {
+    var firmaSet = new Set();
+    getAllWorkers(true).forEach(function(w){ if(w.firma) firmaSet.add(w.firma); });
+    getAllStroje(true).forEach(function(s){ if(s.firma) firmaSet.add(s.firma); });
+    var firmaArr = Array.from(firmaSet).sort(function(a,b){ return a.localeCompare(b, 'cs'); });
+    if(firmaArr.length === 0) {
+      firmyBox.innerHTML = '<div style="font-size:11px;color:var(--text2);">Žádné firmy.</div>';
+    } else {
+      firmyBox.innerHTML = firmaArr.map(function(f){
+        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;">'
+          + '<input type="checkbox" class="exp-fl-firma" value="' + escapeHtml(f) + '">'
+          + '<span>' + escapeHtml(f) + '</span>'
+          + '</label>';
+      }).join('');
+    }
+  }
+  // Stroje
+  var strojeBox = document.getElementById('exp-stroje-list');
+  if(strojeBox) {
+    var stroje = getAllStroje(true);
+    if(stroje.length === 0) {
+      strojeBox.innerHTML = '<div style="font-size:11px;color:var(--text2);">Žádné stroje.</div>';
+    } else {
+      strojeBox.innerHTML = stroje.map(function(s){
+        var fb = s.firma ? ' <span style="color:var(--text2);font-size:10px;">(' + escapeHtml(s.firma) + ')</span>' : '';
+        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;">'
+          + '<input type="checkbox" class="exp-fl-stroj" value="' + s.id + '">'
+          + '<span>🚜 ' + escapeHtml(s.nazev) + fb + '</span>'
+          + '</label>';
+      }).join('');
+    }
+  }
+}
+
+function expFilterToggleAll(kind, val){
+  var sel = (kind === 'osoby') ? '.exp-fl-osoba' : (kind === 'firmy' ? '.exp-fl-firma' : '.exp-fl-stroj');
+  document.querySelectorAll(sel).forEach(function(cb){ cb.checked = !!val; });
+}
+
+// Pomocné getry pro export
+function _getExpOsobyFilter(){
+  var ids = [];
+  document.querySelectorAll('.exp-fl-osoba:checked').forEach(function(cb){ ids.push(cb.value); });
+  return ids; // prázdné pole = bez filtru
+}
+function _getExpFirmyFilter(){
+  var arr = [];
+  document.querySelectorAll('.exp-fl-firma:checked').forEach(function(cb){ arr.push(cb.value.toLowerCase()); });
+  return arr;
+}
+function _getExpStrojeFilter(){
+  var ids = [];
+  document.querySelectorAll('.exp-fl-stroj:checked').forEach(function(cb){ ids.push(cb.value); });
+  return ids;
 }
 function closeDiaryExport(){ document.getElementById('diary-export-modal').classList.remove('open'); }
 
@@ -5812,7 +5888,9 @@ function generateSichtovkaExport(){
     document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)';
     return;
   }
-  var soFilter = _expSoFilter();
+  var soFilter    = _expSoFilter();
+  var osobyFilter = _getExpOsobyFilter();
+  var firmyFilter = _getExpFirmyFilter();
   // Agregace: firma → uid → { name, so, dny:{datum:{h,pozn}}, total }
   var firmy = {};
   keys.forEach(function(dt){
@@ -5825,6 +5903,8 @@ function generateSichtovkaExport(){
       var w = lookupWorker(uid);
       if(!w) w = { name: 'id:' + uid, firma: '', so: '', type: '?' };
       if(soFilter && (w.so || '').toLowerCase() !== soFilter.toLowerCase()) return;
+      if(osobyFilter.length > 0 && osobyFilter.indexOf(uid) === -1) return;
+      if(firmyFilter.length > 0 && firmyFilter.indexOf((w.firma || '').toLowerCase()) === -1) return;
       var firmaKey = (w.firma || '').trim() || '_no_firma';
       if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (w.firma || firmaKey), osoby: {} };
       if(!firmy[firmaKey].osoby[uid]) firmy[firmaKey].osoby[uid] = { name: w.name, so: w.so, dny: {}, total: 0 };
@@ -5915,18 +5995,46 @@ function closeKzpPanel(){
   document.getElementById('kzp-panel').classList.remove('open');
 }
 
-// Sloučí seed (PDF soubory) + manuální záznamy z Firebase
+// Sloučí seed (PDF soubory) + manuální záznamy z Firebase.
+// Ignoruje staré položky bez 'nazev' (zbytky z první verze).
 function refreshKzpAll(){
   var combined = {};
   if(window.kzpSeed && window.kzpSeed.length) {
     window.kzpSeed.forEach(function(it){ if(it.id) combined[it.id] = it; });
   }
   if(window.kzpManual) {
-    Object.keys(window.kzpManual).forEach(function(id){ combined[id] = window.kzpManual[id]; });
+    Object.keys(window.kzpManual).forEach(function(id){
+      var k = window.kzpManual[id];
+      if(k && k.nazev) combined[id] = k; // jen nová struktura (má 'nazev')
+    });
   }
   window.allKzp = combined;
   rebuildKzpFilters();
   renderKzpList();
+}
+
+// Vyčistit Firebase od starých KZP položek (s polem 'cinnost' místo 'nazev')
+function cleanupOldKzp(){
+  if(!window.kzpManual) return;
+  var oldIds = Object.keys(window.kzpManual).filter(function(id){
+    var k = window.kzpManual[id];
+    return k && !k.nazev; // staré položky
+  });
+  if(oldIds.length === 0) {
+    showToast('Žádné staré KZP položky k vyčištění', 2000);
+    return;
+  }
+  if(!confirm('Smazat ' + oldIds.length + ' starých KZP záznamů (z první verze importu)?\nNové PDF (' + (window.kzpSeed ? window.kzpSeed.length : 0) + ') zůstanou.')) return;
+  showSync('⏳ Mažu ' + oldIds.length + ' starých záznamů…');
+  var updates = {};
+  oldIds.forEach(function(id){ updates[id] = null; });
+  db.ref('kvalita').update(updates).then(function(){
+    hideSync();
+    showToast('✓ Vyčištěno ' + oldIds.length + ' položek', 2000);
+  }).catch(function(e){
+    hideSync();
+    showToast('❌ Chyba: ' + (e.message || e), 3000);
+  });
 }
 
 function loadKzpSeed(){
@@ -6235,6 +6343,8 @@ function generateStrojeExport(){
   keys.sort();
   if(keys.length === 0) { document.getElementById('diary-export-text').value = '(V daném rozsahu nejsou žádné zápisy.)'; return; }
 
+  var strojeFilter = _getExpStrojeFilter();
+  var firmyFilter  = _getExpFirmyFilter();
   var firmy = {};
   keys.forEach(function(dt){
     var d = window.diaryAllDays[dt];
@@ -6246,6 +6356,8 @@ function generateStrojeExport(){
       var s = lookupStroj(sid);
       if(!s) s = { nazev: 'id:' + sid, typ: '', firma: '', so: '' };
       if(soFilter && (s.so || '').toLowerCase() !== soFilter.toLowerCase()) return;
+      if(strojeFilter.length > 0 && strojeFilter.indexOf(sid) === -1) return;
+      if(firmyFilter.length > 0 && firmyFilter.indexOf((s.firma || '').toLowerCase()) === -1) return;
       var firmaKey = (s.firma || '').trim() || '_no_firma';
       if(!firmy[firmaKey]) firmy[firmaKey] = { name: firmaKey === '_no_firma' ? '(nepřiřazeno k firmě)' : (s.firma || firmaKey), stroje: {} };
       if(!firmy[firmaKey].stroje[sid]) firmy[firmaKey].stroje[sid] = { nazev: s.nazev, typ: s.typ, so: s.so, dny: {}, total: 0 };
@@ -6789,8 +6901,42 @@ function copyDiaryExport(){
         <input type="date" class="diary-field" id="exp-do">
       </div>
     </div>
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Filtr SO (volitelné, omezí export jen na tento objekt)</label>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Filtr SO (volitelné)</label>
     <input type="text" class="diary-field" id="exp-so" placeholder="např. SO 101 (nech prázdné = všechny SO)">
+
+    <details style="margin-top:6px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;">
+      <summary style="cursor:pointer;font-size:12px;color:var(--accent2);font-weight:700;">🔎 Pokročilé filtry (osoby, firmy, stroje)</summary>
+      <div style="margin-top:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jen tyto osoby</label>
+          <div>
+            <button onclick="expFilterToggleAll('osoby', true)" style="background:transparent;border:none;color:var(--accent2);font-size:11px;cursor:pointer;">✓ vše</button>
+            <button onclick="expFilterToggleAll('osoby', false)" style="background:transparent;border:none;color:var(--text2);font-size:11px;cursor:pointer;">✕ nic</button>
+          </div>
+        </div>
+        <div id="exp-osoby-list" style="max-height:180px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px;"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px;">
+          <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jen tyto firmy</label>
+          <div>
+            <button onclick="expFilterToggleAll('firmy', true)" style="background:transparent;border:none;color:var(--accent2);font-size:11px;cursor:pointer;">✓ vše</button>
+            <button onclick="expFilterToggleAll('firmy', false)" style="background:transparent;border:none;color:var(--text2);font-size:11px;cursor:pointer;">✕ nic</button>
+          </div>
+        </div>
+        <div id="exp-firmy-list" style="max-height:120px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px;"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px;">
+          <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jen tyto stroje</label>
+          <div>
+            <button onclick="expFilterToggleAll('stroje', true)" style="background:transparent;border:none;color:var(--accent2);font-size:11px;cursor:pointer;">✓ vše</button>
+            <button onclick="expFilterToggleAll('stroje', false)" style="background:transparent;border:none;color:var(--text2);font-size:11px;cursor:pointer;">✕ nic</button>
+          </div>
+        </div>
+        <div id="exp-stroje-list" style="max-height:120px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px;"></div>
+
+        <div style="font-size:10px;color:var(--text2);margin-top:8px;font-style:italic;">Tip: prázdný výběr (nezaškrtnuto nic) = vše. Zaškrtnuté položky se BUDOU exportovat.</div>
+      </div>
+    </details>
     <button class="btn-primary" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="generateDiaryExport()">📋 Vygenerovat</button>
     <textarea id="diary-export-text" placeholder="Tady se objeví vygenerovaný text…" readonly></textarea>
     <div style="display:flex;gap:8px;">
@@ -6914,6 +7060,7 @@ function copyDiaryExport(){
   <div id="kzp-header">
     <button id="kzp-back-btn" onclick="closeKzpPdfInline()" style="display:none;background:var(--panel2);color:var(--text);">‹ Zpět</button>
     <h2 id="kzp-header-title">🧪 Kvalita / KZP</h2>
+    <button id="kzp-cleanup-btn" onclick="cleanupOldKzp()" title="Vyčistit staré KZP záznamy" style="background:var(--panel2);color:var(--text2);font-size:13px;">🧹</button>
     <button id="kzp-add-btn" onclick="openKzpAddModal()" style="background:var(--accent);color:#fff;">+ Položka</button>
     <button onclick="closeKzpPanel()">✕</button>
   </div>
