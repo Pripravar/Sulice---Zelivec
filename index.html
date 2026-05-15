@@ -424,6 +424,29 @@ textarea.note-field { min-height:80px; resize:vertical; }
 }
 .prop-pin:hover { transform: scale(1.2); }
 
+/* Doplňkové SO markery (000, 300, 400, 500) - menší, barevné dle kategorie */
+.doplnek-marker {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+}
+.doplnek-pin {
+  min-width: 22px; height: 22px; padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 9px; font-weight: 800;
+  box-shadow: 0 2px 5px rgba(0,0,0,.5);
+  cursor: pointer;
+  transition: transform .15s;
+  white-space: nowrap;
+}
+.doplnek-pin:hover { transform: scale(1.25); }
+.doplnek-pin.cat-000 { background: #fbbf24; color: #1a1a2e; } /* žlutá - demolice */
+.doplnek-pin.cat-300 { background: #06b6d4; }                   /* tyrkysová - kanalizace/vodovod */
+.doplnek-pin.cat-400 { background: #f97316; }                   /* oranžová - VO */
+.doplnek-pin.cat-500 { background: #ef4444; }                   /* červená - plynovod */
+
 /* Propustek detail panel */
 #prop-panel {
   position: fixed;
@@ -1079,6 +1102,10 @@ document.addEventListener('touchend', function(e){
     <label class="toggle"><input type="checkbox" id="lyr-prop" checked onchange="toggleLayer('propustky',this.checked)"><span class="toggle-slider"></span></label>
   </div>
   <div class="layer-row">
+    <label>🧩 Doplňkové SO (000/300/400/500)</label>
+    <label class="toggle"><input type="checkbox" id="lyr-doplnky" checked onchange="toggleLayer('doplnky',this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="layer-row">
     <label>🏗️ Stavební objekty SO</label>
     <label class="toggle"><input type="checkbox" id="lyr-so" checked onchange="toggleLayer('so',this.checked)"><span class="toggle-slider"></span></label>
   </div>
@@ -1236,6 +1263,7 @@ var DOCS_SITUACE = [
   {kmOd:0.400, kmDo:0.800, soubor:PDF_BASE+'SO_101/D.101-2.2_Situace_PDPS.pdf',                  nazev:'Situace SO 101 č.2 (km 0,400–0,800)'},
   {kmOd:0.700, kmDo:1.100, soubor:PDF_BASE+'SO_102/D.102-2.1_Situace_PDPS.pdf',                  nazev:'Situace SO 102 č.1 - extravilán (km 0,700–1,100)'},
   {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'SO_103/D.103-2_Situace_PDPS.pdf',                    nazev:'Situace SO 103 - okružní křižovatka (km 1,040–1,340)'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'SO_103/D.103-2b_Situace_drenazi_PDPS.pdf',           nazev:'Situace drenáží SO 103 - okružní křižovatka'},
   {kmOd:1.300, kmDo:1.600, soubor:PDF_BASE+'SO_102/D.102-2.2_Situace_PDPS.pdf',                  nazev:'Situace SO 102 č.2 - extravilán (km 1,300–1,600)'},
   {kmOd:1.580, kmDo:1.980, soubor:PDF_BASE+'SO_101/D.101-2.3_Situace_PDPS.pdf',                  nazev:'Situace SO 101 č.3 (km 1,580–1,980)'},
   {kmOd:1.980, kmDo:2.360, soubor:PDF_BASE+'SO_101/D.101-2.4_Situace_PDPS.pdf',                  nazev:'Situace SO 101 č.4 (km 1,980–2,360)'},
@@ -1323,6 +1351,106 @@ var PROPUSTKY = [
    ]},
 ];
 var PROPUSTEK_TZ = '';
+
+// DOPLŇKOVÉ SO - další stavební objekty (000=demolice, 300=IS, 400=VO, 500=plynovod)
+// km pozice = z technických zpráv. Kategorie určuje barvu markeru.
+var DOPLNKY_SO = [
+  // SO 000 - DEMOLICE MOSTŮ
+  {id:'SO 004', kat:'000', badge:'D1', km:2.405, perpOffset:-90,
+   nazev:'SO 004 - Demolice mostu 603-010 (km 2,405)',
+   vykresy:[
+     {typ:'📐 Výkres',       nazev:'Výkres SO 004',                       soubor:PDF_BASE+'SO_004/D_004_2_Vykres_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 004',              soubor:PDF_BASE+'SO_004/D_004_1_Technicka_zprava_PDPS.pdf'},
+     {typ:'📑 Rozpiska',     nazev:'Rozpiska SO 004',                      soubor:PDF_BASE+'SO_004/_SO_004_Rozpiska_Desky_PDPS.pdf'},
+     {typ:'📚 Seznam',       nazev:'Seznam příloh SO 004',                 soubor:PDF_BASE+'SO_004/_SO_004_Seznam_Priloh_PDPS.pdf'},
+   ]},
+  {id:'SO 005', kat:'000', badge:'D2', km:3.071, perpOffset:-90,
+   nazev:'SO 005 - Demolice mostu 603-011 (km 3,071)',
+   vykresy:[
+     {typ:'📐 Výkres',       nazev:'Výkres SO 005',                       soubor:PDF_BASE+'SO_005/D_005_2_Vykres_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 005',              soubor:PDF_BASE+'SO_005/D_005_1_Technicka_zprava_PDPS.pdf'},
+     {typ:'📑 Rozpiska',     nazev:'Rozpiska SO 005',                      soubor:PDF_BASE+'SO_005/_SO_005_Rozpiska_Desky_PDPS.pdf'},
+     {typ:'📚 Seznam',       nazev:'Seznam příloh SO 005',                 soubor:PDF_BASE+'SO_005/_SO_005_Seznam_Priloh_PDPS.pdf'},
+   ]},
+  // SO 300 - PŘELOŽKA KANALIZACE / VODOVODU
+  {id:'SO 335', kat:'300', badge:'K5', km:3.071, perpOffset:-60,
+   nazev:'SO 335 - Ochrana / úprava kanalizace v úseku 5 (km 3,071)',
+   vykresy:[
+     {typ:'📋 TZ + výkresy', nazev:'Technická zpráva + výkresy SO 335',    soubor:PDF_BASE+'SO_335/D3_SO_335_1_Technicka zprava_vykresy.pdf'},
+   ]},
+  {id:'SO 345', kat:'300', badge:'V5', km:3.071, perpOffset:-32,
+   nazev:'SO 345 - Přeložka a ochrana vodovodu v úseku 5 (km 3,071)',
+   vykresy:[
+     {typ:'📋 TZ + výkresy', nazev:'Technická zpráva + výkresy SO 345',    soubor:PDF_BASE+'SO_345/D3_SO_345_2_Technicka zprava_vykresy.pdf'},
+   ]},
+  // SO 400 - VEŘEJNÉ OSVĚTLENÍ
+  {id:'SO 441', kat:'400', badge:'VO1', km:2.756, perpOffset:55,
+   nazev:'SO 441 - Doplnění VO v úseku 1 (km 2,756)',
+   vykresy:[
+     {typ:'📐 Situace',      nazev:'Situace SO 441',                       soubor:PDF_BASE+'SO_441/D4_SO441_02_PP_Situace_PDPS.pdf'},
+     {typ:'✂️ Řezy',          nazev:'Řezy SO 441',                          soubor:PDF_BASE+'SO_441/D4_SO441_03_PP_Rezy_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 441',              soubor:PDF_BASE+'SO_441/D4_SO441_01_PP_TZ_PDPS.pdf'},
+     {typ:'🧮 Výpočet',       nazev:'Výpočet SO 441',                       soubor:PDF_BASE+'SO_441/D4_SO441_04_PP_Vypocet_PDPS.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 441',                   soubor:PDF_BASE+'SO_441/D4_SO441_05_PP_VV_PDPS.pdf'},
+     {typ:'📚 Obsah',         nazev:'Obsah SO 441',                         soubor:PDF_BASE+'SO_441/D4_SO441_00_PP_Obsah_PDPS.pdf'},
+   ]},
+  {id:'SO 443', kat:'400', badge:'VO3', km:1.190, perpOffset:55,
+   nazev:'SO 443 - Doplnění a úprava VO v úseku 3 - OK (kruháč, km 1,19)',
+   vykresy:[
+     {typ:'📐 Situace',      nazev:'Situace SO 443',                       soubor:PDF_BASE+'SO_443/D4_SO443_02_VO_Situace_PDPS.pdf'},
+     {typ:'✂️ Řezy',          nazev:'Řezy SO 443',                          soubor:PDF_BASE+'SO_443/D4_SO443_03_VO_Rezy_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 443',              soubor:PDF_BASE+'SO_443/D4_SO443_01_VO_TZ_PDPS.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 443',                   soubor:PDF_BASE+'SO_443/D4_SO443_04_VO_VV_PDPS.pdf'},
+     {typ:'📚 Obsah',         nazev:'Obsah SO 443',                         soubor:PDF_BASE+'SO_443/D4_SO443_00_VO_Obsah_PDPS.pdf'},
+   ]},
+  {id:'SO 444', kat:'400', badge:'VO4', km:2.405, perpOffset:55,
+   nazev:'SO 444 - Ochrana / úprava kabelů VO v úseku 4 (km 2,405)',
+   vykresy:[
+     {typ:'📐 Situace',      nazev:'Situace SO 444',                       soubor:PDF_BASE+'SO_444/D4_SO444_02_VO_Situace_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 444',              soubor:PDF_BASE+'SO_444/D4_SO444_01_VO_TZ_PDPS.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 444',                   soubor:PDF_BASE+'SO_444/D4_SO444_03_VO_VV_PDPS.pdf'},
+     {typ:'📚 Obsah',         nazev:'Obsah SO 444',                         soubor:PDF_BASE+'SO_444/D4_SO444_00_VO_Obsah_PDPS.pdf'},
+   ]},
+  {id:'SO 445', kat:'400', badge:'VO5', km:3.071, perpOffset:55,
+   nazev:'SO 445 - Ochrana / úprava kabelů VO v úseku 5 (km 3,071)',
+   vykresy:[
+     {typ:'📐 Situace',      nazev:'Situace SO 445',                       soubor:PDF_BASE+'SO_445/D4_SO445_02_VO_Situace_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 445',              soubor:PDF_BASE+'SO_445/D4_SO445_01_VO_TZ_PDPS.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 445',                   soubor:PDF_BASE+'SO_445/D4_SO445_03_VO_VV_PDPS.pdf'},
+     {typ:'📚 Obsah',         nazev:'Obsah SO 445',                         soubor:PDF_BASE+'SO_445/D4_SO445_00_VO_Obsah_PDPS.pdf'},
+   ]},
+  {id:'SO 446', kat:'400', badge:'VO6', km:3.46, perpOffset:55,
+   nazev:'SO 446 - Doplnění VO v úseku 6 (Nová Hospoda, km 3,46)',
+   vykresy:[
+     {typ:'📐 Situace',      nazev:'Situace SO 446',                       soubor:PDF_BASE+'SO_446/D4_SO446_02_VO_Situace_PDPS.pdf'},
+     {typ:'✂️ Řezy',          nazev:'Řezy SO 446',                          soubor:PDF_BASE+'SO_446/D4_SO446_03_VO_Rezy_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 446',              soubor:PDF_BASE+'SO_446/D4_SO446_01_VO_TZ_PDPS.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 446',                   soubor:PDF_BASE+'SO_446/D4_SO446_04_VO_VV_PDPS.pdf'},
+     {typ:'📚 Obsah',         nazev:'Obsah SO 446',                         soubor:PDF_BASE+'SO_446/D4_SO446_00_VO_Obsah_PDPS.pdf'},
+   ]},
+  {id:'SO 447', kat:'400', badge:'VO7', km:4.5, perpOffset:55,
+   nazev:'SO 447 - Doplnění VO v úseku 7 - zpomalovací ostrůvek (km 4,5)',
+   vykresy:[
+     {typ:'📐 Situace',      nazev:'Situace SO 447',                       soubor:PDF_BASE+'SO_447/D4_SO447_02_VO_Situace_PDPS.pdf'},
+     {typ:'✂️ Řezy',          nazev:'Řezy SO 447',                          soubor:PDF_BASE+'SO_447/D4_SO447_03_VO_Rezy_PDPS.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 447',              soubor:PDF_BASE+'SO_447/D4_SO447_01_VO_TZ_PDPS.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 447',                   soubor:PDF_BASE+'SO_447/D4_SO447_04_VO_VV_PDPS.pdf'},
+     {typ:'📚 Obsah',         nazev:'Obsah SO 447',                         soubor:PDF_BASE+'SO_447/D4_SO447_00_VO_Obsah_PDPS.pdf'},
+   ]},
+  // SO 500 - PLYNOVOD STL
+  {id:'SO 524', kat:'500', badge:'P4', km:2.405, perpOffset:85,
+   nazev:'SO 524 - Ochrana / úprava STL plynovodů v úseku 4 (km 2,405)',
+   vykresy:[
+     {typ:'📐 Výkres',       nazev:'Ochrana STL plynovodu v úseku 4',       soubor:PDF_BASE+'SO_524/D_5_2_1_SO_524_Ochrana_uprava_STL_plynovodu_v_useku_4.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 524 / 525',         soubor:PDF_BASE+'SO_524/Technicka_zprava_SO524_525.pdf'},
+   ]},
+  {id:'SO 525', kat:'500', badge:'P5', km:3.071, perpOffset:85,
+   nazev:'SO 525 - Ochrana / úprava STL plynovodů v úseku 5 (km 3,071)',
+   vykresy:[
+     {typ:'📐 Výkres',       nazev:'Ochrana STL plynovodu v úseku 5',       soubor:PDF_BASE+'SO_525/D_5_2_2_SO_525_Ochrana_uprava_STL_plynovodu_v_useku_5.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 524 / 525',         soubor:PDF_BASE+'SO_525/Technicka_zprava_SO524_525.pdf'},
+   ]},
+];
 
 // PRACOVNÍ ŘEZY - PDPS Sulice je nemá, prázdná lookup mapa
 var DOCS_PR = {};
@@ -2098,6 +2226,7 @@ function init() {
   if(ETAPY.length) buildEtapy();
   if(CISTENI_PRIKOPY.vpravo.length || CISTENI_PRIKOPY.vlevo.length) buildPrikopy();
   buildPropustky();
+  buildDoplnky();
   map.fitBounds(L.latLngBounds(GPX_POINTS.map(function(p){return[p[0],p[1]];})),{padding:[40,40]});
   startGPS();
   loadNotes();
@@ -3303,6 +3432,34 @@ function buildPrikopy() {
 
   drawSide(CISTENI_PRIKOPY.vpravo, 'vpravo');
   drawSide(CISTENI_PRIKOPY.vlevo,  'vlevo');
+}
+
+// DOPLŇKOVÉ SO - vykresluje markery s barvou dle kategorie (000/300/400/500)
+var doplnkyLayer = null;
+function buildDoplnky() {
+  doplnkyLayer = L.layerGroup().addTo(map);
+  layerGroups.doplnky = doplnkyLayer;
+
+  DOPLNKY_SO.forEach(function(d) {
+    var pos = realKmToLatLng(d.km);
+    if(!pos) return;
+    var gpxM = interp(calibSorted,'realKm','gpxM', d.km);
+    var bear = bearingAtGpxM(gpxM);
+    var perpRad = (bear - 90) * Math.PI / 180; // perpendikulárně k ose
+    var offset = d.perpOffset || 60;
+    var dx = Math.sin(perpRad) * offset;
+    var dy = -Math.cos(perpRad) * offset;
+    var DW = 80, DH = 24;
+    var ancX = Math.round(DW/2 + dx);
+    var ancY = Math.round(DH/2 + dy);
+
+    var html = '<div style="width:'+DW+'px;height:'+DH+'px;display:flex;align-items:center;justify-content:center;pointer-events:all;">' +
+      '<div class="doplnek-pin cat-' + d.kat + '">' + d.badge + '</div></div>';
+    var icon = L.divIcon({className:'doplnek-marker', html:html, iconSize:[DW,DH], iconAnchor:[ancX,ancY]});
+    var m = L.marker(pos, {icon:icon, interactive:true, zIndexOffset:180});
+    (function(dop){ m.on('click', function(e){ L.DomEvent.stopPropagation(e); openPropPanel(dop); }); })(d);
+    m.addTo(doplnkyLayer);
+  });
 }
 
 function buildPropustky() {
