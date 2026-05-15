@@ -6470,13 +6470,37 @@ async function downloadTeprWithSigs(){
     page.drawText(_safePdfText('Stavba: II/603 Sulice – Želivec, rekonstrukce silnice a mostů'), { x: 40, y: y, size: 11, font: helv });
     y -= 15;
     page.drawText(_safePdfText('TePř: ' + (k.so || '') + ' — ' + (k.nazev || '')), { x: 40, y: y, size: 11, font: helv });
-    y -= 25;
-    page.drawText(_safePdfText('Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto'), { x: 40, y: y, size: 10, font: helv });
-    y -= 12;
-    page.drawText(_safePdfText('technologickým předpisem, plánem BOZP, DPŘ stavby a porozuměl'), { x: 40, y: y, size: 10, font: helv });
-    y -= 12;
-    page.drawText(_safePdfText('jejich obsahu a budu se jimi řídit. Otázky mi byly zodpovězeny.'), { x: 40, y: y, size: 10, font: helv });
-    y -= 25;
+    y -= 22;
+
+    // Pomocná funkce pro zalomení textu na šířku
+    function _wrapPdfText(text, font, size, maxWidth){
+      var words = text.split(' ');
+      var lines = [];
+      var current = '';
+      for(var i = 0; i < words.length; i++){
+        var w = words[i];
+        var test = current ? (current + ' ' + w) : w;
+        var width = font.widthOfTextAtSize(test, size);
+        if(width <= maxWidth || !current) { current = test; }
+        else { lines.push(current); current = w; }
+      }
+      if(current) lines.push(current);
+      return lines;
+    }
+
+    // Deklarace
+    var declText =
+      'Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto technologickým ' +
+      'předpisem, plánem BOZP a DPŘ stavby. Tyto tiskopisy mi byly předány ' +
+      'v tištěné verzi v počtu 1 páru od každého dokumentu na dobu potřebnou ' +
+      'k nastudování. Porozuměl jsem jejich obsahu a budu se jimi řídit. ' +
+      'Otázky mi byly zodpovězeny.';
+    var declLines = _wrapPdfText(_safePdfText(declText), helv, 10, tableRight - 40);
+    declLines.forEach(function(ln){
+      page.drawText(ln, { x: 40, y: y, size: 10, font: helv });
+      y -= 12;
+    });
+    y -= 15;
 
     function drawTableHeader(){
       page.drawText(_safePdfText('Jméno'),  { x: col_jmeno,  y: y, size: 10, font: helvB });
