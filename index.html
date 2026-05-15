@@ -6305,6 +6305,11 @@ function signClearCanvas(){
   window._signCtx.fillRect(0, 0, rect.width, rect.height);
 }
 
+function signDateToday(){
+  var inp = document.getElementById('sign-datum');
+  if(inp) inp.value = ymd(new Date());
+}
+
 function _signCanvasIsEmpty(){
   var canvas = document.getElementById('sign-canvas');
   if(!canvas) return true;
@@ -6324,6 +6329,7 @@ function openSignModal(){
   document.getElementById('sign-tepr-title').textContent = '📋 ' + (k.so || '') + ' — ' + (k.nazev || '');
   document.getElementById('sign-name').value = (window.currentUser && window.currentUser.name) || '';
   document.getElementById('sign-funkce').value = '';
+  document.getElementById('sign-datum').value = ymd(new Date()); // default = dnes
   document.getElementById('sign-modal').style.display = 'flex';
   setTimeout(function(){
     _initSignCanvas();
@@ -6374,6 +6380,7 @@ function saveSignature(){
   if(!name || name.length < 2) { showToast('Zadej jméno', 1500); return; }
   if(_signCanvasIsEmpty()) { showToast('Nakresli prosím podpis', 1800); return; }
   var funkce = (document.getElementById('sign-funkce').value || '').trim();
+  var datum  = (document.getElementById('sign-datum').value || '').trim() || ymd(new Date());
   var canvas = document.getElementById('sign-canvas');
   // Generuj komprimovaný PNG (vysoké kvalita ale rozumná velikost)
   var dataUrl = canvas.toDataURL('image/png');
@@ -6382,7 +6389,7 @@ function saveSignature(){
     id: sigId,
     jmeno: name,
     funkce: funkce,
-    datum: ymd(new Date()),
+    datum: datum,
     dataUrl: dataUrl,
     vytvoreno: Date.now(),
     uid: window.currentUser ? window.currentUser.uid : ''
@@ -7740,6 +7747,12 @@ function copyDiaryExport(){
 
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Funkce (volitelné)</label>
     <input type="text" class="diary-field" id="sign-funkce" placeholder="např. stavbyvedoucí, dělník, TDS…">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
+      <span>Datum podpisu</span>
+      <button onclick="signDateToday()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">Dnes</button>
+    </label>
+    <input type="date" class="diary-field" id="sign-datum">
 
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
       <span>Podpis (kresli prstem)</span>
