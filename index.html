@@ -5134,9 +5134,10 @@ function setSOForDay(id, kind, val){
   if(!window.diaryCurrentDate || !window.diaryCurrentData) return;
   var nodeKey = (kind === 'stroje') ? 'so_stroje' : 'so_osoby';
   if(!window.diaryCurrentData[nodeKey]) window.diaryCurrentData[nodeKey] = {};
-  var v = (val || '').trim();
-  if(!v) {
-    // Smaž = "od tohohle dne SO neřešíme" (předchozí pokračuje, pokud existoval)
+  var v = (val == null) ? '' : String(val).trim();
+  // Ukládáme i prázdný řetězec - to je explicitní "Bez SO" od tohohle dne.
+  // Speciální sentinel '__reset__' znamená "vymazat override, vrátit na předchozí/default".
+  if(v === '__reset__') {
     delete window.diaryCurrentData[nodeKey][id];
   } else {
     window.diaryCurrentData[nodeKey][id] = v;
@@ -5172,13 +5173,16 @@ function changeSOForDay(id, kind, val){
 
 function _soSelectHtml(id, kind, currentValue){
   var sos = getAllProjectSOs();
-  // Doplň current pokud chybí
   if(currentValue && sos.indexOf(currentValue) === -1) sos.unshift(currentValue);
-  var opts = '<option value="">— SO —</option>';
+  // První volba: explicitní "Bez SO" (value = "" → uloží prázdný string jako override)
+  // Pokud currentValue je '', tato volba bude vybraná.
+  var isNone = (currentValue === '' || currentValue == null);
+  var opts = '<option value=""' + (isNone ? ' selected' : '') + '>⊘ Bez SO</option>';
   sos.forEach(function(so){
     opts += '<option value="' + escapeHtml(so) + '"' + (so === currentValue ? ' selected' : '') + '>' + escapeHtml(so) + '</option>';
   });
   opts += '<option value="__custom__">+ jiné…</option>';
+  opts += '<option value="__reset__">↺ Vymazat denní volbu</option>';
   return '<select class="sht-so-sel" data-id="' + id + '" data-kind="' + kind + '" onchange="handleSOSelectChange(this)" onclick="event.stopPropagation()" title="SO platí od tohohle dne dál">' + opts + '</select>';
 }
 
