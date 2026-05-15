@@ -10,5 +10,53 @@
     "poznamka": "TePř v01 — neschválená verze",
     "pdfUrl": "pdf/Tepr/SO 100-01_Frézování v01.pdf",
     "docxUrl": "pdf/Tepr/SO 100-01_Frézování v01.docx"
+  },
+  {
+    "id": "tepr_so100-02_az-uprava-zeminy",
+    "typ": "tepr",
+    "so": "SO 100-02",
+    "nazev": "AZ — úprava zeminy pojivem",
+    "technologickaCast": "Komunikace",
+    "verze": "v01",
+    "schvaleno": false,
+    "poznamka": "TePř v01 — neschválená verze",
+    "pdfUrl": "pdf/Tepr/SO 100-02_AZ - úprava zeminy pojivem v01.pdf",
+    "docxUrl": "pdf/Tepr/SO 100-02_AZ - úprava zeminy pojivem v01.docx"
+  },
+  {
+    "id": "tepr_so100-03_nestmelene-podkladni-vrstvy",
+    "typ": "tepr",
+    "so": "SO 100-03",
+    "nazev": "Nestmelené podkladní vrstvy",
+    "technologickaCast": "Komunikace",
+    "verze": "v01",
+    "schvaleno": false,
+    "poznamka": "TePř v01 — neschválená verze",
+    "pdfUrl": "pdf/Tepr/SO 100-03_Nestmelené podkladní vrstvy v01.pdf",
+    "docxUrl": "pdf/Tepr/SO 100-03_Nestmelené podkladní vrstvy v01.docx"
+  },
+  {
+    "id": "tepr_so100-04_rs-ca",
+    "typ": "tepr",
+    "so": "SO 100-04",
+    "nazev": "RS CA (recyklace za studena s asfaltovou emulzí)",
+    "technologickaCast": "Komunikace",
+    "verze": "v01",
+    "schvaleno": false,
+    "poznamka": "TePř v01 — neschválená verze",
+    "pdfUrl": "pdf/Tepr/SO 100-04_RS CA v01.pdf",
+    "docxUrl": "pdf/Tepr/SO 100-04_RS CA v01.docx"
+  },
+  {
+    "id": "tepr_so100-05_sc",
+    "typ": "tepr",
+    "so": "SO 100-05",
+    "nazev": "SC (směs stmelená cementem)",
+    "technologickaCast": "Komunikace",
+    "verze": "v01",
+    "schvaleno": false,
+    "poznamka": "TePř v01 — neschválená verze",
+    "pdfUrl": "pdf/Tepr/SO 100-05_SC v01.pdf",
+    "docxUrl": "pdf/Tepr/SO 100-05_SC v01.docx"
   }
 ]
