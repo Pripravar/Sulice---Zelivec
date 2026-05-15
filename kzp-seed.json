@@ -8,7 +8,8 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 101 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   },
   {
     "id": "kzp_pdf_102",
@@ -19,7 +20,8 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 102 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   },
   {
     "id": "kzp_pdf_103",
@@ -30,7 +32,8 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 103 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   },
   {
     "id": "kzp_pdf_104",
@@ -41,7 +44,8 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 104 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   },
   {
     "id": "kzp_pdf_105",
@@ -52,7 +56,8 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 105 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   },
   {
     "id": "kzp_pdf_106",
@@ -63,7 +68,8 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 106 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   },
   {
     "id": "kzp_pdf_107",
@@ -74,6 +80,7 @@
     "schvaleno": false,
     "poznamka": "KZP v01 — neschválená verze",
     "pdfUrl": "pdf/KZP/KZP SO 107 v01.pdf",
-    "vytvoreno": 1778772505813
+    "vytvoreno": 1778772505813,
+    "typ": "kzp"
   }
 ]

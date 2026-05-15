@@ -1,0 +1,14 @@
+[
+  {
+    "id": "tepr_so100-01_frezovani",
+    "typ": "tepr",
+    "so": "SO 100-01",
+    "nazev": "Frézování",
+    "technologickaCast": "Komunikace",
+    "verze": "v01",
+    "schvaleno": false,
+    "poznamka": "TePř v01 — neschválená verze",
+    "pdfUrl": "pdf/Tepr/SO 100-01_Frézování v01.pdf",
+    "docxUrl": "pdf/Tepr/SO 100-01_Frézování v01.docx"
+  }
+]

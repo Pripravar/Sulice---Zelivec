@@ -22,6 +22,8 @@
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <!-- PDF.js pro náhled výkresů na iOS Safari (kde iframe PDF nezobrazí) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- pdf-lib pro úpravu PDF (vkládání podpisů do TePř) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -6194,30 +6196,35 @@ window.allKzp = {};       // /kvalita/{id} → položka
 window.editingKzpId = null;
 
 window.kzpSeed = null;  // PDF soubory z kzp-seed.json (statické)
+window.teprSeed = null; // PDF soubory z tepr-seed.json (statické)
 window.kzpManual = {};  // Manuálně přidané přes "+ Položka" (Firebase)
 
 function openKzpPanel(){
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
   document.getElementById('kzp-panel').classList.add('open');
-  loadKzpSeed();    // PDF soubory (statické)
-  loadKzpManual();  // ručně přidané z Firebase
+  loadKzpSeed();
+  loadTeprSeed();
+  loadKzpManual();
 }
 function closeKzpPanel(){
   if(window._kzpPdfOpen) closeKzpPdfInline();
   document.getElementById('kzp-panel').classList.remove('open');
 }
 
-// Sloučí seed (PDF soubory) + manuální záznamy z Firebase.
+// Sloučí KZP seed + TePř seed + manuální záznamy z Firebase.
 // Ignoruje staré položky bez 'nazev' (zbytky z první verze).
 function refreshKzpAll(){
   var combined = {};
   if(window.kzpSeed && window.kzpSeed.length) {
-    window.kzpSeed.forEach(function(it){ if(it.id) combined[it.id] = it; });
+    window.kzpSeed.forEach(function(it){ if(it.id) { it.typ = it.typ || 'kzp'; combined[it.id] = it; } });
+  }
+  if(window.teprSeed && window.teprSeed.length) {
+    window.teprSeed.forEach(function(it){ if(it.id) { it.typ = it.typ || 'tepr'; combined[it.id] = it; } });
   }
   if(window.kzpManual) {
     Object.keys(window.kzpManual).forEach(function(id){
       var k = window.kzpManual[id];
-      if(k && k.nazev) combined[id] = k; // jen nová struktura (má 'nazev')
+      if(k && k.nazev) combined[id] = k;
     });
   }
   window.allKzp = combined;
@@ -6226,6 +6233,297 @@ function refreshKzpAll(){
 }
 
 // Vyčistit Firebase od starých KZP položek (s polem 'cinnost' místo 'nazev')
+// ════════════════════════════════════════════════════════════════════
+//   PODPISY TEPŘ
+// ════════════════════════════════════════════════════════════════════
+window._signCtx = null;
+window._signDrawing = false;
+window._signLastX = 0;
+window._signLastY = 0;
+window._teprSignatures = {}; // {tepr_id: {sig_id: {jmeno, funkce, datum, dataUrl, vytvoreno}}}
+
+function _initSignCanvas(){
+  var canvas = document.getElementById('sign-canvas');
+  if(!canvas) return;
+  // Nastav vnitřní rozlišení podle CSS velikosti × DPR
+  var rect = canvas.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(rect.width  * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  var ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, rect.width, rect.height);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#0a0a0a';
+  window._signCtx = ctx;
+  // Připojit event listenery (pouze jednou)
+  if(canvas._signHandlersAdded) return;
+  canvas._signHandlersAdded = true;
+  function pos(e){
+    var r = canvas.getBoundingClientRect();
+    var x, y;
+    if(e.touches && e.touches.length > 0) { x = e.touches[0].clientX - r.left; y = e.touches[0].clientY - r.top; }
+    else { x = e.clientX - r.left; y = e.clientY - r.top; }
+    return {x:x, y:y};
+  }
+  function start(e){ e.preventDefault(); var p = pos(e); window._signDrawing = true; window._signLastX = p.x; window._signLastY = p.y; }
+  function move(e){
+    if(!window._signDrawing) return;
+    e.preventDefault();
+    var p = pos(e);
+    var c = window._signCtx;
+    c.beginPath();
+    c.moveTo(window._signLastX, window._signLastY);
+    c.lineTo(p.x, p.y);
+    c.stroke();
+    window._signLastX = p.x;
+    window._signLastY = p.y;
+  }
+  function end(e){ window._signDrawing = false; }
+  canvas.addEventListener('mousedown',  start);
+  canvas.addEventListener('mousemove',  move);
+  canvas.addEventListener('mouseup',    end);
+  canvas.addEventListener('mouseleave', end);
+  canvas.addEventListener('touchstart', start, {passive:false});
+  canvas.addEventListener('touchmove',  move,  {passive:false});
+  canvas.addEventListener('touchend',   end);
+  canvas.addEventListener('touchcancel',end);
+}
+
+function signClearCanvas(){
+  var canvas = document.getElementById('sign-canvas');
+  if(!canvas || !window._signCtx) return;
+  var rect = canvas.getBoundingClientRect();
+  window._signCtx.fillStyle = '#fff';
+  window._signCtx.fillRect(0, 0, rect.width, rect.height);
+}
+
+function _signCanvasIsEmpty(){
+  var canvas = document.getElementById('sign-canvas');
+  if(!canvas) return true;
+  var ctx = canvas.getContext('2d');
+  var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  // Pokud jsou všechny pixely bílé, je prázdný
+  for(var i = 0; i < data.length; i += 4) {
+    if(data[i] < 250 || data[i+1] < 250 || data[i+2] < 250) return false;
+  }
+  return true;
+}
+
+function openSignModal(){
+  var k = window._kzpCurrentItem;
+  if(!k) { showToast('Nejdřív otevři TePř', 1500); return; }
+  if(k.typ !== 'tepr') { showToast('Podpisy jen pro TePř', 1500); return; }
+  document.getElementById('sign-tepr-title').textContent = '📋 ' + (k.so || '') + ' — ' + (k.nazev || '');
+  document.getElementById('sign-name').value = (window.currentUser && window.currentUser.name) || '';
+  document.getElementById('sign-funkce').value = '';
+  document.getElementById('sign-modal').style.display = 'flex';
+  setTimeout(function(){
+    _initSignCanvas();
+    signClearCanvas();
+    refreshSignList(k.id);
+  }, 80);
+  // Načti existující podpisy z Firebase
+  db.ref('tepr_podpisy/' + k.id).on('value', function(snap){
+    var sigs = snap.val() || {};
+    if(!window._teprSignatures) window._teprSignatures = {};
+    window._teprSignatures[k.id] = sigs;
+    refreshSignList(k.id);
+  });
+}
+function closeSignModal(){
+  document.getElementById('sign-modal').style.display = 'none';
+}
+
+function refreshSignList(teprId){
+  var list = document.getElementById('sign-list');
+  var cntEl = document.getElementById('sign-count');
+  if(!list) return;
+  var sigs = (window._teprSignatures && window._teprSignatures[teprId]) || {};
+  var arr = Object.keys(sigs).map(function(id){ var s = sigs[id]; s._id = id; return s; });
+  arr.sort(function(a,b){ return (a.vytvoreno || 0) - (b.vytvoreno || 0); });
+  if(cntEl) cntEl.textContent = arr.length;
+  if(arr.length === 0) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text2);padding:6px 0;">Zatím žádné podpisy.</div>';
+    return;
+  }
+  list.innerHTML = arr.map(function(s){
+    var dt = s.datum || (s.vytvoreno ? new Date(s.vytvoreno).toLocaleDateString('cs-CZ') : '');
+    return '<div style="display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:8px;padding:6px 8px;">'
+      + '<img src="' + (s.dataUrl || '') + '" style="width:60px;height:32px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid var(--border);">'
+      + '<div style="flex:1;font-size:12px;">'
+      +   '<div style="color:var(--text);font-weight:700;">' + escapeHtml(s.jmeno || '') + '</div>'
+      +   '<div style="color:var(--text2);font-size:10px;">' + escapeHtml(s.funkce || '') + (s.funkce && dt ? ' · ' : '') + escapeHtml(dt) + '</div>'
+      + '</div>'
+      + '<button onclick="deleteSignature(\'' + teprId + '\', \'' + s._id + '\')" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:13px;padding:2px 4px;">🗑</button>'
+      + '</div>';
+  }).join('');
+}
+
+function saveSignature(){
+  var k = window._kzpCurrentItem;
+  if(!k) { showToast('Není otevřená TePř', 1500); return; }
+  var name = (document.getElementById('sign-name').value || '').trim();
+  if(!name || name.length < 2) { showToast('Zadej jméno', 1500); return; }
+  if(_signCanvasIsEmpty()) { showToast('Nakresli prosím podpis', 1800); return; }
+  var funkce = (document.getElementById('sign-funkce').value || '').trim();
+  var canvas = document.getElementById('sign-canvas');
+  // Generuj komprimovaný PNG (vysoké kvalita ale rozumná velikost)
+  var dataUrl = canvas.toDataURL('image/png');
+  var sigId = 'sig_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+  var rec = {
+    id: sigId,
+    jmeno: name,
+    funkce: funkce,
+    datum: ymd(new Date()),
+    dataUrl: dataUrl,
+    vytvoreno: Date.now(),
+    uid: window.currentUser ? window.currentUser.uid : ''
+  };
+  showSync('⏳ Ukládám podpis…');
+  db.ref('tepr_podpisy/' + k.id + '/' + sigId).set(rec).then(function(){
+    hideSync();
+    showToast('✓ Podpis uložen', 1500);
+    signClearCanvas();
+    // Vyčistit pole pro rychlé další zadání
+    document.getElementById('sign-name').value = (window.currentUser && window.currentUser.name) || '';
+    document.getElementById('sign-funkce').value = '';
+  }).catch(function(e){
+    hideSync();
+    showToast('❌ Chyba: ' + (e.message || e), 2500);
+  });
+}
+
+function deleteSignature(teprId, sigId){
+  if(!confirm('Smazat tento podpis?')) return;
+  db.ref('tepr_podpisy/' + teprId + '/' + sigId).remove().then(function(){
+    showToast('🗑 Smazáno', 1200);
+  });
+}
+
+// ── Stažení TePř + podpisy jako finální PDF ─────────────────────────
+function downloadTeprWithSigs(){
+  var k = window._kzpCurrentItem;
+  if(!k || k.typ !== 'tepr') { showToast('Otevři nejdřív TePř', 1800); return; }
+  if(typeof PDFLib === 'undefined') { showToast('Knihovna pdf-lib se nenačetla, zkus reload', 3000); return; }
+  showSync('⏳ Generuji finální PDF…');
+  // 1. Načti původní PDF
+  fetch(k.pdfUrl)
+    .then(function(r){ if(!r.ok) throw new Error('Original PDF not found'); return r.arrayBuffer(); })
+    .then(function(bytes){ return PDFLib.PDFDocument.load(bytes); })
+    .then(function(pdfDoc){
+      // 2. Získej podpisy z Firebase
+      return db.ref('tepr_podpisy/' + k.id).once('value').then(function(snap){
+        var sigs = snap.val() || {};
+        var arr = Object.keys(sigs).map(function(id){ var s = sigs[id]; s._id = id; return s; });
+        arr.sort(function(a,b){ return (a.vytvoreno || 0) - (b.vytvoreno || 0); });
+        return { pdfDoc: pdfDoc, sigs: arr };
+      });
+    })
+    .then(function(ctx){
+      // 3. Přidat stránku s tabulkou podpisů
+      var pdfDoc = ctx.pdfDoc;
+      var sigs = ctx.sigs;
+      var page = pdfDoc.addPage([595, 842]); // A4 portrait
+      var helv = pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
+      var helvB = pdfDoc.embedStandardFont(PDFLib.StandardFonts.HelveticaBold);
+      var y = 800;
+      page.drawText('Prohlášení zaměstnance', { x: 40, y: y, size: 18, font: helvB });
+      y -= 30;
+      page.drawText('Stavba: II/603 Sulice – Želivec', { x: 40, y: y, size: 11, font: helv });
+      y -= 15;
+      page.drawText('TePř: ' + (k.so || '') + ' — ' + (k.nazev || ''), { x: 40, y: y, size: 11, font: helv });
+      y -= 25;
+      page.drawText('Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto', { x: 40, y: y, size: 10, font: helv });
+      y -= 12;
+      page.drawText('technologickým předpisem, plánem BOZP, DPŘ stavby a porozuměl', { x: 40, y: y, size: 10, font: helv });
+      y -= 12;
+      page.drawText('jejich obsahu a budu se jimi řídit. Otázky mi byly zodpovězeny.', { x: 40, y: y, size: 10, font: helv });
+      y -= 25;
+      // Záhlaví tabulky
+      var rowHeight = 60;
+      var col_jmeno = 40, col_funkce = 180, col_datum = 320, col_podpis = 400, tableRight = 555;
+      page.drawText('Jméno', { x: col_jmeno, y: y, size: 10, font: helvB });
+      page.drawText('Funkce', { x: col_funkce, y: y, size: 10, font: helvB });
+      page.drawText('Datum', { x: col_datum, y: y, size: 10, font: helvB });
+      page.drawText('Podpis', { x: col_podpis, y: y, size: 10, font: helvB });
+      y -= 8;
+      page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.6, color: PDFLib.rgb(0,0,0) });
+      y -= 4;
+
+      // Vykresli každý podpis
+      var promises = [];
+      sigs.forEach(function(s){
+        if(y < 80) {
+          // Nová strana
+          page = pdfDoc.addPage([595, 842]);
+          y = 800;
+          page.drawText('Prohlášení zaměstnance (pokračování)', { x: 40, y: y, size: 14, font: helvB });
+          y -= 25;
+          page.drawText('Jméno', { x: col_jmeno, y: y, size: 10, font: helvB });
+          page.drawText('Funkce', { x: col_funkce, y: y, size: 10, font: helvB });
+          page.drawText('Datum', { x: col_datum, y: y, size: 10, font: helvB });
+          page.drawText('Podpis', { x: col_podpis, y: y, size: 10, font: helvB });
+          y -= 8;
+          page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.6, color: PDFLib.rgb(0,0,0) });
+          y -= 4;
+        }
+        var rowY = y - rowHeight;
+        // Text v řádku
+        page.drawText(_safePdfText(s.jmeno || ''), { x: col_jmeno, y: rowY + 35, size: 10, font: helv });
+        page.drawText(_safePdfText(s.funkce || ''), { x: col_funkce, y: rowY + 35, size: 10, font: helv });
+        page.drawText(_safePdfText(s.datum || ''), { x: col_datum, y: rowY + 35, size: 10, font: helv });
+        // Obrázek podpisu
+        if(s.dataUrl) {
+          var p = pdfDoc.embedPng(s.dataUrl).then((function(rowY){
+            return function(img){
+              var sigW = 150, sigH = 50;
+              page.drawImage(img, { x: col_podpis, y: rowY + 5, width: sigW, height: sigH });
+            };
+          })(rowY));
+          promises.push(p);
+        }
+        y = rowY;
+        page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.3, color: PDFLib.rgb(0.6,0.6,0.6) });
+      });
+
+      return Promise.all(promises).then(function(){ return pdfDoc; });
+    })
+    .then(function(pdfDoc){
+      // 4. Stáhni jako Blob
+      return pdfDoc.save();
+    })
+    .then(function(bytes){
+      hideSync();
+      var blob = new Blob([bytes], { type: 'application/pdf' });
+      var url = URL.createObjectURL(blob);
+      var fname = (k.so || 'TePr') + '_' + (k.nazev || '') + '_s-podpisy.pdf';
+      fname = fname.replace(/[^a-z0-9 ._-]/gi, '_');
+      var a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+      showToast('✅ PDF staženo', 2000);
+    })
+    .catch(function(e){
+      hideSync();
+      console.error('downloadTeprWithSigs error:', e);
+      showToast('❌ Chyba: ' + (e.message || e), 3500);
+    });
+}
+
+// Helvetica neumí žádné UTF-8 mimo Latin-1; pro jistotu nahradíme některé znaky
+function _safePdfText(s){
+  if(!s) return '';
+  return String(s)
+    .replace(/–/g, '-').replace(/—/g, '-')
+    .replace(/„|"|"/g, '"').replace(/'|'/g, "'");
+}
+
 function cleanupOldKzp(){
   if(!window.kzpManual) return;
   var oldIds = Object.keys(window.kzpManual).filter(function(id){
@@ -6250,7 +6548,7 @@ function cleanupOldKzp(){
 }
 
 function loadKzpSeed(){
-  if(window.kzpSeed) { refreshKzpAll(); return; } // už načteno
+  if(window.kzpSeed) { refreshKzpAll(); return; }
   fetch('kzp-seed.json?ts=' + Date.now())
     .then(function(r){ return r.ok ? r.json() : []; })
     .then(function(arr){
@@ -6260,6 +6558,21 @@ function loadKzpSeed(){
     .catch(function(e){
       console.warn('kzp-seed.json nenalezen:', e);
       window.kzpSeed = [];
+      refreshKzpAll();
+    });
+}
+
+function loadTeprSeed(){
+  if(window.teprSeed) { refreshKzpAll(); return; }
+  fetch('tepr-seed.json?ts=' + Date.now())
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(arr){
+      window.teprSeed = Array.isArray(arr) ? arr : [];
+      refreshKzpAll();
+    })
+    .catch(function(e){
+      console.warn('tepr-seed.json nenalezen:', e);
+      window.teprSeed = [];
       refreshKzpAll();
     });
 }
@@ -6311,6 +6624,7 @@ function rebuildKzpFilters(){
 }
 
 function clearKzpFilters(){
+  var t = document.getElementById('kzp-filter-typ'); if(t) t.value = '';
   document.getElementById('kzp-filter-so').value = '';
   document.getElementById('kzp-filter-tc').value = '';
   document.getElementById('kzp-filter-text').value = '';
@@ -6320,11 +6634,13 @@ function clearKzpFilters(){
 function renderKzpList(){
   var box = document.getElementById('kzp-list');
   if(!box) return;
+  var typFilt  = document.getElementById('kzp-filter-typ') ? document.getElementById('kzp-filter-typ').value : '';
   var soFilt   = document.getElementById('kzp-filter-so').value;
   var tcFilt   = document.getElementById('kzp-filter-tc').value;
   var textFilt = (document.getElementById('kzp-filter-text').value || '').trim().toLowerCase();
   var items = Object.keys(window.allKzp).map(function(id){ var v = window.allKzp[id]; v._id = id; return v; });
   items = items.filter(function(k){
+    if(typFilt && (k.typ || 'kzp') !== typFilt) return false;
     if(soFilt && k.so !== soFilt) return false;
     if(tcFilt && (k.technologickaCast || '') !== tcFilt) return false;
     if(textFilt) {
@@ -6344,13 +6660,14 @@ function renderKzpList(){
     return;
   }
   box.innerHTML = items.map(function(k){
-    // Jednoduchá karta: "SO 101 - Komunikace" + drobná info pravá
-    var title = (k.so || '–') + (k.technologickaCast ? ' - ' + k.technologickaCast : '');
+    var typIcon = (k.typ === 'tepr') ? '📋' : '🧪';
+    var nameMid = (k.typ === 'tepr' && k.nazev) ? k.nazev : (k.technologickaCast || '');
+    var title = (k.so || '–') + (nameMid ? ' - ' + nameMid : '');
     var schvalenoIcon = (k.schvaleno === false) ? '<span title="Neschváleno" style="color:#ff6b6b;">⚠️</span>' : (k.schvaleno === true ? '<span title="Schváleno" style="color:#48bb78;">✓</span>' : '');
     var verz = k.verze ? '<span style="color:var(--text2);font-size:11px;margin-left:6px;">' + escapeHtml(k.verze) + '</span>' : '';
     var actBtn = '<button onclick="event.stopPropagation();openKzpEditModal(\'' + k._id + '\')" title="Upravit" style="background:transparent;border:none;color:var(--text2);font-size:13px;cursor:pointer;padding:2px 6px;">✏️</button>';
     return '<div class="kzp-card" onclick="openKzpItem(\'' + k._id + '\')" style="display:flex;align-items:center;gap:8px;">'
-      + '<div style="flex:1;font-size:15px;font-weight:700;color:var(--text);">' + escapeHtml(title) + verz + '</div>'
+      + '<div style="flex:1;font-size:15px;font-weight:700;color:var(--text);">' + typIcon + ' ' + escapeHtml(title) + verz + '</div>'
       + schvalenoIcon
       + actBtn
       + '</div>';
@@ -6369,31 +6686,38 @@ function openKzpItem(id){
   openKzpPdfInline(k);
 }
 
+window._kzpCurrentItem = null;
+
 function openKzpPdfInline(k){
   var listBox    = document.getElementById('kzp-list');
   var pdfView    = document.getElementById('kzp-pdf-view');
   var filterBar  = document.getElementById('kzp-filter-bar');
   var warning    = document.getElementById('kzp-warning-banner');
   var backBtn    = document.getElementById('kzp-back-btn');
-  var importBtn  = document.getElementById('kzp-import-btn');
   var addBtn     = document.getElementById('kzp-add-btn');
+  var cleanupBtn = document.getElementById('kzp-cleanup-btn');
+  var signBtn    = document.getElementById('kzp-sign-btn');
+  var dlBtn      = document.getElementById('kzp-download-btn');
   var titleEl    = document.getElementById('kzp-header-title');
   var frame      = document.getElementById('kzp-pdf-frame');
 
-  // Schovej seznam + filtry + banner
+  window._kzpCurrentItem = k;
   if(listBox)   listBox.style.display   = 'none';
   if(filterBar) filterBar.style.display = 'none';
   if(warning)   warning.style.display   = 'none';
-  // Schovej tlačítka import/add a ukaž "zpět"
-  if(importBtn) importBtn.style.display = 'none';
   if(addBtn)    addBtn.style.display    = 'none';
+  if(cleanupBtn)cleanupBtn.style.display= 'none';
   if(backBtn)   backBtn.style.display   = '';
-  // Změň titulek
+  // TePř - ukaž ✍️ Podepsat a 📥 Stáhnout
+  var isTepr = (k.typ === 'tepr');
+  if(signBtn) signBtn.style.display = isTepr ? '' : 'none';
+  if(dlBtn)   dlBtn.style.display   = isTepr ? '' : 'none';
   if(titleEl) {
-    var t = (k.so || '') + (k.technologickaCast ? ' - ' + k.technologickaCast : '');
-    titleEl.textContent = '📄 ' + t;
+    var ico = isTepr ? '📋' : '📄';
+    var mid = isTepr ? (k.nazev || '') : (k.technologickaCast || '');
+    var t = (k.so || '') + (mid ? ' - ' + mid : '');
+    titleEl.textContent = ico + ' ' + t;
   }
-  // Ukaž PDF view a nahraj URL přes Mozilla viewer (na mobilu)
   if(pdfView) pdfView.style.display = 'flex';
   if(frame && typeof pdfFrameSrcFor === 'function') {
     frame.src = pdfFrameSrcFor(k.pdfUrl);
@@ -6409,8 +6733,10 @@ function closeKzpPdfInline(){
   var filterBar  = document.getElementById('kzp-filter-bar');
   var warning    = document.getElementById('kzp-warning-banner');
   var backBtn    = document.getElementById('kzp-back-btn');
-  var importBtn  = document.getElementById('kzp-import-btn');
   var addBtn     = document.getElementById('kzp-add-btn');
+  var cleanupBtn = document.getElementById('kzp-cleanup-btn');
+  var signBtn    = document.getElementById('kzp-sign-btn');
+  var dlBtn      = document.getElementById('kzp-download-btn');
   var titleEl    = document.getElementById('kzp-header-title');
   var frame      = document.getElementById('kzp-pdf-frame');
 
@@ -6419,11 +6745,14 @@ function closeKzpPdfInline(){
   if(listBox)   listBox.style.display   = 'block';
   if(filterBar) filterBar.style.display = '';
   if(warning)   warning.style.display   = '';
-  if(importBtn) importBtn.style.display = '';
   if(addBtn)    addBtn.style.display    = '';
+  if(cleanupBtn)cleanupBtn.style.display= '';
+  if(signBtn)   signBtn.style.display   = 'none';
+  if(dlBtn)     dlBtn.style.display     = 'none';
   if(backBtn)   backBtn.style.display   = 'none';
   if(titleEl)   titleEl.textContent     = '🧪 Kvalita / KZP';
   window._kzpPdfOpen = false;
+  window._kzpCurrentItem = null;
 }
 
 function openKzpAddModal(){
@@ -7306,6 +7635,8 @@ function copyDiaryExport(){
   <div id="kzp-header">
     <button id="kzp-back-btn" onclick="closeKzpPdfInline()" style="display:none;background:var(--panel2);color:var(--text);">‹ Zpět</button>
     <h2 id="kzp-header-title">🧪 Kvalita / KZP</h2>
+    <button id="kzp-sign-btn" onclick="openSignModal()" title="Přidat podpis" style="display:none;background:var(--accent2);color:#0f3460;">✍️ Podepsat</button>
+    <button id="kzp-download-btn" onclick="downloadTeprWithSigs()" title="Stáhnout finální PDF s podpisy" style="display:none;background:var(--green);color:#fff;">📥 Stáhnout</button>
     <button id="kzp-cleanup-btn" onclick="cleanupOldKzp()" title="Vyčistit staré KZP záznamy" style="background:var(--panel2);color:var(--text2);font-size:13px;">🧹</button>
     <button id="kzp-add-btn" onclick="openKzpAddModal()" style="background:var(--accent);color:#fff;">+ Položka</button>
     <button onclick="closeKzpPanel()">✕</button>
@@ -7314,6 +7645,11 @@ function copyDiaryExport(){
     ⚠️ <b>POZOR — KZP nejsou schválena</b>. Hodnoty jsou z neschválené verze v01. Pro skutečné kontroly použij vždy aktuální schválený výtisk od TDS / objednatele.
   </div>
   <div id="kzp-filter-bar">
+    <select id="kzp-filter-typ" onchange="renderKzpList()">
+      <option value="">Vše (KZP + TePř)</option>
+      <option value="kzp">🧪 Jen KZP</option>
+      <option value="tepr">📋 Jen TePř</option>
+    </select>
     <select id="kzp-filter-so" onchange="renderKzpList()">
       <option value="">Všechny SO</option>
     </select>
@@ -7362,6 +7698,38 @@ function copyDiaryExport(){
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveKzpFromForm()">💾 Uložit</button>
       <button class="btn-secondary" style="background:#ff6b6b;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;display:none;" id="kzp-modal-delete" onclick="deleteKzpItem()">🗑</button>
       <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeKzpAddModal()">Zrušit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Podpis pro TePř -->
+<div id="sign-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4900;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,540px);max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="font-size:15px;color:var(--accent2);">✍️ Podpis k TePř</h3>
+    <div id="sign-tepr-title" style="font-size:12px;color:var(--text2);"></div>
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jméno a příjmení</label>
+    <input type="text" class="diary-field" id="sign-name" placeholder="např. Pepa Novák" autocapitalize="words">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Funkce (volitelné)</label>
+    <input type="text" class="diary-field" id="sign-funkce" placeholder="např. stavbyvedoucí, dělník, TDS…">
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
+      <span>Podpis (kresli prstem)</span>
+      <button onclick="signClearCanvas()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">⌫ Vyčistit</button>
+    </label>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;">
+      <canvas id="sign-canvas" width="520" height="200" style="display:block;width:100%;height:200px;background:#fff;cursor:crosshair;"></canvas>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveSignature()">💾 Uložit podpis</button>
+      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeSignModal()">Zrušit</button>
+    </div>
+
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Stávající podpisy <span id="sign-count" style="color:var(--accent2);">0</span></div>
+      <div id="sign-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;"></div>
     </div>
   </div>
 </div>
