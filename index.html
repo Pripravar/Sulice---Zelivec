@@ -6408,124 +6408,147 @@ function deleteSignature(teprId, sigId){
   });
 }
 
+// Helvetica neumí české diakritiky – transliterace á→a, ě→e, atd.
+function _safePdfText(s){
+  if(!s) return '';
+  var map = {
+    'á':'a','č':'c','ď':'d','é':'e','ě':'e','í':'i',
+    'ň':'n','ó':'o','ř':'r','š':'s','ť':'t','ú':'u',
+    'ů':'u','ý':'y','ž':'z',
+    'Á':'A','Č':'C','Ď':'D','É':'E','Ě':'E','Í':'I',
+    'Ň':'N','Ó':'O','Ř':'R','Š':'S','Ť':'T','Ú':'U',
+    'Ů':'U','Ý':'Y','Ž':'Z',
+    '–':'-','—':'-',
+    '„':'"','“':'"','”':'"',
+    '‘':"'",'’':"'",' ':' '
+  };
+  return String(s).split('').map(function(c){ return map[c] !== undefined ? map[c] : c; }).join('');
+}
+
 // ── Stažení TePř + podpisy jako finální PDF ─────────────────────────
-function downloadTeprWithSigs(){
+async function downloadTeprWithSigs(){
   var k = window._kzpCurrentItem;
   if(!k || k.typ !== 'tepr') { showToast('Otevři nejdřív TePř', 1800); return; }
   if(typeof PDFLib === 'undefined') { showToast('Knihovna pdf-lib se nenačetla, zkus reload', 3000); return; }
-  showSync('⏳ Generuji finální PDF…');
-  // 1. Načti původní PDF
-  fetch(k.pdfUrl)
-    .then(function(r){ if(!r.ok) throw new Error('Original PDF not found'); return r.arrayBuffer(); })
-    .then(function(bytes){ return PDFLib.PDFDocument.load(bytes); })
-    .then(function(pdfDoc){
-      // 2. Získej podpisy z Firebase
-      return db.ref('tepr_podpisy/' + k.id).once('value').then(function(snap){
-        var sigs = snap.val() || {};
-        var arr = Object.keys(sigs).map(function(id){ var s = sigs[id]; s._id = id; return s; });
-        arr.sort(function(a,b){ return (a.vytvoreno || 0) - (b.vytvoreno || 0); });
-        return { pdfDoc: pdfDoc, sigs: arr };
-      });
-    })
-    .then(function(ctx){
-      // 3. Přidat stránku s tabulkou podpisů
-      var pdfDoc = ctx.pdfDoc;
-      var sigs = ctx.sigs;
-      var page = pdfDoc.addPage([595, 842]); // A4 portrait
-      var helv = pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
-      var helvB = pdfDoc.embedStandardFont(PDFLib.StandardFonts.HelveticaBold);
-      var y = 800;
-      page.drawText('Prohlášení zaměstnance', { x: 40, y: y, size: 18, font: helvB });
-      y -= 30;
-      page.drawText('Stavba: II/603 Sulice – Želivec', { x: 40, y: y, size: 11, font: helv });
-      y -= 15;
-      page.drawText('TePř: ' + (k.so || '') + ' — ' + (k.nazev || ''), { x: 40, y: y, size: 11, font: helv });
-      y -= 25;
-      page.drawText('Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto', { x: 40, y: y, size: 10, font: helv });
-      y -= 12;
-      page.drawText('technologickým předpisem, plánem BOZP, DPŘ stavby a porozuměl', { x: 40, y: y, size: 10, font: helv });
-      y -= 12;
-      page.drawText('jejich obsahu a budu se jimi řídit. Otázky mi byly zodpovězeny.', { x: 40, y: y, size: 10, font: helv });
-      y -= 25;
-      // Záhlaví tabulky
-      var rowHeight = 60;
-      var col_jmeno = 40, col_funkce = 180, col_datum = 320, col_podpis = 400, tableRight = 555;
-      page.drawText('Jméno', { x: col_jmeno, y: y, size: 10, font: helvB });
-      page.drawText('Funkce', { x: col_funkce, y: y, size: 10, font: helvB });
-      page.drawText('Datum', { x: col_datum, y: y, size: 10, font: helvB });
-      page.drawText('Podpis', { x: col_podpis, y: y, size: 10, font: helvB });
+
+  try {
+    showSync('⏳ Stahuji originál…');
+    var r = await fetch(k.pdfUrl);
+    if(!r.ok) throw new Error('PDF nenalezeno: ' + k.pdfUrl);
+    var bytes = await r.arrayBuffer();
+
+    showSync('⏳ Načítám podpisy…');
+    var snap = await db.ref('tepr_podpisy/' + k.id).once('value');
+    var sigsObj = snap.val() || {};
+    var sigs = Object.keys(sigsObj).map(function(id){ var s = sigsObj[id]; s._id = id; return s; });
+    sigs.sort(function(a,b){ return (a.vytvoreno || 0) - (b.vytvoreno || 0); });
+
+    if(sigs.length === 0) {
+      hideSync();
+      if(!confirm('Žádné podpisy ještě nemáš uložené. Stáhnout originál bez podpisové stránky?')) return;
+      showSync('⏳ Stahuji originál…');
+    }
+
+    showSync('⏳ Generuji finální PDF…');
+    var pdfDoc = await PDFLib.PDFDocument.load(bytes);
+    var helv  = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    var helvB = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+
+    var page = pdfDoc.addPage([595, 842]); // A4 portrait
+    var y = 800;
+    var col_jmeno = 40, col_funkce = 180, col_datum = 320, col_podpis = 400, tableRight = 555;
+
+    page.drawText(_safePdfText('Prohlášení zaměstnance'), { x: 40, y: y, size: 18, font: helvB });
+    y -= 30;
+    page.drawText(_safePdfText('Stavba: II/603 Sulice – Želivec, rekonstrukce silnice a mostů'), { x: 40, y: y, size: 11, font: helv });
+    y -= 15;
+    page.drawText(_safePdfText('TePř: ' + (k.so || '') + ' — ' + (k.nazev || '')), { x: 40, y: y, size: 11, font: helv });
+    y -= 25;
+    page.drawText(_safePdfText('Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto'), { x: 40, y: y, size: 10, font: helv });
+    y -= 12;
+    page.drawText(_safePdfText('technologickým předpisem, plánem BOZP, DPŘ stavby a porozuměl'), { x: 40, y: y, size: 10, font: helv });
+    y -= 12;
+    page.drawText(_safePdfText('jejich obsahu a budu se jimi řídit. Otázky mi byly zodpovězeny.'), { x: 40, y: y, size: 10, font: helv });
+    y -= 25;
+
+    function drawTableHeader(){
+      page.drawText(_safePdfText('Jméno'),  { x: col_jmeno,  y: y, size: 10, font: helvB });
+      page.drawText(_safePdfText('Funkce'), { x: col_funkce, y: y, size: 10, font: helvB });
+      page.drawText(_safePdfText('Datum'),  { x: col_datum,  y: y, size: 10, font: helvB });
+      page.drawText(_safePdfText('Podpis'), { x: col_podpis, y: y, size: 10, font: helvB });
       y -= 8;
       page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.6, color: PDFLib.rgb(0,0,0) });
       y -= 4;
+    }
+    drawTableHeader();
 
-      // Vykresli každý podpis
-      var promises = [];
-      sigs.forEach(function(s){
-        if(y < 80) {
-          // Nová strana
-          page = pdfDoc.addPage([595, 842]);
-          y = 800;
-          page.drawText('Prohlášení zaměstnance (pokračování)', { x: 40, y: y, size: 14, font: helvB });
-          y -= 25;
-          page.drawText('Jméno', { x: col_jmeno, y: y, size: 10, font: helvB });
-          page.drawText('Funkce', { x: col_funkce, y: y, size: 10, font: helvB });
-          page.drawText('Datum', { x: col_datum, y: y, size: 10, font: helvB });
-          page.drawText('Podpis', { x: col_podpis, y: y, size: 10, font: helvB });
-          y -= 8;
-          page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.6, color: PDFLib.rgb(0,0,0) });
-          y -= 4;
+    var rowHeight = 60;
+    for(var i = 0; i < sigs.length; i++) {
+      var s = sigs[i];
+      if(y < 80) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 800;
+        page.drawText(_safePdfText('Prohlášení zaměstnance (pokračování)'), { x: 40, y: y, size: 14, font: helvB });
+        y -= 25;
+        drawTableHeader();
+      }
+      var rowY = y - rowHeight;
+      page.drawText(_safePdfText(s.jmeno || ''),  { x: col_jmeno,  y: rowY + 35, size: 10, font: helv });
+      page.drawText(_safePdfText(s.funkce || ''), { x: col_funkce, y: rowY + 35, size: 10, font: helv });
+      page.drawText(_safePdfText(s.datum || ''),  { x: col_datum,  y: rowY + 35, size: 10, font: helv });
+      if(s.dataUrl) {
+        try {
+          var img = await pdfDoc.embedPng(s.dataUrl);
+          var sigW = 150, sigH = 50;
+          page.drawImage(img, { x: col_podpis, y: rowY + 5, width: sigW, height: sigH });
+        } catch(eImg) {
+          console.warn('Embed PNG selhalo pro podpis ' + s._id, eImg);
         }
-        var rowY = y - rowHeight;
-        // Text v řádku
-        page.drawText(_safePdfText(s.jmeno || ''), { x: col_jmeno, y: rowY + 35, size: 10, font: helv });
-        page.drawText(_safePdfText(s.funkce || ''), { x: col_funkce, y: rowY + 35, size: 10, font: helv });
-        page.drawText(_safePdfText(s.datum || ''), { x: col_datum, y: rowY + 35, size: 10, font: helv });
-        // Obrázek podpisu
-        if(s.dataUrl) {
-          var p = pdfDoc.embedPng(s.dataUrl).then((function(rowY){
-            return function(img){
-              var sigW = 150, sigH = 50;
-              page.drawImage(img, { x: col_podpis, y: rowY + 5, width: sigW, height: sigH });
-            };
-          })(rowY));
-          promises.push(p);
+      }
+      y = rowY;
+      page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.3, color: PDFLib.rgb(0.6,0.6,0.6) });
+    }
+
+    showSync('⏳ Ukládám PDF…');
+    var outBytes = await pdfDoc.save();
+    hideSync();
+
+    var blob = new Blob([outBytes], { type: 'application/pdf' });
+    var fnameSafe = ((k.so || 'TePr') + '_' + (k.nazev || '') + '_s-podpisy.pdf').replace(/[^a-z0-9 ._-]/gi, '_');
+
+    // 1) Pokus o Web Share API (iOS PWA: sdílej / ulož do souborů)
+    if(navigator.canShare) {
+      try {
+        var file = new File([blob], fnameSafe, { type: 'application/pdf' });
+        if(navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: fnameSafe });
+          showToast('✅ PDF sdíleno', 2000);
+          return;
         }
-        y = rowY;
-        page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.3, color: PDFLib.rgb(0.6,0.6,0.6) });
-      });
+      } catch(shareErr) {
+        console.warn('Share failed, fallback to download', shareErr);
+      }
+    }
 
-      return Promise.all(promises).then(function(){ return pdfDoc; });
-    })
-    .then(function(pdfDoc){
-      // 4. Stáhni jako Blob
-      return pdfDoc.save();
-    })
-    .then(function(bytes){
-      hideSync();
-      var blob = new Blob([bytes], { type: 'application/pdf' });
-      var url = URL.createObjectURL(blob);
-      var fname = (k.so || 'TePr') + '_' + (k.nazev || '') + '_s-podpisy.pdf';
-      fname = fname.replace(/[^a-z0-9 ._-]/gi, '_');
-      var a = document.createElement('a');
-      a.href = url; a.download = fname;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
-      showToast('✅ PDF staženo', 2000);
-    })
-    .catch(function(e){
-      hideSync();
-      console.error('downloadTeprWithSigs error:', e);
-      showToast('❌ Chyba: ' + (e.message || e), 3500);
-    });
-}
+    // 2) Fallback: klasický download (desktop, Android)
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fnameSafe;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
 
-// Helvetica neumí žádné UTF-8 mimo Latin-1; pro jistotu nahradíme některé znaky
-function _safePdfText(s){
-  if(!s) return '';
-  return String(s)
-    .replace(/–/g, '-').replace(/—/g, '-')
-    .replace(/„|"|"/g, '"').replace(/'|'/g, "'");
+    // 3) iOS Safari/PWA: pokud download selže (nestáhne), otevři PDF v novém okně
+    setTimeout(function(){
+      // V PWA módu Safari _blank otevře v Safari, kde se PDF zobrazí a uživatel ho může uložit
+      try { window.open(URL.createObjectURL(blob), '_blank'); } catch(e){}
+    }, 800);
+    showToast('✅ PDF připraveno (stažení / Safari)', 2500);
+  } catch(e) {
+    hideSync();
+    console.error('downloadTeprWithSigs error:', e);
+    showToast('❌ Chyba: ' + (e.message || e), 4000);
+  }
 }
 
 function cleanupOldKzp(){
