@@ -3885,19 +3885,111 @@ function switchGalleryTab(tab) {
   renderGallery();
 }
 
+// Parse km string "0+150" → 0.150. Vrací null pokud nejde parsovat.
+function parseKmStr(s){
+  if(!s) return null;
+  if(typeof s === 'number') return s;
+  var m = String(s).match(/(\d+)\+(\d+)/);
+  if(!m) return null;
+  return parseInt(m[1], 10) + parseInt(m[2], 10) / Math.pow(10, m[2].length);
+}
+
+// Vrací 'YYYY-MM-DD' z různých formátů (date string "12.5.2026", ts, time string)
+function itemDateYmd(item){
+  if(item.ts) {
+    var d = new Date(item.ts);
+    if(!isNaN(d)) return ymd(d);
+  }
+  if(item.date) {
+    // "12. 5. 2026" nebo "12.5.2026"
+    var m = String(item.date).match(/(\d+)\.\s*(\d+)\.\s*(\d+)/);
+    if(m) return m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0');
+  }
+  if(item.time) {
+    // formát např. "12. 5. 2026, 14:23:45"
+    var m2 = String(item.time).match(/(\d+)\.\s*(\d+)\.\s*(\d+)/);
+    if(m2) return m2[3] + '-' + String(m2[2]).padStart(2,'0') + '-' + String(m2[1]).padStart(2,'0');
+  }
+  return '';
+}
+
+function applyGalleryFilters(items){
+  var kmOd = parseFloat(document.getElementById('gfilt-km-od').value);
+  var kmDo = parseFloat(document.getElementById('gfilt-km-do').value);
+  var dtOd = (document.getElementById('gfilt-date-od').value || '').trim();
+  var dtDo = (document.getElementById('gfilt-date-do').value || '').trim();
+  var aut  = (document.getElementById('gfilt-author').value || '').trim();
+  return items.filter(function(it){
+    if(!isNaN(kmOd) || !isNaN(kmDo)) {
+      var km = parseKmStr(it.km);
+      if(km === null) return false; // bez km neprochází filtr
+      if(!isNaN(kmOd) && km < kmOd) return false;
+      if(!isNaN(kmDo) && km > kmDo) return false;
+    }
+    if(dtOd || dtDo) {
+      var d = itemDateYmd(it);
+      if(!d) return false;
+      if(dtOd && d < dtOd) return false;
+      if(dtDo && d > dtDo) return false;
+    }
+    if(aut && (it.author || '').trim() !== aut) return false;
+    return true;
+  });
+}
+
+function fillGalleryAuthorOptions(items){
+  var sel = document.getElementById('gfilt-author');
+  if(!sel) return;
+  var current = sel.value;
+  var set = new Set();
+  items.forEach(function(it){ if(it.author) set.add(it.author); });
+  var arr = Array.from(set).sort(function(a,b){ return a.localeCompare(b, 'cs'); });
+  sel.innerHTML = '<option value="">— libovolný —</option>';
+  arr.forEach(function(a){
+    var opt = document.createElement('option');
+    opt.value = a; opt.textContent = a;
+    if(a === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function toggleGalleryFilter(){
+  var bar = document.getElementById('gallery-filter-bar');
+  if(!bar) return;
+  bar.style.display = (bar.style.display === 'none' || !bar.style.display) ? 'block' : 'none';
+}
+
+function clearGalleryFilters(){
+  document.getElementById('gfilt-km-od').value = '';
+  document.getElementById('gfilt-km-do').value = '';
+  document.getElementById('gfilt-date-od').value = '';
+  document.getElementById('gfilt-date-do').value = '';
+  document.getElementById('gfilt-author').value = '';
+  renderGallery();
+}
+
 function renderGallery() {
   var grid = document.getElementById('gallery-grid');
   var empty = document.getElementById('gallery-empty');
+  var cnt   = document.getElementById('gallery-count');
   grid.innerHTML = '';
   empty.style.display = 'none';
+  if(cnt) cnt.textContent = '';
 
   if(galleryTab === 0) {
     db.ref('standalone_photos').orderByChild('ts').once('value', function(snap) {
       var items = [];
       snap.forEach(function(ch) { var v = ch.val(); v.fbKey = ch.key; items.push(v); });
       items.reverse();
-      if(items.length === 0) { empty.style.display = 'block'; return; }
-      items.forEach(function(item) {
+      fillGalleryAuthorOptions(items);
+      var filtered = applyGalleryFilters(items);
+      if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
+      if(filtered.length === 0) {
+        empty.style.display = 'block';
+        empty.textContent = items.length === 0 ? 'Zatím žádné fotky' : 'Žádné fotky neodpovídají filtru';
+        return;
+      }
+      filtered.forEach(function(item) {
         var div = document.createElement('div');
         div.className = 'gallery-item';
         var img = document.createElement('img');
@@ -3905,7 +3997,7 @@ function renderGallery() {
         (function(it) { img.onclick = function() { openPhotoFs(it.url, it.fbKey); }; })(item);
         var meta = document.createElement('div');
         meta.className = 'gallery-item-meta';
-        meta.textContent = (item.km ? 'km ' + item.km : '') + (item.km && item.date ? ' • ' : '') + (item.date || '');
+        meta.textContent = (item.km ? 'km ' + item.km : '') + (item.km && item.date ? ' • ' : '') + (item.date || '') + (item.author ? ' • ' + item.author : '');
         div.appendChild(img); div.appendChild(meta);
         grid.appendChild(div);
       });
@@ -3920,8 +4012,15 @@ function renderGallery() {
       });
     });
     items.reverse();
-    if(items.length === 0) { empty.style.display = 'block'; return; }
-    items.forEach(function(item) {
+    fillGalleryAuthorOptions(items);
+    var filtered = applyGalleryFilters(items);
+    if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
+    if(filtered.length === 0) {
+      empty.style.display = 'block';
+      empty.textContent = items.length === 0 ? 'Zatím žádné fotky v poznámkách' : 'Žádné fotky neodpovídají filtru';
+      return;
+    }
+    filtered.forEach(function(item) {
       var div = document.createElement('div');
       div.className = 'gallery-item';
       var img = document.createElement('img');
@@ -6640,12 +6739,44 @@ function copyDiaryExport(){
 <!-- Fotogalerie modal -->
 <div id="gallery-modal">
   <div id="gallery-header">
-    <h3>Fotogalerie</h3>
+    <h3>Fotogalerie <span id="gallery-count" style="color:var(--text2);font-size:11px;font-weight:400;margin-left:6px;"></span></h3>
+    <button onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
     <button id="gallery-close" onclick="closeGallery()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:4px 8px;">&#x2715;</button>
   </div>
   <div id="gallery-tabs">
     <div class="gallery-tab active" id="gtab-0" onclick="switchGalleryTab(0)">&#128247; Samostatné</div>
     <div class="gallery-tab" id="gtab-1" onclick="switchGalleryTab(1)">&#128204; Z poznámek</div>
+  </div>
+  <div id="gallery-filter-bar" style="display:none;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">📏 KM od</div>
+        <input type="number" id="gfilt-km-od" step="0.001" min="0" placeholder="např. 1.5" oninput="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">📏 KM do</div>
+        <input type="number" id="gfilt-km-do" step="0.001" min="0" placeholder="např. 2.8" oninput="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">📅 Datum od</div>
+        <input type="date" id="gfilt-date-od" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">📅 Datum do</div>
+        <input type="date" id="gfilt-date-do" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">👤 Autor</div>
+        <select id="gfilt-author" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+          <option value="">— libovolný —</option>
+        </select>
+      </div>
+      <button onclick="clearGalleryFilters()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">⌫ Vynulovat</button>
+    </div>
   </div>
   <div id="gallery-body">
     <div id="gallery-empty" style="text-align:center;color:var(--text2);padding:40px 20px;font-size:14px;">Zatím žádné fotky</div>
