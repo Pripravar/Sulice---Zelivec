@@ -431,12 +431,12 @@ textarea.note-field { min-height:80px; resize:vertical; }
   overflow: visible !important;
 }
 .doplnek-pin {
-  min-width: 22px; height: 22px; padding: 0 4px;
-  border: 2px solid #fff;
-  border-radius: 11px;
+  min-width: 18px; height: 18px; padding: 0 3px;
+  border: 1.5px solid #fff;
+  border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 9px; font-weight: 800;
-  box-shadow: 0 2px 5px rgba(0,0,0,.5);
+  color: #fff; font-size: 8px; font-weight: 800;
+  box-shadow: 0 1px 3px rgba(0,0,0,.45);
   cursor: pointer;
   transition: transform .15s;
   white-space: nowrap;
@@ -1353,38 +1353,35 @@ var PROPUSTKY = [
 var PROPUSTEK_TZ = '';
 
 // DOPLŇKOVÉ SO - další stavební objekty (000=demolice, 300=IS, 400=VO, 500=plynovod)
-// km pozice = z technických zpráv. Kategorie určuje barvu markeru.
+// kmShift = posun po ose silnice (m), perpOffset = posun kolmo k ose (px)
+// → kombinace rozprostře markery hezky kolem propustků a podél osy
 var DOPLNKY_SO = [
-  // SO 000 - DEMOLICE MOSTŮ
-  {id:'SO 004', kat:'000', badge:'D1', km:2.405, perpOffset:-90,
+  // SO 000 - DEMOLICE MOSTŮ (žlutá, vlevo nad osou, kmShift -40m)
+  {id:'SO 004', kat:'000', badge:'D1', km:2.405, kmShift:-0.040, perpOffset:-90,
    nazev:'SO 004 - Demolice mostu 603-010 (km 2,405)',
    vykresy:[
      {typ:'📐 Výkres',       nazev:'Výkres SO 004',                       soubor:PDF_BASE+'SO_004/D_004_2_Vykres_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 004',              soubor:PDF_BASE+'SO_004/D_004_1_Technicka_zprava_PDPS.pdf'},
-     {typ:'📑 Rozpiska',     nazev:'Rozpiska SO 004',                      soubor:PDF_BASE+'SO_004/_SO_004_Rozpiska_Desky_PDPS.pdf'},
-     {typ:'📚 Seznam',       nazev:'Seznam příloh SO 004',                 soubor:PDF_BASE+'SO_004/_SO_004_Seznam_Priloh_PDPS.pdf'},
    ]},
-  {id:'SO 005', kat:'000', badge:'D2', km:3.071, perpOffset:-90,
+  {id:'SO 005', kat:'000', badge:'D2', km:3.071, kmShift:-0.040, perpOffset:-90,
    nazev:'SO 005 - Demolice mostu 603-011 (km 3,071)',
    vykresy:[
      {typ:'📐 Výkres',       nazev:'Výkres SO 005',                       soubor:PDF_BASE+'SO_005/D_005_2_Vykres_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 005',              soubor:PDF_BASE+'SO_005/D_005_1_Technicka_zprava_PDPS.pdf'},
-     {typ:'📑 Rozpiska',     nazev:'Rozpiska SO 005',                      soubor:PDF_BASE+'SO_005/_SO_005_Rozpiska_Desky_PDPS.pdf'},
-     {typ:'📚 Seznam',       nazev:'Seznam příloh SO 005',                 soubor:PDF_BASE+'SO_005/_SO_005_Seznam_Priloh_PDPS.pdf'},
    ]},
-  // SO 300 - PŘELOŽKA KANALIZACE / VODOVODU
-  {id:'SO 335', kat:'300', badge:'K5', km:3.071, perpOffset:-60,
+  // SO 300 - IS (tyrkysová, vlevo nad osou, kmShift -25m, dvě úrovně perp)
+  {id:'SO 335', kat:'300', badge:'K5', km:3.071, kmShift:-0.025, perpOffset:-80,
    nazev:'SO 335 - Ochrana / úprava kanalizace v úseku 5 (km 3,071)',
    vykresy:[
      {typ:'📋 TZ + výkresy', nazev:'Technická zpráva + výkresy SO 335',    soubor:PDF_BASE+'SO_335/D3_SO_335_1_Technicka zprava_vykresy.pdf'},
    ]},
-  {id:'SO 345', kat:'300', badge:'V5', km:3.071, perpOffset:-32,
+  {id:'SO 345', kat:'300', badge:'V5', km:3.071, kmShift:-0.025, perpOffset:-50,
    nazev:'SO 345 - Přeložka a ochrana vodovodu v úseku 5 (km 3,071)',
    vykresy:[
      {typ:'📋 TZ + výkresy', nazev:'Technická zpráva + výkresy SO 345',    soubor:PDF_BASE+'SO_345/D3_SO_345_2_Technicka zprava_vykresy.pdf'},
    ]},
-  // SO 400 - VEŘEJNÉ OSVĚTLENÍ
-  {id:'SO 441', kat:'400', badge:'VO1', km:2.756, perpOffset:55,
+  // SO 400 - VO (oranžová, vpravo pod osou, kmShift +25m)
+  {id:'SO 441', kat:'400', badge:'VO1', km:2.756, kmShift:0, perpOffset:55,
    nazev:'SO 441 - Doplnění VO v úseku 1 (km 2,756)',
    vykresy:[
      {typ:'📐 Situace',      nazev:'Situace SO 441',                       soubor:PDF_BASE+'SO_441/D4_SO441_02_PP_Situace_PDPS.pdf'},
@@ -1392,59 +1389,53 @@ var DOPLNKY_SO = [
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 441',              soubor:PDF_BASE+'SO_441/D4_SO441_01_PP_TZ_PDPS.pdf'},
      {typ:'🧮 Výpočet',       nazev:'Výpočet SO 441',                       soubor:PDF_BASE+'SO_441/D4_SO441_04_PP_Vypocet_PDPS.pdf'},
      {typ:'📊 VV',            nazev:'Výkaz výměr SO 441',                   soubor:PDF_BASE+'SO_441/D4_SO441_05_PP_VV_PDPS.pdf'},
-     {typ:'📚 Obsah',         nazev:'Obsah SO 441',                         soubor:PDF_BASE+'SO_441/D4_SO441_00_PP_Obsah_PDPS.pdf'},
    ]},
-  {id:'SO 443', kat:'400', badge:'VO3', km:1.190, perpOffset:55,
+  {id:'SO 443', kat:'400', badge:'VO3', km:1.190, kmShift:0, perpOffset:55,
    nazev:'SO 443 - Doplnění a úprava VO v úseku 3 - OK (kruháč, km 1,19)',
    vykresy:[
      {typ:'📐 Situace',      nazev:'Situace SO 443',                       soubor:PDF_BASE+'SO_443/D4_SO443_02_VO_Situace_PDPS.pdf'},
      {typ:'✂️ Řezy',          nazev:'Řezy SO 443',                          soubor:PDF_BASE+'SO_443/D4_SO443_03_VO_Rezy_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 443',              soubor:PDF_BASE+'SO_443/D4_SO443_01_VO_TZ_PDPS.pdf'},
      {typ:'📊 VV',            nazev:'Výkaz výměr SO 443',                   soubor:PDF_BASE+'SO_443/D4_SO443_04_VO_VV_PDPS.pdf'},
-     {typ:'📚 Obsah',         nazev:'Obsah SO 443',                         soubor:PDF_BASE+'SO_443/D4_SO443_00_VO_Obsah_PDPS.pdf'},
    ]},
-  {id:'SO 444', kat:'400', badge:'VO4', km:2.405, perpOffset:55,
+  {id:'SO 444', kat:'400', badge:'VO4', km:2.405, kmShift:0.025, perpOffset:55,
    nazev:'SO 444 - Ochrana / úprava kabelů VO v úseku 4 (km 2,405)',
    vykresy:[
      {typ:'📐 Situace',      nazev:'Situace SO 444',                       soubor:PDF_BASE+'SO_444/D4_SO444_02_VO_Situace_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 444',              soubor:PDF_BASE+'SO_444/D4_SO444_01_VO_TZ_PDPS.pdf'},
      {typ:'📊 VV',            nazev:'Výkaz výměr SO 444',                   soubor:PDF_BASE+'SO_444/D4_SO444_03_VO_VV_PDPS.pdf'},
-     {typ:'📚 Obsah',         nazev:'Obsah SO 444',                         soubor:PDF_BASE+'SO_444/D4_SO444_00_VO_Obsah_PDPS.pdf'},
    ]},
-  {id:'SO 445', kat:'400', badge:'VO5', km:3.071, perpOffset:55,
+  {id:'SO 445', kat:'400', badge:'VO5', km:3.071, kmShift:0.025, perpOffset:55,
    nazev:'SO 445 - Ochrana / úprava kabelů VO v úseku 5 (km 3,071)',
    vykresy:[
      {typ:'📐 Situace',      nazev:'Situace SO 445',                       soubor:PDF_BASE+'SO_445/D4_SO445_02_VO_Situace_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 445',              soubor:PDF_BASE+'SO_445/D4_SO445_01_VO_TZ_PDPS.pdf'},
      {typ:'📊 VV',            nazev:'Výkaz výměr SO 445',                   soubor:PDF_BASE+'SO_445/D4_SO445_03_VO_VV_PDPS.pdf'},
-     {typ:'📚 Obsah',         nazev:'Obsah SO 445',                         soubor:PDF_BASE+'SO_445/D4_SO445_00_VO_Obsah_PDPS.pdf'},
    ]},
-  {id:'SO 446', kat:'400', badge:'VO6', km:3.46, perpOffset:55,
+  {id:'SO 446', kat:'400', badge:'VO6', km:3.46, kmShift:0, perpOffset:55,
    nazev:'SO 446 - Doplnění VO v úseku 6 (Nová Hospoda, km 3,46)',
    vykresy:[
      {typ:'📐 Situace',      nazev:'Situace SO 446',                       soubor:PDF_BASE+'SO_446/D4_SO446_02_VO_Situace_PDPS.pdf'},
      {typ:'✂️ Řezy',          nazev:'Řezy SO 446',                          soubor:PDF_BASE+'SO_446/D4_SO446_03_VO_Rezy_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 446',              soubor:PDF_BASE+'SO_446/D4_SO446_01_VO_TZ_PDPS.pdf'},
      {typ:'📊 VV',            nazev:'Výkaz výměr SO 446',                   soubor:PDF_BASE+'SO_446/D4_SO446_04_VO_VV_PDPS.pdf'},
-     {typ:'📚 Obsah',         nazev:'Obsah SO 446',                         soubor:PDF_BASE+'SO_446/D4_SO446_00_VO_Obsah_PDPS.pdf'},
    ]},
-  {id:'SO 447', kat:'400', badge:'VO7', km:4.5, perpOffset:55,
+  {id:'SO 447', kat:'400', badge:'VO7', km:4.5, kmShift:0, perpOffset:55,
    nazev:'SO 447 - Doplnění VO v úseku 7 - zpomalovací ostrůvek (km 4,5)',
    vykresy:[
      {typ:'📐 Situace',      nazev:'Situace SO 447',                       soubor:PDF_BASE+'SO_447/D4_SO447_02_VO_Situace_PDPS.pdf'},
      {typ:'✂️ Řezy',          nazev:'Řezy SO 447',                          soubor:PDF_BASE+'SO_447/D4_SO447_03_VO_Rezy_PDPS.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 447',              soubor:PDF_BASE+'SO_447/D4_SO447_01_VO_TZ_PDPS.pdf'},
      {typ:'📊 VV',            nazev:'Výkaz výměr SO 447',                   soubor:PDF_BASE+'SO_447/D4_SO447_04_VO_VV_PDPS.pdf'},
-     {typ:'📚 Obsah',         nazev:'Obsah SO 447',                         soubor:PDF_BASE+'SO_447/D4_SO447_00_VO_Obsah_PDPS.pdf'},
    ]},
-  // SO 500 - PLYNOVOD STL
-  {id:'SO 524', kat:'500', badge:'P4', km:2.405, perpOffset:85,
+  // SO 500 - PLYNOVOD STL (červená, vpravo pod osou, kmShift +50m)
+  {id:'SO 524', kat:'500', badge:'P4', km:2.405, kmShift:0.050, perpOffset:85,
    nazev:'SO 524 - Ochrana / úprava STL plynovodů v úseku 4 (km 2,405)',
    vykresy:[
      {typ:'📐 Výkres',       nazev:'Ochrana STL plynovodu v úseku 4',       soubor:PDF_BASE+'SO_524/D_5_2_1_SO_524_Ochrana_uprava_STL_plynovodu_v_useku_4.pdf'},
      {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 524 / 525',         soubor:PDF_BASE+'SO_524/Technicka_zprava_SO524_525.pdf'},
    ]},
-  {id:'SO 525', kat:'500', badge:'P5', km:3.071, perpOffset:85,
+  {id:'SO 525', kat:'500', badge:'P5', km:3.071, kmShift:0.050, perpOffset:85,
    nazev:'SO 525 - Ochrana / úprava STL plynovodů v úseku 5 (km 3,071)',
    vykresy:[
      {typ:'📐 Výkres',       nazev:'Ochrana STL plynovodu v úseku 5',       soubor:PDF_BASE+'SO_525/D_5_2_2_SO_525_Ochrana_uprava_STL_plynovodu_v_useku_5.pdf'},
@@ -3441,15 +3432,17 @@ function buildDoplnky() {
   layerGroups.doplnky = doplnkyLayer;
 
   DOPLNKY_SO.forEach(function(d) {
-    var pos = realKmToLatLng(d.km);
+    // posun po ose silnice (kmShift) - rozprostře markery podél osy
+    var effKm = d.km + (d.kmShift || 0);
+    var pos = realKmToLatLng(effKm);
     if(!pos) return;
-    var gpxM = interp(calibSorted,'realKm','gpxM', d.km);
+    var gpxM = interp(calibSorted,'realKm','gpxM', effKm);
     var bear = bearingAtGpxM(gpxM);
     var perpRad = (bear - 90) * Math.PI / 180; // perpendikulárně k ose
     var offset = d.perpOffset || 60;
     var dx = Math.sin(perpRad) * offset;
     var dy = -Math.cos(perpRad) * offset;
-    var DW = 80, DH = 24;
+    var DW = 60, DH = 20;
     var ancX = Math.round(DW/2 + dx);
     var ancY = Math.round(DH/2 + dy);
 
