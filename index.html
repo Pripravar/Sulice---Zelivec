@@ -24,6 +24,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <!-- pdf-lib pro úpravu PDF (vkládání podpisů do TePř) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<!-- JSZip pro hromadné stažení fotek jako ZIP -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- piexifjs pro zápis EXIF data pořízení do fotek (aby je iOS Photos zařadil podle data pořízení, ne podle data stažení) -->
+<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 :root {
@@ -680,6 +684,17 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .gallery-item-meta { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.6); color:#fff; font-size:9px; border-radius:0 0 6px 6px; padding:2px 4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gallery-note-badge { position:absolute; top:3px; right:3px; background:rgba(233,69,96,0.85); color:#fff; font-size:9px; border-radius:3px; padding:1px 4px; }
 #gallery-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:14px; }
+/* Režim hromadného výběru fotek */
+.gallery-item .gsel-check { position:absolute; top:4px; left:4px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.55); border:2px solid #fff; display:none; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700; z-index:2; }
+#gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
+#gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
+#gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
+#gallery-actionbar { background:var(--panel); border-top:1px solid var(--border); padding:10px 12px; padding-bottom:calc(10px + env(safe-area-inset-bottom)); display:none; gap:8px; align-items:center; flex-shrink:0; }
+#gallery-actionbar.show { display:flex; }
+#gallery-actionbar .gab-count { flex:1; color:var(--text); font-size:13px; font-weight:600; }
+#gallery-actionbar button { background:var(--accent2); color:#0f3460; border:none; border-radius:8px; padding:9px 14px; font-size:13px; font-weight:700; cursor:pointer; }
+#gallery-actionbar button.secondary { background:var(--panel2); color:var(--text); }
+#gallery-select-btn.on { background:var(--accent2) !important; color:#0f3460 !important; }
 
 /* ═══════════════════════════════════════════════════════
    AUTH GATE + UŽIVATEL + ÚKOLNÍČEK (přidáno 2026-05-12)
@@ -2869,13 +2884,16 @@ function closeNoteDetail() {
 }
 
 var _photoFsKey = null;
+var _photoFsItem = null;  // celá meta fotky (kvůli datu pořízení při stahování)
 
-function openPhotoFs(src, firebaseKey) {
+function openPhotoFs(src, firebaseKey, item) {
   var url = (typeof src === 'string') ? src : src.src;
   document.getElementById('photo-fs-img').src = url;
   var ob = document.getElementById('photo-fs-open');
   if(ob) ob.href = url;
   _photoFsKey = firebaseKey || null;
+  _photoFsItem = item || (typeof src === 'object' ? src : { url: url });
+  if(!_photoFsItem.url) _photoFsItem.url = url;
   var delBtn = document.getElementById('photo-fs-delete');
   if(delBtn) delBtn.style.display = _photoFsKey ? 'inline-block' : 'none';
   document.getElementById('photo-fs').classList.add('open');
@@ -2885,7 +2903,247 @@ function openPhotoFs(src, firebaseKey) {
 function closePhotoFs() {
   document.getElementById('photo-fs').classList.remove('open');
   _photoFsKey = null;
+  _photoFsItem = null;
   lockViewport();
+}
+
+// ── Stahování fotek s datem pořízení ──────────────────────────────
+// Vrátí Date z meta fotky. Preferuje item.ts (Date.now()), pak parsuje 'time'/'date' string.
+function photoCreationDate(item) {
+  if(!item) return new Date();
+  if(item.ts && !isNaN(item.ts)) {
+    var d = new Date(item.ts);
+    if(!isNaN(d)) return d;
+  }
+  // 'time' formát: "12. 5. 2026, 14:23:45" nebo podobné
+  var s = item.time || item.date || '';
+  var m = String(s).match(/(\d+)\.\s*(\d+)\.\s*(\d+)(?:,?\s*(\d+):(\d+)(?::(\d+))?)?/);
+  if(m) {
+    var dd = parseInt(m[1],10), mm = parseInt(m[2],10)-1, yy = parseInt(m[3],10);
+    var hh = m[4]?parseInt(m[4],10):12, mi = m[5]?parseInt(m[5],10):0, ss = m[6]?parseInt(m[6],10):0;
+    var d2 = new Date(yy, mm, dd, hh, mi, ss);
+    if(!isNaN(d2)) return d2;
+  }
+  return new Date();
+}
+
+function pad2(n){ return (n<10?'0':'')+n; }
+
+// Souborové jméno: sulice_2026-05-12_1423_km1+540_Ondrej.jpg
+function photoFilename(item, idx) {
+  var d = photoCreationDate(item);
+  var base = 'sulice_' + d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate())
+           + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
+  if(item && item.km) base += '_km' + String(item.km).replace(/\s+/g,'').replace(/[^\w+\-.]/g,'');
+  if(item && item.author) base += '_' + String(item.author).replace(/\s+/g,'_').replace(/[^\w\-]/g,'');
+  if(typeof idx === 'number') base += '_' + (idx+1);
+  return base + '.jpg';
+}
+
+// piexif datum formát "YYYY:MM:DD HH:MM:SS"
+function exifDateString(d) {
+  return d.getFullYear() + ':' + pad2(d.getMonth()+1) + ':' + pad2(d.getDate())
+       + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+
+// Stáhne blob a vrátí Promise<{blob, dataUrl}>
+function fetchPhotoAsBlob(url) {
+  return fetch(url, { mode:'cors' }).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.blob();
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise(function(resolve, reject){
+    var fr = new FileReader();
+    fr.onload = function(){ resolve(fr.result); };
+    fr.onerror = function(e){ reject(e); };
+    fr.readAsDataURL(blob);
+  });
+}
+
+// Vloží EXIF DateTimeOriginal (datum pořízení) do JPEG dataURL. Vrací nový dataURL.
+function setExifCreationDate(jpegDataUrl, date) {
+  try {
+    if(typeof piexif === 'undefined') return jpegDataUrl;
+    var exifObj;
+    try { exifObj = piexif.load(jpegDataUrl); } catch(e) { exifObj = {"0th":{}, "Exif":{}, "GPS":{}, "Interop":{}, "1st":{}, "thumbnail":null}; }
+    if(!exifObj["0th"]) exifObj["0th"] = {};
+    if(!exifObj["Exif"]) exifObj["Exif"] = {};
+    var ds = exifDateString(date);
+    exifObj["0th"][piexif.ImageIFD.DateTime] = ds;
+    exifObj["Exif"][piexif.ExifIFD.DateTimeOriginal] = ds;
+    exifObj["Exif"][piexif.ExifIFD.DateTimeDigitized] = ds;
+    var exifBytes = piexif.dump(exifObj);
+    return piexif.insert(exifBytes, jpegDataUrl);
+  } catch(e) {
+    console.warn('EXIF write failed', e);
+    return jpegDataUrl;
+  }
+}
+
+// Připraví fotku ke stažení (blob s EXIF datem). Vrací Promise<Blob>.
+function preparePhotoBlobForDownload(item) {
+  var d = photoCreationDate(item);
+  return fetchPhotoAsBlob(item.url).then(function(blob){
+    // Jen JPEG dokážeme upravit EXIF, jinak stáhneme tak jak je
+    if(blob.type && blob.type.indexOf('jpeg') === -1 && blob.type.indexOf('jpg') === -1) {
+      return blob;
+    }
+    return blobToDataUrl(blob).then(function(dataUrl){
+      var newDataUrl = setExifCreationDate(dataUrl, d);
+      // dataURL → Blob
+      var byteString = atob(newDataUrl.split(',')[1]);
+      var ab = new ArrayBuffer(byteString.length);
+      var ia = new Uint8Array(ab);
+      for(var i=0; i<byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+      return new Blob([ab], { type:'image/jpeg' });
+    });
+  });
+}
+
+function triggerBlobDownload(blob, filename) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 500);
+}
+
+// Stažení aktuální fotky z fullscreen náhledu - s datem pořízení v EXIF i ve jménu
+function downloadCurrentFsPhoto() {
+  var item = _photoFsItem;
+  if(!item || !item.url) { showToast('❌ Žádná fotka', 1500); return; }
+  showSync('⏳ Připravuji stažení...');
+  preparePhotoBlobForDownload(item)
+    .then(function(blob){
+      triggerBlobDownload(blob, photoFilename(item));
+      hideSync();
+      showToast('✅ Staženo s datem ' + new Date(photoCreationDate(item)).toLocaleDateString('cs-CZ'), 2200);
+    })
+    .catch(function(err){
+      console.error('Download error', err);
+      hideSync();
+      // Fallback: otevřít v novém tabu (uživatel může uložit ručně)
+      window.open(item.url, '_blank');
+      showToast('⚠️ Použito otevření v prohlížeči', 2500);
+    });
+}
+
+// ── Hromadný výběr fotek v galerii ────────────────────────────────
+var gallerySelectMode = false;
+var gallerySelectedKeys = {};   // mapa stringKey → item
+var galleryCurrentItems = [];   // aktuálně vykreslené (po filtru) items
+
+function _galleryItemKey(item) {
+  return item.fbKey || (item.noteId ? ('n:'+item.noteId+':'+item.url) : ('u:'+item.url));
+}
+
+function toggleGallerySelectMode() {
+  gallerySelectMode = !gallerySelectMode;
+  gallerySelectedKeys = {};
+  var grid = document.getElementById('gallery-grid');
+  var btn  = document.getElementById('gallery-select-btn');
+  var bar  = document.getElementById('gallery-actionbar');
+  if(grid) grid.classList.toggle('selectmode', gallerySelectMode);
+  if(btn)  btn.classList.toggle('on', gallerySelectMode);
+  if(btn)  btn.textContent = gallerySelectMode ? '✕ Konec' : '☑️ Vybrat';
+  if(bar)  bar.classList.toggle('show', gallerySelectMode);
+  _updateGallerySelectionUI();
+}
+
+function _updateGallerySelectionUI() {
+  var n = Object.keys(gallerySelectedKeys).length;
+  var c = document.getElementById('gab-count');
+  if(c) c.textContent = 'Vybráno: ' + n;
+  // Promítnout třídu .selected na DOM (kdyby se mezitím překreslila mřížka)
+  document.querySelectorAll('#gallery-grid .gallery-item').forEach(function(div){
+    var k = div.getAttribute('data-gk');
+    if(k && gallerySelectedKeys[k]) div.classList.add('selected');
+    else div.classList.remove('selected');
+  });
+}
+
+function _toggleGallerySelection(item, div) {
+  var k = _galleryItemKey(item);
+  if(gallerySelectedKeys[k]) { delete gallerySelectedKeys[k]; div.classList.remove('selected'); }
+  else { gallerySelectedKeys[k] = item; div.classList.add('selected'); }
+  _updateGallerySelectionUI();
+}
+
+function selectAllVisibleGallery() {
+  galleryCurrentItems.forEach(function(it){
+    gallerySelectedKeys[_galleryItemKey(it)] = it;
+  });
+  _updateGallerySelectionUI();
+}
+
+function clearGallerySelection() {
+  gallerySelectedKeys = {};
+  _updateGallerySelectionUI();
+}
+
+function downloadSelectedGalleryPhotos() {
+  var items = Object.values(gallerySelectedKeys);
+  if(items.length === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
+  if(items.length === 1) {
+    // Jednu fotku stáhneme přímo (rychlejší, bez ZIPu)
+    showSync('⏳ Stahuji fotku...');
+    preparePhotoBlobForDownload(items[0])
+      .then(function(blob){
+        triggerBlobDownload(blob, photoFilename(items[0]));
+        hideSync();
+        showToast('✅ Staženo', 1800);
+      })
+      .catch(function(err){
+        console.error(err); hideSync();
+        showToast('❌ Stažení selhalo: ' + (err.message||err), 2800);
+      });
+    return;
+  }
+  // Více fotek → ZIP
+  if(typeof JSZip === 'undefined') {
+    showToast('❌ JSZip se nenahrál, zkus znovu', 2500);
+    return;
+  }
+  var zip = new JSZip();
+  var total = items.length, done = 0, failed = 0;
+  showSync('⏳ Stahuji 0/' + total + '...');
+  var promises = items.map(function(it, idx){
+    return preparePhotoBlobForDownload(it)
+      .then(function(blob){
+        var name = photoFilename(it, idx);
+        // Zajistit unikátní jméno v ZIPu
+        var n = name, k = 1;
+        while(zip.file(n)) { n = name.replace(/\.jpg$/i, '_' + (k++) + '.jpg'); }
+        zip.file(n, blob);
+        done++;
+        showSync('⏳ Stahuji ' + done + '/' + total + '...');
+      })
+      .catch(function(err){ console.warn('skip photo', err); failed++; done++; });
+  });
+  Promise.all(promises).then(function(){
+    showSync('⏳ Balím ZIP...');
+    return zip.generateAsync({ type:'blob', compression:'STORE' });
+  }).then(function(blob){
+    var d = new Date();
+    var fname = 'sulice_fotky_' + d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate())
+              + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + '_' + (total-failed) + 'ks.zip';
+    triggerBlobDownload(blob, fname);
+    hideSync();
+    if(failed) showToast('⚠ Hotovo: ' + (total-failed) + '/' + total + ' (' + failed + ' selhalo)', 3500);
+    else       showToast('✅ ZIP stažen (' + total + ' fotek)', 2500);
+  }).catch(function(err){
+    console.error(err); hideSync();
+    showToast('❌ Vytvoření ZIPu selhalo', 2800);
+  });
 }
 
 function deleteStandalonePhoto() {
@@ -4027,6 +4285,8 @@ function openGallery() {
 
 function closeGallery() {
   document.getElementById('gallery-modal').classList.remove('open');
+  // Reset režimu výběru
+  if(gallerySelectMode) toggleGallerySelectMode();
   lockViewport();
 }
 
@@ -4034,6 +4294,8 @@ function switchGalleryTab(tab) {
   galleryTab = tab;
   document.getElementById('gtab-0').classList.toggle('active', tab === 0);
   document.getElementById('gtab-1').classList.toggle('active', tab === 1);
+  // Při přepnutí tabu vyčistit výběr (jiný obsah)
+  gallerySelectedKeys = {};
   renderGallery();
 }
 
@@ -4135,6 +4397,7 @@ function renderGallery() {
       items.reverse();
       fillGalleryAuthorOptions(items);
       var filtered = applyGalleryFilters(items);
+      galleryCurrentItems = filtered;
       if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
       if(filtered.length === 0) {
         empty.style.display = 'block';
@@ -4144,15 +4407,27 @@ function renderGallery() {
       filtered.forEach(function(item) {
         var div = document.createElement('div');
         div.className = 'gallery-item';
+        var k = _galleryItemKey(item);
+        div.setAttribute('data-gk', k);
+        if(gallerySelectedKeys[k]) div.classList.add('selected');
         var img = document.createElement('img');
         img.src = item.url; img.loading = 'lazy';
-        (function(it) { img.onclick = function() { openPhotoFs(it.url, it.fbKey); }; })(item);
+        (function(it, divRef) {
+          img.onclick = function() {
+            if(gallerySelectMode) { _toggleGallerySelection(it, divRef); }
+            else { openPhotoFs(it.url, it.fbKey, it); }
+          };
+        })(item, div);
+        var chk = document.createElement('div');
+        chk.className = 'gsel-check';
+        chk.textContent = '✓';
         var meta = document.createElement('div');
         meta.className = 'gallery-item-meta';
         meta.textContent = (item.km ? 'km ' + item.km : '') + (item.km && item.date ? ' • ' : '') + (item.date || '') + (item.author ? ' • ' + item.author : '');
-        div.appendChild(img); div.appendChild(meta);
+        div.appendChild(img); div.appendChild(chk); div.appendChild(meta);
         grid.appendChild(div);
       });
+      _updateGallerySelectionUI();
     });
   } else {
     var items = [];
@@ -4166,6 +4441,7 @@ function renderGallery() {
     items.reverse();
     fillGalleryAuthorOptions(items);
     var filtered = applyGalleryFilters(items);
+    galleryCurrentItems = filtered;
     if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
     if(filtered.length === 0) {
       empty.style.display = 'block';
@@ -4175,18 +4451,36 @@ function renderGallery() {
     filtered.forEach(function(item) {
       var div = document.createElement('div');
       div.className = 'gallery-item';
+      var k = _galleryItemKey(item);
+      div.setAttribute('data-gk', k);
+      if(gallerySelectedKeys[k]) div.classList.add('selected');
       var img = document.createElement('img');
       img.src = item.url; img.loading = 'lazy';
-      img.onclick = function() { openPhotoFs(item.url); };
+      (function(it, divRef) {
+        img.onclick = function() {
+          if(gallerySelectMode) { _toggleGallerySelection(it, divRef); }
+          else { openPhotoFs(it.url, null, it); }
+        };
+      })(item, div);
+      var chk = document.createElement('div');
+      chk.className = 'gsel-check';
+      chk.textContent = '✓';
       var badge = document.createElement('div');
       badge.className = 'gallery-note-badge'; badge.textContent = '📌';
-      badge.onclick = function(e) { e.stopPropagation(); closeGallery(); openNoteDetail(item.noteId); };
+      (function(it){
+        badge.onclick = function(e) {
+          e.stopPropagation();
+          if(gallerySelectMode) return; // v režimu výběru badge ignoruj
+          closeGallery(); openNoteDetail(it.noteId);
+        };
+      })(item);
       var meta = document.createElement('div');
       meta.className = 'gallery-item-meta';
       meta.textContent = (item.km ? 'km ' + item.km : '') + (item.km && item.author ? ' • ' : '') + (item.author || '');
-      div.appendChild(img); div.appendChild(badge); div.appendChild(meta);
+      div.appendChild(img); div.appendChild(chk); div.appendChild(badge); div.appendChild(meta);
       grid.appendChild(div);
     });
+    _updateGallerySelectionUI();
   }
 }
 
@@ -7262,10 +7556,11 @@ function copyDiaryExport(){
 <!-- Fullscreen foto -->
 <div id="photo-fs" onclick="if(event.target===this||event.target.id==='photo-fs-img')closePhotoFs()">
   <img id="photo-fs-img" src="" style="max-width:100%;max-height:calc(100% - 60px);object-fit:contain;">
-  <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:10px;background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
-    <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;">&#128247; Otevřít / Uložit</a>
-    <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">&#128465; Smazat</button>
-    <button onclick="closePhotoFs()" style="background:#333;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:14px;cursor:pointer;">Zavít</button>
+  <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
+    <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="background:var(--accent2);color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout s datem</button>
+    <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">&#128247; Otevřít</a>
+    <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;background:#e94560;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">&#128465; Smazat</button>
+    <button onclick="closePhotoFs()" style="background:#333;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;">Zavřít</button>
   </div>
 </div>
 
@@ -7277,6 +7572,7 @@ function copyDiaryExport(){
 <div id="gallery-modal">
   <div id="gallery-header">
     <h3>Fotogalerie <span id="gallery-count" style="color:var(--text2);font-size:11px;font-weight:400;margin-left:6px;"></span></h3>
+    <button id="gallery-select-btn" onclick="toggleGallerySelectMode()" title="Hromadný výběr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">☑️ Vybrat</button>
     <button onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
     <button id="gallery-close" onclick="closeGallery()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:4px 8px;">&#x2715;</button>
   </div>
@@ -7318,6 +7614,12 @@ function copyDiaryExport(){
   <div id="gallery-body">
     <div id="gallery-empty" style="text-align:center;color:var(--text2);padding:40px 20px;font-size:14px;">Zatím žádné fotky</div>
     <div class="gallery-grid" id="gallery-grid"></div>
+  </div>
+  <div id="gallery-actionbar">
+    <span class="gab-count" id="gab-count">Vybráno: 0</span>
+    <button class="secondary" onclick="selectAllVisibleGallery()">Vše</button>
+    <button class="secondary" onclick="clearGallerySelection()">Žádné</button>
+    <button onclick="downloadSelectedGalleryPhotos()">⬇ Stáhnout</button>
   </div>
 </div>
 
