@@ -451,6 +451,22 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .doplnek-pin.cat-400 { background: #f97316; }                   /* oranžová - VO */
 .doplnek-pin.cat-500 { background: #ef4444; }                   /* červená - plynovod */
 
+/* NN nadzemní vedení - žlutý kruh s bleskem */
+.nn-marker { background:transparent !important; border:none !important; overflow:visible !important; }
+.nn-pin {
+  width:26px; height:26px;
+  background:#facc15;
+  color:#1a1a2e;
+  border:2px solid #1a1a2e;
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; font-weight:800;
+  box-shadow:0 2px 5px rgba(0,0,0,0.45);
+  cursor:pointer;
+  transition:transform .15s;
+}
+.nn-pin:hover { transform:scale(1.2); }
+
 /* Propustek detail panel */
 #prop-panel {
   position: fixed;
@@ -1458,6 +1474,17 @@ var DOPLNKY_SO = [
    ]},
 ];
 
+// NN NADZEMNÍ VEDENÍ - křížení s osou silnice (značka ⚡, popup "NN nadzemní")
+// Poznámka: úsek km 0,145-0,186 obsahuje 3 křížení (značky na 0,145 / 0,166 / 0,186)
+var VEDENI_NN = [
+  {km: 0.077},
+  {km: 0.145},
+  {km: 0.166},
+  {km: 0.186},
+  {km: 0.234},
+  {km: 0.266},
+];
+
 // PRACOVNÍ ŘEZY - PDPS Sulice je nemá, prázdná lookup mapa
 var DOCS_PR = {};
 function findPR(realKm) { return null; }
@@ -2233,6 +2260,7 @@ function init() {
   if(CISTENI_PRIKOPY.vpravo.length || CISTENI_PRIKOPY.vlevo.length) buildPrikopy();
   buildPropustky();
   buildDoplnky();
+  buildVedeniNN();
   map.fitBounds(L.latLngBounds(GPX_POINTS.map(function(p){return[p[0],p[1]];})),{padding:[40,40]});
   startGPS();
   loadNotes();
@@ -3710,6 +3738,29 @@ function buildDoplnky() {
     var m = L.marker(pos, {icon:icon, interactive:true, zIndexOffset:180});
     (function(dop){ m.on('click', function(e){ L.DomEvent.stopPropagation(e); openPropPanel(dop); }); })(d);
     m.addTo(doplnkyLayer);
+  });
+}
+
+// NN nadzemní vedení - značky ⚡ s popupem "NN nadzemní"
+var vedeniNNLayer = null;
+function buildVedeniNN() {
+  vedeniNNLayer = L.layerGroup().addTo(map);
+  layerGroups.vedeniNN = vedeniNNLayer;
+  if(!Array.isArray(VEDENI_NN) || !VEDENI_NN.length) return;
+  VEDENI_NN.forEach(function(v) {
+    var pos = realKmToLatLng(v.km);
+    if(!pos) return;
+    var html = '<div class="nn-pin" title="NN nadzemní">⚡</div>';
+    var icon = L.divIcon({className:'nn-marker', html:html, iconSize:[26,26], iconAnchor:[13,13]});
+    var m = L.marker(pos, {icon:icon, interactive:true, zIndexOffset:170});
+    var kmStr = v.km.toFixed(3).replace('.', ',');
+    var popupHtml = '<div style="text-align:center;font-size:13px;padding:2px 4px;">' +
+      '<div style="font-size:22px;line-height:1;margin-bottom:4px;">⚡</div>' +
+      '<div style="font-weight:700;color:#0f3460;">NN nadzemní</div>' +
+      '<div style="font-size:11px;color:#666;margin-top:3px;">km ' + kmStr + '</div>' +
+      '</div>';
+    m.bindPopup(popupHtml, {closeButton:true, autoPan:true});
+    m.addTo(vedeniNNLayer);
   });
 }
 
