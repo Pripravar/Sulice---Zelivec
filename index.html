@@ -4481,55 +4481,64 @@ function ppAnswer(yes) {
 
     // VŽDY ukládáme obě verze (originál + s razítkem). 'yes' = uživatelova preference pro galerii.
     // V galerii pak vidí jen tu verzi co si přál; ale obě jsou k dispozici pro download.
+    // Důležité: GitHub API neumí 2 paralelní PUTy do stejné větve - musí jít SEKVENČNĚ,
+    // jinak druhý request selže s 409 (parent SHA konflikt).
     showSync('⏳ Připravuji razítko...');
     burnInMetadata(compressed, meta.km, meta.author, function(stampedDataUrl) {
       var t = Date.now();
       var fnOrig  = 'standalone/foto_' + t + '_o.jpg';   // _o = original
       var fnStamp = 'standalone/foto_' + t + '_s.jpg';   // _s = stamped
 
-      showSync('⏳ Nahrávám 2 verze...');
-      Promise.all([
-        uploadPhotoToGitHubP(compressed, fnOrig),
-        uploadPhotoToGitHubP(stampedDataUrl, fnStamp)
-      ]).then(function(results) {
-        var urlOrig  = results[0];
-        var urlStamp = results[1];
-        if(!urlOrig && !urlStamp) {
+      // Pořadí uploadu: nejdřív preferovaná verze (aby v případě selhání 2. uploadu
+      // měla galerie aspoň tu správnou). 'yes'=true → nejdřív razítko, jinak originál.
+      var firstSrc, firstFn, secondSrc, secondFn;
+      if(yes) { firstSrc = stampedDataUrl; firstFn = fnStamp; secondSrc = compressed;      secondFn = fnOrig;  }
+      else    { firstSrc = compressed;      firstFn = fnOrig;  secondSrc = stampedDataUrl; secondFn = fnStamp; }
+
+      showSync('⏳ Nahrávám 1/2...');
+      uploadPhotoToGitHubP(firstSrc, firstFn).then(function(url1){
+        if(!url1) {
           hideSync();
-          showToast('❌ Upload obou verzí selhal', 3000);
+          showToast('❌ Upload preferované verze selhal', 3000);
           _showContinuePrompt();
           return;
         }
-        // 'url' = co se zobrazí v galerii (= co si uživatel přál)
-        var visibleUrl = yes ? (urlStamp || urlOrig) : (urlOrig || urlStamp);
-        var entry = {
-          url: visibleUrl,
-          stamped: !!yes,   // true = v galerii je verze s razítkem
-          km: meta.km, author: meta.author,
-          lat: meta.lat, lng: meta.lng,
-          time: new Date().toLocaleString('cs-CZ'),
-          date: new Date().toLocaleDateString('cs-CZ'),
-          ts: Date.now()
-        };
-        // Druhé URL přidáme jen pokud upload uspěl - jinak při downloadu z fallbacku
-        if(urlOrig)  entry.urlOriginal = urlOrig;
-        if(urlStamp) entry.urlStamped  = urlStamp;
+        showSync('⏳ Nahrávám 2/2...');
+        // Krátké zpoždění aby GitHub stihl propsat předchozí commit
+        setTimeout(function(){
+          uploadPhotoToGitHubP(secondSrc, secondFn).then(function(url2){
+            // Mapování zpět - kterou ze dvou jsme nahráli první/druhou
+            var urlOrig  = yes ? url2 : url1;
+            var urlStamp = yes ? url1 : url2;
+            // 'url' v galerii = co si uživatel přál
+            var visibleUrl = yes ? urlStamp : urlOrig;
+            var entry = {
+              url: visibleUrl,
+              stamped: !!yes,   // true = v galerii verze s razítkem
+              km: meta.km, author: meta.author,
+              lat: meta.lat, lng: meta.lng,
+              time: new Date().toLocaleString('cs-CZ'),
+              date: new Date().toLocaleDateString('cs-CZ'),
+              ts: Date.now()
+            };
+            if(urlOrig)  entry.urlOriginal = urlOrig;
+            if(urlStamp) entry.urlStamped  = urlStamp;
 
-        var key = String(t);
-        db.ref('standalone_photos/' + key).set(entry)
-          .then(function() {
-            sess.count++;
-            hideSync();
-            if(!urlOrig || !urlStamp) {
-              showToast('⚠ Uložena jen 1 verze (druhá se nenahrála)', 2800);
-            }
-            _showContinuePrompt();
-          })
-          .catch(function() {
-            hideSync();
-            showToast('❌ Chyba uložení do DB', 2500);
-            _showContinuePrompt();
+            var key = String(t);
+            db.ref('standalone_photos/' + key).set(entry)
+              .then(function() {
+                sess.count++;
+                hideSync();
+                if(!url2) showToast('⚠ Druhá verze se nenahrála, máš jen ' + (yes?'s razítkem':'originál'), 3000);
+                _showContinuePrompt();
+              })
+              .catch(function() {
+                hideSync();
+                showToast('❌ Chyba uložení do DB', 2500);
+                _showContinuePrompt();
+              });
           });
+        }, 600);
       });
     });
   } else if(sess.phase === 'continue') {
