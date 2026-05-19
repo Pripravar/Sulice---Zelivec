@@ -1351,6 +1351,11 @@ var DOCS_CHPR = [
   {kmOd:0.000, kmDo:4.605, soubor:PDF_BASE+'SO_101/D.101-5_Charakteristicke_pricne_rezy_PDPS_R2_06_2025.pdf', nazev:'Charakteristické příčné řezy SO 101'},
 ];
 
+// Kladečské plány (zatím jen SO 103 - okružní křižovatka)
+var DOCS_KLAD = [
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'SO_103/D.103-8_Kladecsky_plan_PDPS.pdf', nazev:'Kladečský plán SO 103 - okružní křižovatka (km 1,040–1,340)'},
+];
+
 // Technické zprávy (kontextové) - dají se zapnout zvlášť
 var DOCS_TZ = [
   {kmOd:0.000, kmDo:4.605, soubor:PDF_BASE+'SO_101/D.101-1_Technicka_zprava_PDPS_R2_06_2025.pdf', nazev:'Technická zpráva SO 101'},
@@ -1877,6 +1882,12 @@ function onStaniceniClick(realKm) {
   if(typeof DOCS_CHPR !== 'undefined') {
     findDocsForKm(DOCS_CHPR, realKm).forEach(function(d) {
       pages.push({soubor:d.soubor, nazev:d.nazev, typ:'✂️ Char. řezy'});
+    });
+  }
+  // Kladečské plány – z DOCS_KLAD (zatím jen SO 103)
+  if(typeof DOCS_KLAD !== 'undefined') {
+    findDocsForKm(DOCS_KLAD, realKm).forEach(function(d, i) {
+      pages.push({soubor:d.soubor, nazev:d.nazev, typ:'🧱 Klad. plán'+(i?' '+(i+1):'')});
     });
   }
   // Dopravní značení – VŠECHNY pasující
