@@ -705,11 +705,11 @@ textarea.note-field { min-height:80px; resize:vertical; }
 #gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
 #gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
 #gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
-#gallery-actionbar { background:var(--panel); border-top:1px solid var(--border); padding:10px 12px; padding-bottom:calc(10px + env(safe-area-inset-bottom)); display:none; gap:8px; align-items:center; flex-shrink:0; }
+#gallery-actionbar { background:var(--panel); border-top:1px solid var(--border); padding:8px 10px; padding-bottom:calc(8px + env(safe-area-inset-bottom)); display:none; gap:6px; align-items:center; flex-wrap:wrap; flex-shrink:0; }
 #gallery-actionbar.show { display:flex; }
-#gallery-actionbar .gab-count { flex:1; color:var(--text); font-size:13px; font-weight:600; }
-#gallery-actionbar button { background:var(--accent2); color:#0f3460; border:none; border-radius:8px; padding:9px 14px; font-size:13px; font-weight:700; cursor:pointer; }
-#gallery-actionbar button.secondary { background:var(--panel2); color:var(--text); }
+#gallery-actionbar .gab-count { flex:1; min-width:80px; color:var(--text); font-size:13px; font-weight:600; }
+#gallery-actionbar button { background:var(--accent2); color:#0f3460; border:none; border-radius:8px; padding:8px 12px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+#gallery-actionbar button.secondary { background:var(--panel2); color:var(--text); padding:8px 10px; }
 #gallery-select-btn.on { background:var(--accent2) !important; color:#0f3460 !important; }
 
 /* ═══════════════════════════════════════════════════════
@@ -3144,7 +3144,7 @@ function clearGallerySelection() {
   _updateGallerySelectionUI();
 }
 
-// Stáhne sekvenčně každou fotku zvlášť (fallback když Share API neumí soubory)
+// Stáhne sekvenčně každou fotku zvlášť (poslední záchrana - neideální UX)
 function _sequentialDownloadFiles(files) {
   if(!files.length) return;
   showToast('⏳ Stahuji ' + files.length + ' fotek po jedné...', 2500);
@@ -3156,26 +3156,24 @@ function _sequentialDownloadFiles(files) {
   }, files.length * 800 + 400);
 }
 
-function downloadSelectedGalleryPhotos() {
+// Sdílená příprava: vybrané fotky → pole File[] s EXIF datem a správnými jmény.
+// Vrací Promise<{files: File[], failed: number, total: number}>.
+function _prepareSelectedPhotosAsFiles() {
   var items = Object.values(gallerySelectedKeys);
-  if(items.length === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
-
   var total = items.length;
   var done = 0, failed = 0;
-  showSync('⏳ Připravuji 0/' + total + '...');
+  if(total === 0) return Promise.resolve({ files: [], failed: 0, total: 0 });
 
-  // Připravíme každou fotku jako File (s EXIF datem a správným jménem)
+  showSync('⏳ Připravuji 0/' + total + '...');
   var filePromises = items.map(function(it, idx) {
     return preparePhotoBlobForDownload(it).then(function(blob){
       done++;
       showSync('⏳ Připravuji ' + done + '/' + total + '...');
       var d = photoCreationDate(it);
       var name = photoFilename(it, total > 1 ? idx : undefined);
-      // File s lastModified = datum pořízení (Android Gallery to může respektovat)
       try {
         return new File([blob], name, { type: 'image/jpeg', lastModified: d.getTime() });
       } catch(e) {
-        // Starší prohlížeče nemusí mít File konstruktor s lastModified - fallback bez něj
         var f = new Blob([blob], { type: 'image/jpeg' });
         f.name = name;
         return f;
@@ -3188,15 +3186,20 @@ function downloadSelectedGalleryPhotos() {
     });
   });
 
-  Promise.all(filePromises).then(function(allFiles){
-    hideSync();
-    var files = allFiles.filter(function(f){ return f != null; });
-    if(files.length === 0) {
-      showToast('❌ Žádnou fotku se nepodařilo načíst', 3000);
-      return;
-    }
+  return Promise.all(filePromises).then(function(allFiles){
+    return { files: allFiles.filter(function(f){ return f != null; }), failed: failed, total: total };
+  });
+}
 
-    // 1) Web Share API se soubory (iOS Safari 15+, Chrome Android) - share sheet → "Uložit obrázky" jde rovnou do Fotek
+// 📲 MOBIL - Web Share API → systémový share sheet → "Uložit X obrázků" rovnou do Fotek/Galerie.
+function downloadSelectedGalleryPhotosShare() {
+  if(Object.keys(gallerySelectedKeys).length === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
+
+  _prepareSelectedPhotosAsFiles().then(function(res){
+    hideSync();
+    var files = res.files;
+    if(files.length === 0) { showToast('❌ Žádnou fotku se nepodařilo načíst', 3000); return; }
+
     var canShareFiles = false;
     try {
       canShareFiles = !!(navigator.canShare && navigator.share &&
@@ -3206,34 +3209,64 @@ function downloadSelectedGalleryPhotos() {
 
     if(canShareFiles) {
       var title = files.length === 1 ? 'Fotka ze Sulice' : ('Sulice – ' + files.length + ' fotek');
-      navigator.share({
-        files: files,
-        title: title
-      }).then(function(){
-        showToast('✅ ' + files.length + ' ' + (files.length === 1 ? 'fotka odeslána do sdílení' : 'fotek odesláno do sdílení'), 2500);
-      }).catch(function(err){
-        // Uživatel zavřel sheet, nebo chyba - nepadnout, jen tichý log
-        if(err && err.name === 'AbortError') return;
-        console.warn('Share failed, padám na sekvenční stažení', err);
-        _sequentialDownloadFiles(files);
-      });
-      if(failed) {
-        setTimeout(function(){
-          showToast('⚠ ' + failed + ' fotek se nenačetlo', 2500);
-        }, 2700);
-      }
-      return;
+      navigator.share({ files: files, title: title })
+        .then(function(){
+          showToast('✅ Otevřeno sdílení (' + files.length + ' ks). Ťukni „Uložit obrázky".', 3000);
+        })
+        .catch(function(err){
+          if(err && err.name === 'AbortError') return;
+          console.warn('Share failed, fallback download', err);
+          _sequentialDownloadFiles(files);
+        });
+    } else {
+      // Není mobil / starý prohlížeč - pošli uživatele na ZIP tlačítko
+      showToast('⚠ Tento prohlížeč neumí přímé sdílení do Fotek. Použij raději tlačítko 💻 ZIP.', 4500);
     }
 
-    // 2) Fallback: stáhnout postupně po jedné (desktop, starší prohlížeče)
-    _sequentialDownloadFiles(files);
-    if(failed) {
-      setTimeout(function(){
-        showToast('⚠ ' + failed + ' fotek se nenačetlo', 2500);
-      }, files.length * 800 + 800);
+    if(res.failed) {
+      setTimeout(function(){ showToast('⚠ ' + res.failed + ' fotek se nenačetlo', 2500); }, 3200);
     }
   });
 }
+
+// 💻 PC - hromadné stažení jako ZIP archiv (jeden soubor → snadné rozbalit na počítači).
+function downloadSelectedGalleryPhotosZip() {
+  if(Object.keys(gallerySelectedKeys).length === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
+  if(typeof JSZip === 'undefined') {
+    showToast('❌ JSZip se nenačetl - zkontroluj připojení a obnov stránku.', 3500);
+    return;
+  }
+
+  _prepareSelectedPhotosAsFiles().then(function(res){
+    var files = res.files;
+    if(files.length === 0) { hideSync(); showToast('❌ Žádnou fotku se nepodařilo načíst', 3000); return; }
+
+    showSync('⏳ Balím ZIP (' + files.length + ' fotek)...');
+    var zip = new JSZip();
+    files.forEach(function(f) {
+      var name = f.name || 'foto.jpg', k = 1;
+      // Zaručíme unikátní jména uvnitř ZIPu (kdyby měly dvě fotky stejný název)
+      while(zip.file(name)) { name = (f.name || 'foto.jpg').replace(/\.jpg$/i, '_' + (k++) + '.jpg'); }
+      zip.file(name, f);
+    });
+
+    zip.generateAsync({ type:'blob', compression:'STORE' }).then(function(blob){
+      hideSync();
+      var d = new Date();
+      var fname = 'sulice_fotky_' + d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate())
+                + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + '_' + files.length + 'ks.zip';
+      triggerBlobDownload(blob, fname);
+      if(res.failed) showToast('⚠ ZIP stažen (' + files.length + '/' + res.total + ', ' + res.failed + ' selhalo)', 3500);
+      else           showToast('✅ ZIP stažen (' + files.length + ' fotek)', 2500);
+    }).catch(function(err){
+      console.error(err); hideSync();
+      showToast('❌ Vytvoření ZIPu selhalo', 2800);
+    });
+  });
+}
+
+// Zpětná kompatibilita - kdyby ještě někde zůstalo volání staré funkce
+function downloadSelectedGalleryPhotos() { return downloadSelectedGalleryPhotosShare(); }
 
 function deleteStandalonePhoto() {
   if(!_photoFsKey) return;
@@ -7730,8 +7763,9 @@ function copyDiaryExport(){
   <div id="gallery-actionbar">
     <span class="gab-count" id="gab-count">Vybráno: 0</span>
     <button class="secondary" onclick="selectAllVisibleGallery()">Vše</button>
-    <button class="secondary" onclick="clearGallerySelection()">Žádné</button>
-    <button onclick="downloadSelectedGalleryPhotos()">⬇ Stáhnout</button>
+    <button class="secondary" onclick="clearGallerySelection()">−</button>
+    <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
+    <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
   </div>
 </div>
 
