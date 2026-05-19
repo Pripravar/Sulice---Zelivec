@@ -4572,10 +4572,12 @@ window.addEventListener('load', function() {
     var reader = new FileReader();
     reader.onload = function(ev) {
       compressImage(ev.target.result, function(compressed) {
-        // Připrav fotku a otázku
+        // Vždy uložit obě verze (originál + s razítkem). V galerii zobrazit s razítkem.
+        // Dotaz "razítkovat?" se přeskakuje - volba se dělá až při stahování.
         window.photoSession.pendingPhoto = compressed;
         window.photoSession.pendingMeta  = {km: km, author: author, lat: latlng.lat, lng: latlng.lng};
-        _showStampPrompt();
+        window.photoSession.phase = 'stamp';
+        ppAnswer(true);  // true = v galerii bude razítkovaná verze
       });
     };
     reader.readAsDataURL(file);
