@@ -3011,8 +3011,10 @@ function setExifCreationDate(jpegDataUrl, date) {
   }
 }
 
-// Připraví fotku ke stažení (blob s EXIF datem). Vrací Promise<Blob>.
-function preparePhotoBlobForDownload(item) {
+// Připraví fotku ke stažení (blob s EXIF datem; volitelně i s vypáleným razítkem). Vrací Promise<Blob>.
+// opts = { stamp: bool }  - když true, aplikuje burnInMetadata před vrácením
+function preparePhotoBlobForDownload(item, opts) {
+  opts = opts || {};
   var d = photoCreationDate(item);
   return fetchPhotoAsBlob(item.url).then(function(blob){
     // Jen JPEG dokážeme upravit EXIF, jinak stáhneme tak jak je
@@ -3020,15 +3022,85 @@ function preparePhotoBlobForDownload(item) {
       return blob;
     }
     return blobToDataUrl(blob).then(function(dataUrl){
-      var newDataUrl = setExifCreationDate(dataUrl, d);
-      // dataURL → Blob
-      var byteString = atob(newDataUrl.split(',')[1]);
-      var ab = new ArrayBuffer(byteString.length);
-      var ia = new Uint8Array(ab);
-      for(var i=0; i<byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-      return new Blob([ab], { type:'image/jpeg' });
+      // Krok 1: volitelně vypálit razítko (km + datum + jméno) - musí být před EXIF zápisem,
+      // protože burnInMetadata překreslí přes canvas a EXIF z původního JPEGu se ztratí.
+      function continueWithExif(srcDataUrl) {
+        var newDataUrl = setExifCreationDate(srcDataUrl, d);
+        var byteString = atob(newDataUrl.split(',')[1]);
+        var ab = new ArrayBuffer(byteString.length);
+        var ia = new Uint8Array(ab);
+        for(var i=0; i<byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        return new Blob([ab], { type:'image/jpeg' });
+      }
+      if(opts.stamp) {
+        return new Promise(function(resolve){
+          // Použij datum pořízení (ne dnešní) - razítko ukáže reálné datum focení
+          burnInMetadataWithDate(srcOrDataUrl(dataUrl), item.km || '-', item.author || '', d, function(stampedDataUrl){
+            resolve(continueWithExif(stampedDataUrl));
+          });
+        });
+      }
+      return continueWithExif(dataUrl);
     });
   });
+}
+
+// Pomocná - vrátí dataUrl jak je (placeholder pro budoucí transformace)
+function srcOrDataUrl(x) { return x; }
+
+// Varianta burnInMetadata s explicitním datem (ne new Date()). Razítko ukáže datum pořízení.
+function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback) {
+  var img = new Image();
+  img.onload = function() {
+    var canvas = document.createElement('canvas');
+    canvas.width = img.width; canvas.height = img.height;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    var dStr = dateObj.toLocaleDateString('cs-CZ');
+    var line1 = 'km ' + (km || '-') + '   •   ' + dStr;
+    var line2 = author || '';
+    var fontSize = Math.max(20, Math.round(img.width / 40));
+    ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
+    var pad = Math.round(fontSize * 0.6);
+    var lineH = Math.round(fontSize * 1.45);
+    var textW = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width);
+    var boxW = textW + pad * 2;
+    var boxH = lineH * 2 + pad;
+    var boxX = img.width - boxW - pad;
+    var boxY = img.height - boxH - pad;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    if(ctx.roundRect) { ctx.beginPath(); ctx.roundRect(boxX, boxY, boxW, boxH, 6); ctx.fill(); }
+    else { ctx.fillRect(boxX, boxY, boxW, boxH); }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
+    ctx.fillText(line1, boxX + pad, boxY + lineH * 0.85);
+    ctx.font = fontSize + 'px Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillText(line2, boxX + pad, boxY + lineH * 1.88);
+    callback(canvas.toDataURL('image/jpeg', 0.9));
+  };
+  img.onerror = function(){ callback(dataUrl); }; // při selhání vrátí beze změny
+  img.src = dataUrl;
+}
+
+// ── Modal: ptá se uživatele zda vypálit razítko před stažením ─────
+var _stampChoiceResolver = null;
+function askDownloadStampChoice(photoCount) {
+  return new Promise(function(resolve){
+    var modal = document.getElementById('dl-stamp-modal');
+    if(!modal) { resolve(false); return; }
+    document.getElementById('dlsm-title').innerHTML = '🏷️ Vypálit razítko při stažení?' +
+      (photoCount > 1 ? '<br><span style="font-size:12px;font-weight:400;color:var(--text2);">do ' + photoCount + ' fotek</span>' : '');
+    _stampChoiceResolver = resolve;
+    modal.style.display = 'flex';
+  });
+}
+function _resolveStampChoice(choice) {
+  var modal = document.getElementById('dl-stamp-modal');
+  if(modal) modal.style.display = 'none';
+  if(typeof _stampChoiceResolver === 'function') {
+    var r = _stampChoiceResolver; _stampChoiceResolver = null; r(choice);
+  }
 }
 
 function triggerBlobDownload(blob, filename) {
@@ -3050,8 +3122,16 @@ function triggerBlobDownload(blob, filename) {
 function downloadCurrentFsPhoto() {
   var item = _photoFsItem;
   if(!item || !item.url) { showToast('❌ Žádná fotka', 1500); return; }
+  // Nejdřív se zeptáme zda vypálit razítko
+  askDownloadStampChoice(1).then(function(stampChoice){
+    if(stampChoice === null) return; // Zrušit
+    _doDownloadCurrentFsPhoto(item, stampChoice);
+  });
+}
+
+function _doDownloadCurrentFsPhoto(item, applyStamp) {
   showSync('⏳ Připravuji fotku...');
-  preparePhotoBlobForDownload(item)
+  preparePhotoBlobForDownload(item, { stamp: applyStamp })
     .then(function(blob){
       hideSync();
       var d = photoCreationDate(item);
@@ -3158,7 +3238,7 @@ function _sequentialDownloadFiles(files) {
 
 // Sdílená příprava: vybrané fotky → pole File[] s EXIF datem a správnými jmény.
 // Vrací Promise<{files: File[], failed: number, total: number}>.
-function _prepareSelectedPhotosAsFiles() {
+function _prepareSelectedPhotosAsFiles(applyStamp) {
   var items = Object.values(gallerySelectedKeys);
   var total = items.length;
   var done = 0, failed = 0;
@@ -3166,7 +3246,7 @@ function _prepareSelectedPhotosAsFiles() {
 
   showSync('⏳ Připravuji 0/' + total + '...');
   var filePromises = items.map(function(it, idx) {
-    return preparePhotoBlobForDownload(it).then(function(blob){
+    return preparePhotoBlobForDownload(it, { stamp: !!applyStamp }).then(function(blob){
       done++;
       showSync('⏳ Připravuji ' + done + '/' + total + '...');
       var d = photoCreationDate(it);
@@ -3193,9 +3273,16 @@ function _prepareSelectedPhotosAsFiles() {
 
 // 📲 MOBIL - Web Share API → systémový share sheet → "Uložit X obrázků" rovnou do Fotek/Galerie.
 function downloadSelectedGalleryPhotosShare() {
-  if(Object.keys(gallerySelectedKeys).length === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
+  var n = Object.keys(gallerySelectedKeys).length;
+  if(n === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
+  askDownloadStampChoice(n).then(function(stampChoice){
+    if(stampChoice === null) return; // Zrušit
+    _doShareSelectedGalleryPhotos(stampChoice);
+  });
+}
 
-  _prepareSelectedPhotosAsFiles().then(function(res){
+function _doShareSelectedGalleryPhotos(applyStamp) {
+  _prepareSelectedPhotosAsFiles(applyStamp).then(function(res){
     hideSync();
     var files = res.files;
     if(files.length === 0) { showToast('❌ Žádnou fotku se nepodařilo načíst', 3000); return; }
@@ -3231,13 +3318,20 @@ function downloadSelectedGalleryPhotosShare() {
 
 // 💻 PC - hromadné stažení jako ZIP archiv (jeden soubor → snadné rozbalit na počítači).
 function downloadSelectedGalleryPhotosZip() {
-  if(Object.keys(gallerySelectedKeys).length === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
+  var n = Object.keys(gallerySelectedKeys).length;
+  if(n === 0) { showToast('Vyber nejdřív fotky', 1800); return; }
   if(typeof JSZip === 'undefined') {
     showToast('❌ JSZip se nenačetl - zkontroluj připojení a obnov stránku.', 3500);
     return;
   }
+  askDownloadStampChoice(n).then(function(stampChoice){
+    if(stampChoice === null) return; // Zrušit
+    _doZipSelectedGalleryPhotos(stampChoice);
+  });
+}
 
-  _prepareSelectedPhotosAsFiles().then(function(res){
+function _doZipSelectedGalleryPhotos(applyStamp) {
+  _prepareSelectedPhotosAsFiles(applyStamp).then(function(res){
     var files = res.files;
     if(files.length === 0) { hideSync(); showToast('❌ Žádnou fotku se nepodařilo načíst', 3000); return; }
 
@@ -7995,6 +8089,20 @@ function copyDiaryExport(){
     <div id="pp-counter">📸 0 fotek</div>
     <button id="pp-yes" class="pp-btn pp-yes" onclick="ppAnswer(true)">Ano</button>
     <button id="pp-no" class="pp-btn pp-no" onclick="ppAnswer(false)">Ne</button>
+  </div>
+</div>
+
+<!-- Modal: volba razítka při stažení -->
+<div id="dl-stamp-modal" style="display:none;position:fixed;inset:0;z-index:4750;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border-radius:14px;padding:22px 18px;width:min(92vw,380px);display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 28px rgba(0,0,0,0.5);">
+    <div id="dlsm-title" style="font-size:16px;font-weight:700;color:var(--text);text-align:center;line-height:1.4;">🏷️ Vypálit razítko při stažení?</div>
+    <div style="font-size:11px;color:var(--text2);text-align:center;">km + datum + jméno do pravého spodního rohu</div>
+    <div id="dlsm-warning" style="display:none;font-size:11px;color:var(--accent2);text-align:center;background:rgba(245,166,35,0.1);padding:6px 8px;border-radius:6px;line-height:1.35;">
+      ⚠ Pokud fotka už při focení byla orazítkovaná, dostane další razítko navíc.
+    </div>
+    <button id="dlsm-yes" class="pp-btn pp-yes" onclick="_resolveStampChoice(true)" style="margin-top:6px;">🏷️ Ano, s razítkem</button>
+    <button id="dlsm-no"  class="pp-btn pp-no"  onclick="_resolveStampChoice(false)">📷 Ne, jak je</button>
+    <button id="dlsm-cancel" style="background:transparent;color:var(--text2);border:none;font-size:13px;cursor:pointer;padding:6px;" onclick="_resolveStampChoice(null)">Zrušit</button>
   </div>
 </div>
 
