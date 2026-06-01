@@ -118,3 +118,78 @@ exports.sendTaskNotifications = functions
 
     return snap.ref.remove();
   });
+
+/* ════════════════════════════════════════════════════════════════
+   HTTPS FUNKCE – upload fotky do GitHubu (token zůstává na serveru)
+   - Klient pošle POST { filename, content (base64 JPEG) } + Firebase ID token
+   - Funkce ověří přihlášení, validuje jméno souboru a commitne do repa
+   - GitHub token je v Secret Manageru, NIKDY v prohlížeči
+
+   NASTAVENÍ TOKENU (jednou):
+     firebase functions:secrets:set GITHUB_TOKEN
+       → vlož NOVÝ fine-grained PAT (repo Sulice---Zelivec, Contents: Read&Write)
+   DEPLOY:
+     firebase deploy --only functions
+   URL po deployi:
+     https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadFoto
+   ════════════════════════════════════════════════════════════════ */
+const GH_REPO     = 'Pripravar/Sulice---Zelivec';
+const GH_BRANCH   = 'main';
+const ALLOW_ORIGIN = 'https://pripravar.github.io';
+
+exports.uploadFoto = functions
+  .region('europe-west1')
+  .runWith({ secrets: ['GITHUB_TOKEN'] })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if(req.method !== 'POST')    { res.status(405).json({ error: 'Jen POST' }); return; }
+
+    // 1) Ověřit přihlášeného uživatele (Firebase ID token)
+    const authHeader = req.get('Authorization') || '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if(!idToken) { res.status(401).json({ error: 'Chybí přihlášení' }); return; }
+    try {
+      await admin.auth().verifyIdToken(idToken);
+    } catch(e) {
+      res.status(401).json({ error: 'Neplatné přihlášení' }); return;
+    }
+
+    // 2) Validovat vstup
+    const body = req.body || {};
+    const filename = String(body.filename || '');
+    const content  = String(body.content  || '');
+    // jen bezpečné názvy: písmena, číslice, tečka, podtržítko, pomlčka, končí .jpg/.jpeg/.png
+    if(!/^[A-Za-z0-9._-]+\.(jpe?g|png)$/i.test(filename)) {
+      res.status(400).json({ error: 'Neplatné jméno souboru' }); return;
+    }
+    if(!content || content.length > 12 * 1024 * 1024) { // ~9 MB binárně
+      res.status(400).json({ error: 'Chybí nebo příliš velký obsah' }); return;
+    }
+
+    // 3) Commit do GitHubu (token ze Secret Manageru)
+    const apiUrl = 'https://api.github.com/repos/' + GH_REPO + '/contents/photos/' + filename;
+    try {
+      const ghResp = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'token ' + process.env.GITHUB_TOKEN,
+          'Content-Type':  'application/json',
+          'User-Agent':    'sulice-zelivec-fn'
+        },
+        body: JSON.stringify({ message: 'Foto: ' + filename, content: content, branch: GH_BRANCH })
+      });
+      const data = await ghResp.json();
+      if(ghResp.ok && data && data.content && data.content.download_url) {
+        res.status(200).json({ download_url: data.content.download_url });
+      } else {
+        console.error('GitHub upload err:', ghResp.status, JSON.stringify(data));
+        res.status(502).json({ error: (data && data.message) || 'GitHub upload selhal' });
+      }
+    } catch(e) {
+      console.error('uploadFoto výjimka:', e);
+      res.status(500).json({ error: 'Chyba serveru při uploadu' });
+    }
+  });

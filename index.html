@@ -64,9 +64,9 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #header > * { flex-shrink:0; }
 #header h1 { font-size:15px; font-weight:700; flex:0 0 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #header h1 .title-name, #header h1 .title-suffix { color:var(--accent); }
-#header button { padding:7px 10px; font-size:15px; }
+#header button { padding:7px 10px; font-size:15px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
 #km-display { background:var(--panel2); border:1px solid var(--accent); border-radius:8px; padding:5px 9px; font-size:13px; font-weight:700; color:var(--accent2); min-width:auto; text-align:center; white-space:nowrap; }
-#btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px 10px; font-size:13px; cursor:pointer; white-space:nowrap; }
+#btn-layers { background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px 10px; font-size:13px; cursor:pointer; white-space:nowrap; min-height:44px; }
 
 /* Na úzkém telefonu (≤420 px) - jen mírná kompakce, tlačítka zůstávají dotykově použitelná */
 @media (max-width:420px) {
@@ -74,8 +74,8 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
   #header h1 { font-size:14px; }
   #header h1 .title-prefix,
   #header h1 .title-suffix { display:none; }
-  #header button { padding:6px 9px; font-size:15px; }
-  #btn-layers { padding:6px 9px; font-size:12px; }
+  #header button { padding:6px 9px; font-size:15px; min-height:44px; }
+  #btn-layers { padding:6px 9px; font-size:12px; min-height:44px; }
   #user-badge { max-width:36px; padding:3px 4px; }
   #user-badge span { display:none; }
   #user-badge img { width:24px; height:24px; }
@@ -97,12 +97,12 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #basemap-row { display:flex; gap:5px; margin-bottom:4px; }
 .bm-btn { flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:10px; padding:5px 2px; cursor:pointer; text-align:center; transition:all .15s; }
 .bm-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(233,69,96,0.1); }
-.toggle { position:relative; width:38px; height:20px; flex-shrink:0; }
+.toggle { position:relative; width:46px; height:26px; flex-shrink:0; }
 .toggle input { opacity:0; width:0; height:0; }
-.toggle-slider { position:absolute; inset:0; background:#333; border-radius:20px; transition:.2s; cursor:pointer; }
-.toggle-slider:before { content:''; position:absolute; width:14px; height:14px; left:3px; top:3px; background:white; border-radius:50%; transition:.2s; }
+.toggle-slider { position:absolute; inset:0; background:#333; border-radius:26px; transition:.2s; cursor:pointer; }
+.toggle-slider:before { content:''; position:absolute; width:20px; height:20px; left:3px; top:3px; background:white; border-radius:50%; transition:.2s; }
 .toggle input:checked + .toggle-slider { background:var(--accent); }
-.toggle input:checked + .toggle-slider:before { transform:translateX(18px); }
+.toggle input:checked + .toggle-slider:before { transform:translateX(20px); }
 
 #btn-gps { position:fixed; bottom:24px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
 #btn-gps.active { border-color:var(--green); color:var(--green); box-shadow:0 0 16px rgba(72,187,120,.4); }
@@ -184,13 +184,13 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #pdf-header { display:flex; align-items:center; padding:6px 10px; background:var(--panel2); gap:6px; flex-shrink:0; }
 #pdf-title { flex:1; font-size:12px; font-weight:600; color:var(--accent2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #pdf-counter { font-size:11px; color:var(--text2); white-space:nowrap; }
-#btn-pdf-close,#btn-pdf-fs { background:none; border:none; color:var(--text2); font-size:18px; cursor:pointer; padding:2px 6px; }
+#btn-pdf-close,#btn-pdf-fs { background:none; border:none; color:var(--text2); font-size:18px; cursor:pointer; padding:2px 6px; min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
 #btn-pdf-close:hover,#btn-pdf-fs:hover { color:var(--text); }
-#btn-pdf-prev,#btn-pdf-next { background:var(--panel); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:22px; cursor:pointer; padding:0 8px; line-height:1.4; flex-shrink:0; }
+#btn-pdf-prev,#btn-pdf-next { background:var(--panel); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:22px; cursor:pointer; padding:0 8px; flex-shrink:0; min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
 #btn-pdf-prev:hover,#btn-pdf-next:hover { background:var(--panel2); }
 #btn-pdf-prev:disabled,#btn-pdf-next:disabled { opacity:0.3; cursor:default; }
 #pdf-tabs { display:flex; gap:4px; padding:6px 10px; background:var(--bg); flex-shrink:0; overflow-x:auto; }
-.pdf-tab { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:11px; padding:4px 10px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.pdf-tab { background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:11px; padding:9px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; min-height:40px; display:inline-flex; align-items:center; }
 .pdf-tab.active { border-color:var(--accent); color:var(--accent); background:rgba(233,69,96,0.12); }
 #pdf-frame { flex:1; border:none; width:100%; background:#222; }
 #pdf-nosit { flex:1; display:none; align-items:center; justify-content:center; color:var(--text2); font-size:14px; flex-direction:column; gap:8px; text-align:center; padding:20px; }
@@ -1246,6 +1246,8 @@ var KM_END   = 4.605;
 
 var GITHUB_USER_REPO = 'Pripravar/Sulice---Zelivec';
 var GITHUB_BRANCH_PDF = 'main';
+// Upload fotek jde přes Cloud Function (GitHub token zůstává na serveru, ne v prohlížeči).
+var UPLOAD_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadFoto';
 // Bázová cesta k PDF výkresům - RELATIVNÍ k aplikaci (na GitHub Pages).
 // Důvod: raw.githubusercontent.com servíruje PDF jako application/octet-stream
 // → iframe je nezobrazí. Pages servírují PDF jako application/pdf → iframe OK.
@@ -2819,34 +2821,9 @@ window.addEventListener('load', function() {
   }
 });
 
-// -- GitHub foto upload -------------------------------------------
-var GITHUB_REPO   = GITHUB_USER_REPO;     // 'Pripravar/Sulice---Zelivec'
-var GITHUB_BRANCH = GITHUB_BRANCH_PDF;    // 'main'
-// Token uložen sdíleně v kódu (rozdělen přes .join() aby ho GitHub secret scanning nezachytil).
-// Tým nemusí nic zadávat. Pokud GitHub token autodeaktivuje, vygeneruj nový (Settings →
-// Developer settings → Fine-grained tokens, repo Sulice---Zelivec, Contents: Read&Write)
-// a nahraď tři části níže.
-function getGithubToken() {
-  // Priorita 1: URL parametr (?gh_tok=...) - jednorázový override, pak uložen
-  try {
-    var url = new URLSearchParams(window.location.search);
-    var fromUrl = url.get('gh_tok');
-    if(fromUrl) {
-      localStorage.setItem('gh_tok_sulice', fromUrl);
-      history.replaceState(null, '', window.location.pathname + window.location.hash);
-      return fromUrl;
-    }
-  } catch(e) {}
-  // Default Sulice token (rozdělený, aby ho secret scanning nedetekoval).
-  // Aplikace VŽDY zapisuje aktuální default do localStorage - tím se přepíše
-  // jakákoli stará hodnota (např. Votice token, který by uploadoval do špatného repa).
-  var def = ['github_pat_11C','AM4KWA0X2fmYME3wVs3_','UOmgtblrLbMcK9ynNEs','kSMGe3L6kAbzfWo978ox6bR25NTTIBZZkcETzI58'].join('');
-  var stored = localStorage.getItem('gh_tok_sulice');
-  if(stored !== def) localStorage.setItem('gh_tok_sulice', def);
-  return def;
-}
-// Při načtení rovnou inicializuj (uloží default do localStorage, pokud chybí)
-window.addEventListener('load', function(){ try { getGithubToken(); } catch(e){} });
+// -- GitHub foto upload (přes Cloud Function) ---------------------
+// GitHub token je na serveru (Secret Manager), ne v prohlížeči. Klient pošle
+// fotku + svůj Firebase ID token; Cloud Function ověří přihlášení a commitne.
 
 // -- Burn-in metadata do fotky --------
 function burnInMetadata(dataUrl, km, author, callback) {
@@ -2884,25 +2861,27 @@ function burnInMetadata(dataUrl, km, author, callback) {
 
 function uploadPhotoToGitHub(dataUrl, filename, callback) {
   var base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  var path = 'photos/' + filename;
-  var apiUrl = 'https://api.github.com/repos/' + GITHUB_REPO + '/contents/' + path;
-  fetch(apiUrl, {
-    method: 'PUT',
-    headers: { 'Authorization': 'token ' + getGithubToken(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: 'Foto: ' + filename, content: base64, branch: GITHUB_BRANCH })
+  var user = (typeof fbAuth !== 'undefined' && fbAuth) ? fbAuth.currentUser : null;
+  if(!user) { showToast('❌ Nejsi přihlášen – foto se nenahrálo', 3000); callback(null); return; }
+  user.getIdToken().then(function(idToken){
+    return fetch(UPLOAD_FN_URL, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + idToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: filename, content: base64 })
+    });
   })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if(data && data.content && data.content.download_url) {
-      callback(data.content.download_url);
+  .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+  .then(function(res){
+    if(res.ok && res.data && res.data.download_url) {
+      callback(res.data.download_url);
     } else {
-      console.error('GitHub upload err:', JSON.stringify(data));
-      var msg = (data && data.message) ? data.message : 'neznámá chyba';
-      showToast('❌ GitHub: ' + msg, 4000);
+      console.error('Upload fn err:', JSON.stringify(res.data));
+      var msg = (res.data && res.data.error) ? res.data.error : 'neznámá chyba';
+      showToast('❌ Upload: ' + msg, 4000);
       callback(null);
     }
   })
-  .catch(function(e){ console.error('GitHub upload exc:', e); showToast('❌ Síťová chyba uploadu', 3000); callback(null); });
+  .catch(function(e){ console.error('Upload fn exc:', e); showToast('❌ Síťová chyba uploadu', 3000); callback(null); });
 }
 
 function uploadPhotosToGitHub(items, onProgress, onDone, meta) {
