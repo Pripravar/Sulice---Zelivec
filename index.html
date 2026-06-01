@@ -24,6 +24,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <!-- pdf-lib pro úpravu PDF (vkládání podpisů do TePř) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<!-- fontkit – umožní vložit Unicode font s diakritikou (čeština + azbuka) do PDF -->
+<script src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
 <!-- JSZip pro hromadné stažení fotek jako ZIP -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <!-- piexifjs pro zápis EXIF data pořízení do fotek (aby je iOS Photos zařadil podle data pořízení, ne podle data stažení) -->
@@ -7075,7 +7077,7 @@ function _initSignCanvas(){
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = '#0a0a0a';
+  ctx.strokeStyle = '#16348c'; // propisková modrá
   window._signCtx = ctx;
   // Připojit event listenery (pouze jednou)
   if(canvas._signHandlersAdded) return;
@@ -7422,18 +7424,44 @@ async function downloadTeprWithSigs(){
 
     showSync('⏳ Generuji finální PDF…');
     var pdfDoc = await PDFLib.PDFDocument.load(bytes);
-    var helv  = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-    var helvB = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
 
+    // Pokus o vložení Unicode fontu (čeština + azbuka). Když selže, fallback na Helvetica + transliteraci.
+    var helv, helvB, useUnicode = false;
+    try {
+      if(window.fontkit && typeof pdfDoc.registerFontkit === 'function') {
+        pdfDoc.registerFontkit(window.fontkit);
+        showSync('⏳ Stahuji font…');
+        var fontReg = 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf';
+        var fontBld = 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf';
+        var fr = await Promise.all([
+          fetch(fontReg).then(function(r){ if(!r.ok) throw new Error('font reg'); return r.arrayBuffer(); }),
+          fetch(fontBld).then(function(r){ if(!r.ok) throw new Error('font bold'); return r.arrayBuffer(); })
+        ]);
+        helv  = await pdfDoc.embedFont(fr[0], { subset: true });
+        helvB = await pdfDoc.embedFont(fr[1], { subset: true });
+        useUnicode = true;
+      }
+    } catch(eFont) {
+      console.warn('Unicode font selhal, fallback na Helvetica:', eFont);
+      useUnicode = false;
+    }
+    if(!useUnicode) {
+      helv  = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+      helvB = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+    }
+    // T() = text pro PDF: s Unicode fontem ponech diakritiku, jinak transliteruj
+    function T(s){ return useUnicode ? (s == null ? '' : String(s)) : _safePdfText(s); }
+
+    showSync('⏳ Generuji finální PDF…');
     var page = pdfDoc.addPage([595, 842]); // A4 portrait
     var y = 800;
     var col_jmeno = 40, col_funkce = 180, col_datum = 320, col_podpis = 400, tableRight = 555;
 
-    page.drawText(_safePdfText('Prohlášení zaměstnance'), { x: 40, y: y, size: 18, font: helvB });
+    page.drawText(T('Prohlášení zaměstnance'), { x: 40, y: y, size: 18, font: helvB });
     y -= 30;
-    page.drawText(_safePdfText('Stavba: II/603 Sulice – Želivec, rekonstrukce silnice a mostů'), { x: 40, y: y, size: 11, font: helv });
+    page.drawText(T('Stavba: II/603 Sulice – Želivec, rekonstrukce silnice a mostů'), { x: 40, y: y, size: 11, font: helv });
     y -= 15;
-    page.drawText(_safePdfText('TePř: ' + (k.so || '') + ' — ' + (k.nazev || '')), { x: 40, y: y, size: 11, font: helv });
+    page.drawText(T('TePř: ' + (k.so || '') + ' — ' + (k.nazev || '')), { x: 40, y: y, size: 11, font: helv });
     y -= 22;
 
     // Pomocná funkce pro zalomení textu na šířku
@@ -7455,7 +7483,7 @@ async function downloadTeprWithSigs(){
     // Deklarace (stejný text jako v podpisovém okně – vždy česky v oficiálním PDF)
     var declText = (typeof SIGN_DECL !== 'undefined' && SIGN_DECL.cs) ? SIGN_DECL.cs :
       'Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto technologickým předpisem, plánem BOZP a DPŘ stavby.';
-    var declLines = _wrapPdfText(_safePdfText(declText), helv, 10, tableRight - 40);
+    var declLines = _wrapPdfText(T(declText), helv, 10, tableRight - 40);
     declLines.forEach(function(ln){
       page.drawText(ln, { x: 40, y: y, size: 10, font: helv });
       y -= 12;
@@ -7463,41 +7491,60 @@ async function downloadTeprWithSigs(){
     y -= 15;
 
     function drawTableHeader(){
-      page.drawText(_safePdfText('Jméno'),  { x: col_jmeno,  y: y, size: 10, font: helvB });
-      page.drawText(_safePdfText('Funkce'), { x: col_funkce, y: y, size: 10, font: helvB });
-      page.drawText(_safePdfText('Datum'),  { x: col_datum,  y: y, size: 10, font: helvB });
-      page.drawText(_safePdfText('Podpis'), { x: col_podpis, y: y, size: 10, font: helvB });
+      page.drawText(T('Jméno'),  { x: col_jmeno,  y: y, size: 10, font: helvB });
+      page.drawText(T('Funkce'), { x: col_funkce, y: y, size: 10, font: helvB });
+      page.drawText(T('Datum'),  { x: col_datum,  y: y, size: 10, font: helvB });
+      page.drawText(T('Podpis'), { x: col_podpis, y: y, size: 10, font: helvB });
       y -= 8;
       page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.6, color: PDFLib.rgb(0,0,0) });
       y -= 4;
     }
     drawTableHeader();
 
-    var rowHeight = 60;
+    // šířky sloupců pro zalomení textu (s malou rezervou, ať nelezou do sebe)
+    var wJmeno  = col_funkce - col_jmeno - 8;   // sloupec Jméno/Firma
+    var wFunkce = col_datum  - col_funkce - 8;  // sloupec Funkce
+    var wDatum  = col_podpis - col_datum  - 8;  // sloupec Datum
     for(var i = 0; i < sigs.length; i++) {
       var s = sigs[i];
-      if(y < 80) {
+      // Zalom dlouhé hodnoty do svých sloupců
+      var nameLines   = _wrapPdfText(T(s.jmeno || ''),  helv, 10, wJmeno);
+      var firmaLines  = s.firma ? _wrapPdfText(T(s.firma), helv, 8, wJmeno) : [];
+      var funkceLines = _wrapPdfText(T(s.funkce || ''), helv, 9, wFunkce);
+      var datumLines  = _wrapPdfText(T(s.datum || ''),  helv, 10, wDatum);
+      // Výška textu vs. podpisu → výška řádku
+      var textH = nameLines.length * 12 + firmaLines.length * 10 + 4;
+      var funkceH = funkceLines.length * 11 + 4;
+      var rowHeight = Math.max(60, textH, funkceH);
+      // Zalomení stránky
+      if(y - rowHeight < 70) {
         page = pdfDoc.addPage([595, 842]);
         y = 800;
-        page.drawText(_safePdfText('Prohlášení zaměstnance (pokračování)'), { x: 40, y: y, size: 14, font: helvB });
+        page.drawText(T('Prohlášení zaměstnance (pokračování)'), { x: 40, y: y, size: 14, font: helvB });
         y -= 25;
         drawTableHeader();
       }
-      var rowY = y - rowHeight;
-      page.drawText(_safePdfText(s.jmeno || ''),  { x: col_jmeno,  y: rowY + 35, size: 10, font: helv });
-      if(s.firma) page.drawText(_safePdfText(s.firma), { x: col_jmeno, y: rowY + 22, size: 8, font: helv, color: PDFLib.rgb(0.4,0.4,0.4) });
-      page.drawText(_safePdfText(s.funkce || ''), { x: col_funkce, y: rowY + 35, size: 10, font: helv });
-      page.drawText(_safePdfText(s.datum || ''),  { x: col_datum,  y: rowY + 35, size: 10, font: helv });
+      var topBaseline = y - 14; // baseline prvního řádku textu
+      // Jméno (víceřádkově) + pod ním firma
+      var ny = topBaseline;
+      nameLines.forEach(function(ln){ page.drawText(ln, { x: col_jmeno, y: ny, size: 10, font: helv }); ny -= 12; });
+      firmaLines.forEach(function(ln){ page.drawText(ln, { x: col_jmeno, y: ny, size: 8, font: helv, color: PDFLib.rgb(0.4,0.4,0.4) }); ny -= 10; });
+      // Funkce (víceřádkově) – ve svém sloupci, nepřekrývá datum
+      var fy = topBaseline;
+      funkceLines.forEach(function(ln){ page.drawText(ln, { x: col_funkce, y: fy, size: 9, font: helv }); fy -= 11; });
+      // Datum
+      page.drawText((datumLines[0] || ''), { x: col_datum, y: topBaseline, size: 10, font: helv });
+      // Podpis (obrázek)
       if(s.dataUrl) {
         try {
           var img = await pdfDoc.embedPng(s.dataUrl);
           var sigW = 150, sigH = 50;
-          page.drawImage(img, { x: col_podpis, y: rowY + 5, width: sigW, height: sigH });
+          page.drawImage(img, { x: col_podpis, y: y - rowHeight + 5, width: sigW, height: sigH });
         } catch(eImg) {
           console.warn('Embed PNG selhalo pro podpis ' + s._id, eImg);
         }
       }
-      y = rowY;
+      y = y - rowHeight;
       page.drawLine({ start:{x:40, y:y}, end:{x:tableRight, y:y}, thickness:0.3, color: PDFLib.rgb(0.6,0.6,0.6) });
     }
 
