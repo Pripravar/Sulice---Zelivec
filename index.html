@@ -7377,6 +7377,137 @@ function deleteSignature(teprId, sigId){
   });
 }
 
+// ════════════════════════════════════════════════════════════════════
+//   EVIDENCE PODPISŮ – přehledová tabulka přes všechny TePř
+// ════════════════════════════════════════════════════════════════════
+window._signEvidenceData = [];
+function openSignEvidence(){
+  showSync('⏳ Načítám podpisy…');
+  db.ref('tepr_podpisy').once('value').then(function(snap){
+    hideSync();
+    var all = snap.val() || {};
+    var rows = [];
+    Object.keys(all).forEach(function(teprId){
+      var meta = (window.allKzp && window.allKzp[teprId]) || {};
+      var sigs = all[teprId] || {};
+      Object.keys(sigs).forEach(function(sid){
+        var s = sigs[sid] || {};
+        rows.push({
+          teprId: teprId, so: meta.so || '', nazev: meta.nazev || '',
+          jmeno: s.jmeno || '', funkce: s.funkce || '', firma: s.firma || '',
+          datum: s.datum || '', vytvoreno: s.vytvoreno || 0, dataUrl: s.dataUrl || '', sid: sid
+        });
+      });
+    });
+    window._signEvidenceData = rows;
+    document.getElementById('sign-evidence-modal').style.display = 'flex';
+    var sb = document.getElementById('sign-ev-search'); if(sb) sb.value = '';
+    renderSignEvidence();
+  }).catch(function(e){
+    hideSync();
+    showToast('❌ Chyba načtení: ' + (e.message || e), 3000);
+  });
+}
+function closeSignEvidence(){
+  document.getElementById('sign-evidence-modal').style.display = 'none';
+}
+function _signEvidenceFiltered(){
+  var q = ((document.getElementById('sign-ev-search') || {}).value || '').trim().toLowerCase();
+  var rows = (window._signEvidenceData || []).slice();
+  if(q){
+    rows = rows.filter(function(r){
+      return (r.jmeno + ' ' + r.funkce + ' ' + r.firma + ' ' + r.so + ' ' + r.nazev).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  return rows;
+}
+function renderSignEvidence(){
+  var body = document.getElementById('sign-ev-body');
+  var cnt  = document.getElementById('sign-ev-count');
+  if(!body) return;
+  var rows = _signEvidenceFiltered();
+  if(cnt) cnt.textContent = rows.length + ' ' + (rows.length === 1 ? 'podpis' : (rows.length < 5 ? 'podpisy' : 'podpisů'));
+  if(rows.length === 0){
+    body.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:14px 4px;">Zatím žádné podpisy.</div>';
+    return;
+  }
+  // Seskup podle TePř
+  var groups = {};
+  rows.forEach(function(r){
+    var key = r.teprId;
+    if(!groups[key]) groups[key] = { so: r.so, nazev: r.nazev, items: [] };
+    groups[key].items.push(r);
+  });
+  var keys = Object.keys(groups).sort(function(a,b){
+    return ((groups[a].so + groups[a].nazev) || '').localeCompare((groups[b].so + groups[b].nazev) || '', 'cs');
+  });
+  var html = '';
+  keys.forEach(function(key){
+    var g = groups[key];
+    // řadit podle data podpisu
+    g.items.sort(function(a,b){
+      var da = a.datum || '', dbb = b.datum || '';
+      if(da !== dbb) return da < dbb ? -1 : 1;
+      return (a.vytvoreno || 0) - (b.vytvoreno || 0);
+    });
+    html += '<div style="margin-top:12px;font-weight:700;color:var(--accent2);font-size:13px;">' + escapeHtml(g.so) + (g.so && g.nazev ? ' — ' : '') + escapeHtml(g.nazev) + ' <span style="color:var(--text2);font-weight:400;font-size:11px;">(' + g.items.length + ')</span></div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">'
+      + '<thead><tr style="color:var(--text2);text-align:left;">'
+      + '<th style="padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600;">#</th>'
+      + '<th style="padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600;">Jméno</th>'
+      + '<th style="padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600;">Funkce</th>'
+      + '<th style="padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600;">Firma</th>'
+      + '<th style="padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600;">Datum</th>'
+      + '<th style="padding:4px 6px;border-bottom:1px solid var(--border);font-weight:600;">Podpis</th>'
+      + '</tr></thead><tbody>';
+    g.items.forEach(function(r, i){
+      var dt = r.datum || (r.vytvoreno ? new Date(r.vytvoreno).toLocaleDateString('cs-CZ') : '');
+      html += '<tr style="border-bottom:1px solid var(--border);">'
+        + '<td style="padding:4px 6px;color:var(--text2);">' + (i + 1) + '</td>'
+        + '<td style="padding:4px 6px;color:var(--text);font-weight:600;">' + escapeHtml(r.jmeno) + '</td>'
+        + '<td style="padding:4px 6px;color:var(--text2);">' + escapeHtml(r.funkce) + '</td>'
+        + '<td style="padding:4px 6px;color:var(--text2);">' + escapeHtml(r.firma) + '</td>'
+        + '<td style="padding:4px 6px;color:var(--text2);white-space:nowrap;">' + escapeHtml(dt) + '</td>'
+        + '<td style="padding:4px 6px;">' + (r.dataUrl ? '<img src="' + r.dataUrl + '" style="height:26px;background:#fff;border-radius:3px;border:1px solid var(--border);">' : '') + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  body.innerHTML = html;
+}
+function downloadSignEvidenceCsv(){
+  var rows = _signEvidenceFiltered();
+  if(rows.length === 0){ showToast('Není co exportovat', 1500); return; }
+  rows.sort(function(a,b){
+    var ka = (a.so + a.nazev), kb = (b.so + b.nazev);
+    if(ka !== kb) return ka.localeCompare(kb, 'cs');
+    var da = a.datum || '', dbb = b.datum || '';
+    if(da !== dbb) return da < dbb ? -1 : 1;
+    return (a.vytvoreno || 0) - (b.vytvoreno || 0);
+  });
+  function q(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+  var lines = ['TePř SO;TePř název;Jméno;Funkce;Firma;Datum podpisu'];
+  rows.forEach(function(r){
+    var dt = r.datum || (r.vytvoreno ? new Date(r.vytvoreno).toLocaleDateString('cs-CZ') : '');
+    lines.push([q(r.so), q(r.nazev), q(r.jmeno), q(r.funkce), q(r.firma), q(dt)].join(';'));
+  });
+  var csv = '﻿' + lines.join('\r\n'); // BOM pro správnou diakritiku v Excelu
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var fname = 'evidence_podpisu_' + ymd(new Date()) + '.csv';
+  if(navigator.canShare){
+    try {
+      var file = new File([blob], fname, { type: 'text/csv' });
+      if(navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: fname }); return; }
+    } catch(e){}
+  }
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+  showToast('✅ CSV připraveno', 2000);
+}
+
 // Helvetica neumí české diakritiky – transliterace á→a, ě→e, atd.
 function _safePdfText(s){
   if(!s) return '';
@@ -8656,6 +8787,24 @@ function copyDiaryExport(){
   </div>
 </div>
 
+<!-- Modal: Evidence podpisů (přehled všech TePř) -->
+<div id="sign-evidence-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4900;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(98vw,720px);max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="font-size:15px;color:var(--accent2);">📋 Evidence podpisů</h3>
+      <div style="display:flex;gap:6px;">
+        <button onclick="downloadSignEvidenceCsv()" title="Stáhnout jako CSV" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">⬇ CSV</button>
+        <button onclick="closeSignEvidence()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">Zavřít</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="sign-ev-search" oninput="renderSignEvidence()" placeholder="🔍 Hledat jméno / firmu / TePř…" class="diary-field" style="flex:1;min-width:160px;">
+      <span id="sign-ev-count" style="font-size:11px;color:var(--text2);"></span>
+    </div>
+    <div id="sign-ev-body" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
 <!-- Modal: edit stroje -->
 <div id="stroj-edit-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4800;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,460px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
@@ -8726,6 +8875,7 @@ function copyDiaryExport(){
     <h2 id="kzp-header-title">🧪 Kvalita / KZP</h2>
     <button id="kzp-sign-btn" onclick="openSignModal()" title="Přidat podpis" style="display:none;background:var(--accent2);color:#0f3460;">✍️ Podepsat</button>
     <button id="kzp-download-btn" onclick="downloadTeprWithSigs()" title="Stáhnout finální PDF s podpisy" style="display:none;background:var(--green);color:#fff;">📥 Stáhnout</button>
+    <button id="kzp-evidence-btn" onclick="openSignEvidence()" title="Evidence podpisů (přehled tabulka)" style="background:var(--panel2);color:var(--text2);font-size:13px;">📋 Evidence</button>
     <button id="kzp-cleanup-btn" onclick="cleanupOldKzp()" title="Vyčistit staré KZP záznamy" style="background:var(--panel2);color:var(--text2);font-size:13px;">🧹</button>
     <button id="kzp-add-btn" onclick="openKzpAddModal()" style="background:var(--accent);color:#fff;">+ Položka</button>
     <button onclick="closeKzpPanel()">✕</button>
@@ -8807,13 +8957,13 @@ function copyDiaryExport(){
     </div>
 
     <!-- Prohlášení / dovětek -->
-    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;">
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;flex-shrink:0;">
       <div id="sign-lbl-decl" style="font-size:11px;color:var(--accent2);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Prohlášení</div>
       <div id="sign-decl-text" style="font-size:11.5px;color:var(--text);line-height:1.45;"></div>
     </div>
 
     <!-- Fronta předvyplněných lidí -->
-    <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;">
+    <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;flex-shrink:0;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <span id="sign-lbl-queue" style="font-size:11px;color:var(--text2);text-transform:uppercase;">Fronta k podpisu</span>
         <span id="sign-fronta-count" style="color:var(--accent2);font-size:11px;">0</span>
@@ -8845,12 +8995,12 @@ function copyDiaryExport(){
       <span id="sign-lbl-podpis-span">Podpis (kresli prstem)</span>
       <button id="sign-btn-clear" onclick="signClearCanvas()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">⌫ Vyčistit</button>
     </label>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;flex-shrink:0;height:200px;">
       <canvas id="sign-canvas" width="520" height="200" style="display:block;width:100%;height:200px;background:#fff;cursor:crosshair;"></canvas>
     </div>
 
     <!-- Které TePř podepsat -->
-    <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;">
+    <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;flex-shrink:0;">
       <div id="sign-lbl-tepr" style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Které TePř podepsat</div>
       <div id="sign-tepr-list" style="display:flex;flex-direction:column;gap:2px;max-height:160px;overflow-y:auto;"></div>
     </div>
