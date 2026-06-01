@@ -7007,7 +7007,58 @@ window._signCtx = null;
 window._signDrawing = false;
 window._signLastX = 0;
 window._signLastY = 0;
-window._teprSignatures = {}; // {tepr_id: {sig_id: {jmeno, funkce, datum, dataUrl, vytvoreno}}}
+window._teprSignatures = {}; // {tepr_id: {sig_id: {jmeno, funkce, firma, datum, dataUrl, vytvoreno}}}
+window._signFronta = {};      // {fronta_id: {jmeno, funkce, firma}} – předvyplnění lidí (Firebase: podpisy_fronta)
+window._signLoadedFrontaId = null; // id právě načteného člověka z fronty (po uložení se z fronty odebere)
+window._signLang = 'cs';      // aktuální jazyk podpisové stránky
+
+// ── Prohlášení (dovětek) + překlady podpisové stránky ───────────────
+var SIGN_DECL = {
+  cs: 'Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto technologickým předpisem, plánem BOZP a DPŘ stavby. Tyto tiskopisy mi byly předány v tištěné verzi v počtu 1 páru od každého dokumentu na dobu potřebnou k nastudování. Porozuměl jsem jejich obsahu a budu se jimi řídit. Otázky mi byly zodpovězeny.',
+  en: 'By signing, I confirm that I have duly familiarized myself with this technological procedure, the OHS (health & safety) plan and the site traffic management plan (DPŘ). These documents were handed to me in printed form, one copy of each, for the time needed to study them. I have understood their content and will comply with them. My questions have been answered.',
+  de: 'Mit meiner Unterschrift bestätige ich, dass ich mich ordnungsgemäß mit dieser technologischen Vorschrift, dem Arbeitsschutzplan (BOZP) und dem Verkehrsführungsplan der Baustelle (DPŘ) vertraut gemacht habe. Diese Unterlagen wurden mir in gedruckter Form, je ein Exemplar, für die zum Studium erforderliche Zeit übergeben. Ich habe ihren Inhalt verstanden und werde mich daran halten. Meine Fragen wurden beantwortet.',
+  uk: 'Своїм підписом підтверджую, що належним чином ознайомився з цим технологічним регламентом, планом охорони праці (BOZP) та планом організації дорожнього руху на будівництві (DPŘ). Ці документи були передані мені у друкованому вигляді, по одному примірнику кожного, на час, потрібний для вивчення. Я зрозумів їхній зміст і дотримуватимусь їх. На мої запитання було надано відповіді.',
+  ru: 'Своей подписью подтверждаю, что надлежащим образом ознакомился с настоящим технологическим регламентом, планом охраны труда (BOZP) и планом организации дорожного движения на стройке (DPŘ). Эти документы были переданы мне в печатном виде, по одному экземпляру каждого, на время, необходимое для изучения. Я понял их содержание и буду их соблюдать. На мои вопросы были даны ответы.'
+};
+var SIGN_I18N = {
+  cs: { title:'✍️ Podpis k TePř', decl:'Prohlášení', name:'Jméno a příjmení', funkce:'Funkce (volitelné)', firma:'Firma / subdodavatel (volitelné)', datum:'Datum podpisu', today:'Dnes', podpis:'Podpis (kresli prstem)', clear:'⌫ Vyčistit', save:'💾 Uložit podpis', cancel:'Zrušit', tepr:'Které TePř podepsat', queue:'Fronta k podpisu', queueAdd:'+ Přidat do fronty', queueWorkers:'+ Z pracovníků', existing:'Stávající podpisy', phName:'např. Pepa Novák', phFunkce:'např. stavbyvedoucí, dělník, TDS…', phFirma:'např. Subdodavatel s.r.o.' },
+  en: { title:'✍️ Signature for TePř', decl:'Declaration', name:'Name and surname', funkce:'Position (optional)', firma:'Company / subcontractor (optional)', datum:'Date of signature', today:'Today', podpis:'Signature (draw with finger)', clear:'⌫ Clear', save:'💾 Save signature', cancel:'Cancel', tepr:'Which TePř to sign', queue:'Signing queue', queueAdd:'+ Add to queue', queueWorkers:'+ From workers', existing:'Existing signatures', phName:'e.g. John Smith', phFunkce:'e.g. site manager, worker…', phFirma:'e.g. Subcontractor Ltd.' },
+  de: { title:'✍️ Unterschrift zu TePř', decl:'Erklärung', name:'Vor- und Nachname', funkce:'Funktion (optional)', firma:'Firma / Subunternehmer (optional)', datum:'Datum der Unterschrift', today:'Heute', podpis:'Unterschrift (mit dem Finger zeichnen)', clear:'⌫ Löschen', save:'💾 Unterschrift speichern', cancel:'Abbrechen', tepr:'Welche TePř unterschreiben', queue:'Warteschlange', queueAdd:'+ Zur Warteschlange', queueWorkers:'+ Aus Mitarbeitern', existing:'Vorhandene Unterschriften', phName:'z.B. Hans Müller', phFunkce:'z.B. Bauleiter, Arbeiter…', phFirma:'z.B. Subunternehmer GmbH' },
+  uk: { title:'✍️ Підпис до TePř', decl:'Декларація', name:'Імʼя та прізвище', funkce:'Посада (необовʼязково)', firma:'Компанія / субпідрядник (необовʼязково)', datum:'Дата підпису', today:'Сьогодні', podpis:'Підпис (малюйте пальцем)', clear:'⌫ Очистити', save:'💾 Зберегти підпис', cancel:'Скасувати', tepr:'Які TePř підписати', queue:'Черга на підпис', queueAdd:'+ Додати в чергу', queueWorkers:'+ З працівників', existing:'Наявні підписи', phName:'напр. Іван Коваль', phFunkce:'напр. виконроб, робітник…', phFirma:'напр. Субпідрядник ТОВ' },
+  ru: { title:'✍️ Подпись к TePř', decl:'Декларация', name:'Имя и фамилия', funkce:'Должность (необязательно)', firma:'Компания / субподрядчик (необязательно)', datum:'Дата подписи', today:'Сегодня', podpis:'Подпись (рисуйте пальцем)', clear:'⌫ Очистить', save:'💾 Сохранить подпись', cancel:'Отмена', tepr:'Какие TePř подписать', queue:'Очередь на подпись', queueAdd:'+ Добавить в очередь', queueWorkers:'+ Из работников', existing:'Имеющиеся подписи', phName:'напр. Иван Иванов', phFunkce:'напр. прораб, рабочий…', phFirma:'напр. Субподрядчик ООО' }
+};
+function signSetLang(lang){
+  if(!SIGN_I18N[lang]) lang = 'cs';
+  window._signLang = lang;
+  var t = SIGN_I18N[lang];
+  function setTxt(id, v){ var el = document.getElementById(id); if(el) el.textContent = v; }
+  function setPh(id, v){ var el = document.getElementById(id); if(el) el.placeholder = v; }
+  setTxt('sign-i18n-title', t.title);
+  setTxt('sign-lbl-decl', t.decl);
+  setTxt('sign-decl-text', SIGN_DECL[lang] || SIGN_DECL.cs);
+  setTxt('sign-lbl-name', t.name);
+  setTxt('sign-lbl-funkce', t.funkce);
+  setTxt('sign-lbl-firma', t.firma);
+  setTxt('sign-lbl-datum-span', t.datum);
+  setTxt('sign-btn-dnes', t.today);
+  setTxt('sign-lbl-podpis-span', t.podpis);
+  setTxt('sign-btn-clear', t.clear);
+  setTxt('sign-btn-save', t.save);
+  setTxt('sign-btn-cancel', t.cancel);
+  setTxt('sign-lbl-tepr', t.tepr);
+  setTxt('sign-lbl-queue', t.queue);
+  setTxt('sign-btn-queue-add', t.queueAdd);
+  setTxt('sign-btn-queue-workers', t.queueWorkers);
+  setTxt('sign-lbl-existing-txt', t.existing);
+  setPh('sign-name', t.phName);
+  setPh('sign-funkce', t.phFunkce);
+  setPh('sign-firma', t.phFirma);
+  // zvýraznit aktivní tlačítko jazyka
+  ['cs','en','de','uk','ru'].forEach(function(l){
+    var b = document.getElementById('sign-lang-' + l);
+    if(b){ b.style.background = (l === lang) ? 'var(--accent)' : 'var(--panel2)'; b.style.color = (l === lang) ? '#fff' : 'var(--text2)'; }
+  });
+}
 
 function _initSignCanvas(){
   var canvas = document.getElementById('sign-canvas');
@@ -7085,6 +7136,119 @@ function _signCanvasIsEmpty(){
   return true;
 }
 
+// ── Fronta připravených podepisujících (předvyplnění) ───────────────
+function _signFrontaArr(){
+  var f = window._signFronta || {};
+  return Object.keys(f).map(function(id){ var x = f[id]; return { _id:id, jmeno:x.jmeno||'', funkce:x.funkce||'', firma:x.firma||'', poradi: x.poradi||0 }; })
+    .sort(function(a,b){ return (a.poradi||0) - (b.poradi||0); });
+}
+function signRenderFronta(){
+  var box = document.getElementById('sign-fronta-list');
+  var cnt = document.getElementById('sign-fronta-count');
+  if(!box) return;
+  var arr = _signFrontaArr();
+  if(cnt) cnt.textContent = arr.length;
+  if(arr.length === 0){
+    box.innerHTML = '<div style="font-size:11px;color:var(--text2);padding:4px 0;">—</div>';
+    return;
+  }
+  box.innerHTML = arr.map(function(p){
+    var sub = [p.funkce, p.firma].filter(Boolean).join(' · ');
+    var loaded = (window._signLoadedFrontaId === p._id);
+    return '<div style="display:flex;align-items:center;gap:6px;background:' + (loaded ? 'var(--accent)' : 'var(--panel2)') + ';border-radius:8px;padding:5px 8px;">'
+      + '<div style="flex:1;min-width:0;cursor:pointer;" onclick="signLoadFronta(\'' + p._id + '\')">'
+      +   '<div style="font-size:12px;font-weight:700;color:' + (loaded ? '#fff' : 'var(--text)') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(p.jmeno) + '</div>'
+      +   (sub ? '<div style="font-size:10px;color:' + (loaded ? 'rgba(255,255,255,.85)' : 'var(--text2)') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(sub) + '</div>' : '')
+      + '</div>'
+      + '<button onclick="signRemoveFronta(\'' + p._id + '\')" title="Odebrat" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:13px;padding:2px 4px;">🗑</button>'
+      + '</div>';
+  }).join('');
+}
+function signAddToFronta(){
+  var jmeno = (document.getElementById('sign-name').value || '').trim();
+  if(!jmeno || jmeno.length < 2){ showToast('Zadej jméno', 1500); return; }
+  var funkce = (document.getElementById('sign-funkce').value || '').trim();
+  var firma  = (document.getElementById('sign-firma').value || '').trim();
+  var id = 'fr_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
+  db.ref('podpisy_fronta/' + id).set({ jmeno:jmeno, funkce:funkce, firma:firma, poradi: Date.now() });
+  // vyčistit formulář pro dalšího
+  document.getElementById('sign-name').value = '';
+  document.getElementById('sign-funkce').value = '';
+  document.getElementById('sign-firma').value = '';
+  window._signLoadedFrontaId = null;
+  showToast('✓ Přidáno do fronty', 1200);
+}
+function signLoadFronta(id){
+  var p = window._signFronta && window._signFronta[id];
+  if(!p) return;
+  document.getElementById('sign-name').value = p.jmeno || '';
+  document.getElementById('sign-funkce').value = p.funkce || '';
+  document.getElementById('sign-firma').value = p.firma || '';
+  window._signLoadedFrontaId = id;
+  signClearCanvas();
+  signRenderFronta();
+}
+function signRemoveFronta(id){
+  if(window._signLoadedFrontaId === id) window._signLoadedFrontaId = null;
+  db.ref('podpisy_fronta/' + id).remove();
+}
+// Výběr z existujícího seznamu pracovníků → přidat do fronty
+function signToggleWorkerPicker(){
+  var box = document.getElementById('sign-worker-picker');
+  if(!box) return;
+  if(box.style.display === 'none' || !box.style.display){
+    var workers = (typeof getAllWorkers === 'function') ? getAllWorkers(true) : [];
+    if(workers.length === 0){
+      box.innerHTML = '<div style="font-size:11px;color:var(--text2);padding:6px;">Žádní pracovníci v seznamu.</div>';
+    } else {
+      box.innerHTML = workers.map(function(w){
+        var fb = w.firma ? ' <span style="color:var(--text2);font-size:10px;">(' + escapeHtml(w.firma) + ')</span>' : '';
+        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:12px;color:var(--text);cursor:pointer;">'
+          + '<input type="checkbox" class="sign-wp-cb" data-name="' + escapeHtml(w.name) + '" data-firma="' + escapeHtml(w.firma || '') + '">'
+          + '<span>' + escapeHtml(w.name) + fb + '</span></label>';
+      }).join('')
+      + '<button onclick="signAddWorkersToFronta()" style="margin-top:6px;width:100%;background:var(--accent2);color:#0f3460;border:none;border-radius:6px;padding:7px;font-weight:700;font-size:12px;cursor:pointer;">Přidat vybrané do fronty</button>';
+    }
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+function signAddWorkersToFronta(){
+  var cbs = document.querySelectorAll('.sign-wp-cb:checked');
+  if(cbs.length === 0){ showToast('Nikdo nevybrán', 1200); return; }
+  var updates = {};
+  var base = Date.now();
+  cbs.forEach(function(cb, i){
+    var id = 'fr_' + (base + i) + '_' + Math.random().toString(36).substr(2,4);
+    updates[id] = { jmeno: cb.getAttribute('data-name') || '', funkce: '', firma: cb.getAttribute('data-firma') || '', poradi: base + i };
+  });
+  db.ref('podpisy_fronta').update(updates).then(function(){
+    showToast('✓ Přidáno ' + cbs.length + ' do fronty', 1500);
+    var box = document.getElementById('sign-worker-picker');
+    if(box){ box.style.display = 'none'; }
+  });
+}
+// ── Seznam TePř se zatržítky (podpis do více najednou) ───────────────
+function signRenderTeprList(currentId){
+  var box = document.getElementById('sign-tepr-list');
+  if(!box) return;
+  var all = window.allKzp || {};
+  var teprs = Object.keys(all).map(function(id){ var x = all[id]; return { id:id, so:x.so||'', nazev:x.nazev||'', typ:x.typ }; })
+    .filter(function(x){ return x.typ === 'tepr'; })
+    .sort(function(a,b){ return (a.so + a.nazev).localeCompare(b.so + b.nazev, 'cs'); });
+  if(teprs.length === 0){
+    box.innerHTML = '<div style="font-size:11px;color:var(--text2);padding:4px 0;">—</div>';
+    return;
+  }
+  box.innerHTML = teprs.map(function(t){
+    var checked = (t.id === currentId) ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:12px;color:var(--text);cursor:pointer;">'
+      + '<input type="checkbox" class="sign-tepr-cb" value="' + t.id + '"' + checked + '>'
+      + '<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(t.so) + (t.so && t.nazev ? ' — ' : '') + escapeHtml(t.nazev) + '</span></label>';
+  }).join('');
+}
+
 function openSignModal(){
   var k = window._kzpCurrentItem;
   if(!k) { showToast('Nejdřív otevři TePř', 1500); return; }
@@ -7092,7 +7256,12 @@ function openSignModal(){
   document.getElementById('sign-tepr-title').textContent = '📋 ' + (k.so || '') + ' — ' + (k.nazev || '');
   document.getElementById('sign-name').value = (window.currentUser && window.currentUser.name) || '';
   document.getElementById('sign-funkce').value = '';
+  var firmaInp = document.getElementById('sign-firma'); if(firmaInp) firmaInp.value = '';
   document.getElementById('sign-datum').value = ymd(new Date()); // default = dnes
+  window._signLoadedFrontaId = null;
+  var wp = document.getElementById('sign-worker-picker'); if(wp){ wp.style.display = 'none'; wp.innerHTML = ''; }
+  signSetLang(window._signLang || 'cs'); // přelož popisky + prohlášení
+  signRenderTeprList(k.id);              // seznam TePř (aktuální zaškrtnutá)
   document.getElementById('sign-modal').style.display = 'flex';
   setTimeout(function(){
     _initSignCanvas();
@@ -7106,9 +7275,18 @@ function openSignModal(){
     window._teprSignatures[k.id] = sigs;
     refreshSignList(k.id);
   });
+  // Načti frontu předvyplněných lidí
+  db.ref('podpisy_fronta').on('value', function(snap){
+    window._signFronta = snap.val() || {};
+    signRenderFronta();
+  });
 }
 function closeSignModal(){
   document.getElementById('sign-modal').style.display = 'none';
+  // odpoj Firebase listenery, ať se nehromadí
+  var k = window._kzpCurrentItem;
+  if(k && k.id) { try { db.ref('tepr_podpisy/' + k.id).off(); } catch(e){} }
+  try { db.ref('podpisy_fronta').off(); } catch(e){}
 }
 
 function refreshSignList(teprId){
@@ -7117,7 +7295,12 @@ function refreshSignList(teprId){
   if(!list) return;
   var sigs = (window._teprSignatures && window._teprSignatures[teprId]) || {};
   var arr = Object.keys(sigs).map(function(id){ var s = sigs[id]; s._id = id; return s; });
-  arr.sort(function(a,b){ return (a.vytvoreno || 0) - (b.vytvoreno || 0); });
+  // řadit podle data podpisu (vzestupně), vytvoreno jako sekundární klíč
+  arr.sort(function(a,b){
+    var da = a.datum || '', dbb = b.datum || '';
+    if(da !== dbb) return da < dbb ? -1 : 1;
+    return (a.vytvoreno || 0) - (b.vytvoreno || 0);
+  });
   if(cntEl) cntEl.textContent = arr.length;
   if(arr.length === 0) {
     list.innerHTML = '<div style="font-size:11px;color:var(--text2);padding:6px 0;">Zatím žádné podpisy.</div>';
@@ -7125,11 +7308,12 @@ function refreshSignList(teprId){
   }
   list.innerHTML = arr.map(function(s){
     var dt = s.datum || (s.vytvoreno ? new Date(s.vytvoreno).toLocaleDateString('cs-CZ') : '');
+    var sub = [s.funkce, s.firma].filter(Boolean).join(' · ');
     return '<div style="display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:8px;padding:6px 8px;">'
       + '<img src="' + (s.dataUrl || '') + '" style="width:60px;height:32px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid var(--border);">'
       + '<div style="flex:1;font-size:12px;">'
       +   '<div style="color:var(--text);font-weight:700;">' + escapeHtml(s.jmeno || '') + '</div>'
-      +   '<div style="color:var(--text2);font-size:10px;">' + escapeHtml(s.funkce || '') + (s.funkce && dt ? ' · ' : '') + escapeHtml(dt) + '</div>'
+      +   '<div style="color:var(--text2);font-size:10px;">' + escapeHtml(sub) + (sub && dt ? ' · ' : '') + escapeHtml(dt) + '</div>'
       + '</div>'
       + '<button onclick="deleteSignature(\'' + teprId + '\', \'' + s._id + '\')" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:13px;padding:2px 4px;">🗑</button>'
       + '</div>';
@@ -7143,28 +7327,41 @@ function saveSignature(){
   if(!name || name.length < 2) { showToast('Zadej jméno', 1500); return; }
   if(_signCanvasIsEmpty()) { showToast('Nakresli prosím podpis', 1800); return; }
   var funkce = (document.getElementById('sign-funkce').value || '').trim();
+  var firma  = (document.getElementById('sign-firma') ? (document.getElementById('sign-firma').value || '').trim() : '');
   var datum  = (document.getElementById('sign-datum').value || '').trim() || ymd(new Date());
   var canvas = document.getElementById('sign-canvas');
+  // Které TePř podepsat (zatržítka) – fallback na aktuální
+  var teprIds = [];
+  document.querySelectorAll('.sign-tepr-cb:checked').forEach(function(cb){ teprIds.push(cb.value); });
+  if(teprIds.length === 0) teprIds = [k.id];
   // Generuj komprimovaný PNG (vysoké kvalita ale rozumná velikost)
   var dataUrl = canvas.toDataURL('image/png');
-  var sigId = 'sig_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
-  var rec = {
-    id: sigId,
-    jmeno: name,
-    funkce: funkce,
-    datum: datum,
-    dataUrl: dataUrl,
-    vytvoreno: Date.now(),
-    uid: window.currentUser ? window.currentUser.uid : ''
-  };
+  var base = Date.now();
+  var updates = {};
+  teprIds.forEach(function(tid, i){
+    var sigId = 'sig_' + (base + i) + '_' + Math.random().toString(36).substr(2,5);
+    updates['tepr_podpisy/' + tid + '/' + sigId] = {
+      id: sigId,
+      jmeno: name,
+      funkce: funkce,
+      firma: firma,
+      datum: datum,
+      dataUrl: dataUrl,
+      vytvoreno: base + i,
+      uid: window.currentUser ? window.currentUser.uid : ''
+    };
+  });
   showSync('⏳ Ukládám podpis…');
-  db.ref('tepr_podpisy/' + k.id + '/' + sigId).set(rec).then(function(){
+  db.ref().update(updates).then(function(){
     hideSync();
-    showToast('✓ Podpis uložen', 1500);
+    showToast('✓ Podpis uložen' + (teprIds.length > 1 ? ' (' + teprIds.length + ' TePř)' : ''), 1600);
     signClearCanvas();
+    // Pokud byl člověk načtený z fronty, odeber ho
+    if(window._signLoadedFrontaId){ signRemoveFronta(window._signLoadedFrontaId); window._signLoadedFrontaId = null; }
     // Vyčistit pole pro rychlé další zadání
     document.getElementById('sign-name').value = (window.currentUser && window.currentUser.name) || '';
     document.getElementById('sign-funkce').value = '';
+    if(document.getElementById('sign-firma')) document.getElementById('sign-firma').value = '';
   }).catch(function(e){
     hideSync();
     showToast('❌ Chyba: ' + (e.message || e), 2500);
@@ -7211,7 +7408,11 @@ async function downloadTeprWithSigs(){
     var snap = await db.ref('tepr_podpisy/' + k.id).once('value');
     var sigsObj = snap.val() || {};
     var sigs = Object.keys(sigsObj).map(function(id){ var s = sigsObj[id]; s._id = id; return s; });
-    sigs.sort(function(a,b){ return (a.vytvoreno || 0) - (b.vytvoreno || 0); });
+    sigs.sort(function(a,b){
+      var da = a.datum || '', dbb = b.datum || '';
+      if(da !== dbb) return da < dbb ? -1 : 1;
+      return (a.vytvoreno || 0) - (b.vytvoreno || 0);
+    });
 
     if(sigs.length === 0) {
       hideSync();
@@ -7251,13 +7452,9 @@ async function downloadTeprWithSigs(){
       return lines;
     }
 
-    // Deklarace
-    var declText =
-      'Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto technologickým ' +
-      'předpisem, plánem BOZP a DPŘ stavby. Tyto tiskopisy mi byly předány ' +
-      'v tištěné verzi v počtu 1 páru od každého dokumentu na dobu potřebnou ' +
-      'k nastudování. Porozuměl jsem jejich obsahu a budu se jimi řídit. ' +
-      'Otázky mi byly zodpovězeny.';
+    // Deklarace (stejný text jako v podpisovém okně – vždy česky v oficiálním PDF)
+    var declText = (typeof SIGN_DECL !== 'undefined' && SIGN_DECL.cs) ? SIGN_DECL.cs :
+      'Svým podpisem potvrzuji, že jsem se řádně seznámil s tímto technologickým předpisem, plánem BOZP a DPŘ stavby.';
     var declLines = _wrapPdfText(_safePdfText(declText), helv, 10, tableRight - 40);
     declLines.forEach(function(ln){
       page.drawText(ln, { x: 40, y: y, size: 10, font: helv });
@@ -7288,6 +7485,7 @@ async function downloadTeprWithSigs(){
       }
       var rowY = y - rowHeight;
       page.drawText(_safePdfText(s.jmeno || ''),  { x: col_jmeno,  y: rowY + 35, size: 10, font: helv });
+      if(s.firma) page.drawText(_safePdfText(s.firma), { x: col_jmeno, y: rowY + 22, size: 8, font: helv, color: PDFLib.rgb(0.4,0.4,0.4) });
       page.drawText(_safePdfText(s.funkce || ''), { x: col_funkce, y: rowY + 35, size: 10, font: helv });
       page.drawText(_safePdfText(s.datum || ''),  { x: col_datum,  y: rowY + 35, size: 10, font: helv });
       if(s.dataUrl) {
@@ -8549,36 +8747,74 @@ function copyDiaryExport(){
 <!-- Modal: Podpis pro TePř -->
 <div id="sign-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4900;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,540px);max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
-    <h3 style="font-size:15px;color:var(--accent2);">✍️ Podpis k TePř</h3>
+    <h3 id="sign-i18n-title" style="font-size:15px;color:var(--accent2);">✍️ Podpis k TePř</h3>
     <div id="sign-tepr-title" style="font-size:12px;color:var(--text2);"></div>
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jméno a příjmení</label>
+    <!-- Přepínač jazyka (jen pro podpis) -->
+    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+      <button id="sign-lang-cs" onclick="signSetLang('cs')" style="flex:1;min-width:54px;background:var(--accent);color:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 4px;font-size:12px;font-weight:700;cursor:pointer;">CZ</button>
+      <button id="sign-lang-en" onclick="signSetLang('en')" style="flex:1;min-width:54px;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;font-size:12px;font-weight:700;cursor:pointer;">EN</button>
+      <button id="sign-lang-de" onclick="signSetLang('de')" style="flex:1;min-width:54px;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;font-size:12px;font-weight:700;cursor:pointer;">DE</button>
+      <button id="sign-lang-uk" onclick="signSetLang('uk')" style="flex:1;min-width:54px;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;font-size:12px;font-weight:700;cursor:pointer;">UA</button>
+      <button id="sign-lang-ru" onclick="signSetLang('ru')" style="flex:1;min-width:54px;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;font-size:12px;font-weight:700;cursor:pointer;">RU</button>
+    </div>
+
+    <!-- Prohlášení / dovětek -->
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;">
+      <div id="sign-lbl-decl" style="font-size:11px;color:var(--accent2);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Prohlášení</div>
+      <div id="sign-decl-text" style="font-size:11.5px;color:var(--text);line-height:1.45;"></div>
+    </div>
+
+    <!-- Fronta předvyplněných lidí -->
+    <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span id="sign-lbl-queue" style="font-size:11px;color:var(--text2);text-transform:uppercase;">Fronta k podpisu</span>
+        <span id="sign-fronta-count" style="color:var(--accent2);font-size:11px;">0</span>
+      </div>
+      <div id="sign-fronta-list" style="display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto;"></div>
+      <div style="display:flex;gap:6px;margin-top:7px;">
+        <button id="sign-btn-queue-add" onclick="signAddToFronta()" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 4px;font-size:11px;cursor:pointer;">+ Přidat do fronty</button>
+        <button id="sign-btn-queue-workers" onclick="signToggleWorkerPicker()" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:7px 4px;font-size:11px;cursor:pointer;">+ Z pracovníků</button>
+      </div>
+      <div id="sign-worker-picker" style="display:none;margin-top:7px;max-height:180px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px;"></div>
+    </div>
+
+    <label id="sign-lbl-name" style="font-size:11px;color:var(--text2);text-transform:uppercase;">Jméno a příjmení</label>
     <input type="text" class="diary-field" id="sign-name" placeholder="např. Pepa Novák" autocapitalize="words">
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Funkce (volitelné)</label>
+    <label id="sign-lbl-funkce" style="font-size:11px;color:var(--text2);text-transform:uppercase;">Funkce (volitelné)</label>
     <input type="text" class="diary-field" id="sign-funkce" placeholder="např. stavbyvedoucí, dělník, TDS…">
 
+    <label id="sign-lbl-firma" style="font-size:11px;color:var(--text2);text-transform:uppercase;">Firma / subdodavatel (volitelné)</label>
+    <input type="text" class="diary-field" id="sign-firma" placeholder="např. Subdodavatel s.r.o." autocapitalize="words">
+
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
-      <span>Datum podpisu</span>
-      <button onclick="signDateToday()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">Dnes</button>
+      <span id="sign-lbl-datum-span">Datum podpisu</span>
+      <button id="sign-btn-dnes" onclick="signDateToday()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">Dnes</button>
     </label>
     <input type="date" class="diary-field" id="sign-datum">
 
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
-      <span>Podpis (kresli prstem)</span>
-      <button onclick="signClearCanvas()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">⌫ Vyčistit</button>
+      <span id="sign-lbl-podpis-span">Podpis (kresli prstem)</span>
+      <button id="sign-btn-clear" onclick="signClearCanvas()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">⌫ Vyčistit</button>
     </label>
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;">
       <canvas id="sign-canvas" width="520" height="200" style="display:block;width:100%;height:200px;background:#fff;cursor:crosshair;"></canvas>
     </div>
 
+    <!-- Které TePř podepsat -->
+    <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;">
+      <div id="sign-lbl-tepr" style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Které TePř podepsat</div>
+      <div id="sign-tepr-list" style="display:flex;flex-direction:column;gap:2px;max-height:160px;overflow-y:auto;"></div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:6px;">
-      <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveSignature()">💾 Uložit podpis</button>
-      <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeSignModal()">Zrušit</button>
+      <button id="sign-btn-save" class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveSignature()">💾 Uložit podpis</button>
+      <button id="sign-btn-cancel" class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeSignModal()">Zrušit</button>
     </div>
 
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
-      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Stávající podpisy <span id="sign-count" style="color:var(--accent2);">0</span></div>
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;"><span id="sign-lbl-existing-txt">Stávající podpisy</span> <span id="sign-count" style="color:var(--accent2);">0</span></div>
       <div id="sign-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;"></div>
     </div>
   </div>
