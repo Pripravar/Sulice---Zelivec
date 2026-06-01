@@ -161,8 +161,9 @@ exports.uploadFoto = functions
     const body = req.body || {};
     const filename = String(body.filename || '');
     const content  = String(body.content  || '');
-    // jen bezpečné názvy: písmena, číslice, tečka, podtržítko, pomlčka, končí .jpg/.jpeg/.png
-    if(!/^[A-Za-z0-9._-]+\.(jpe?g|png)$/i.test(filename)) {
+    // jen bezpečné názvy: písmena, číslice, tečka, podtržítko, pomlčka, volitelně jedna
+    // podsložka (např. "standalone/"), končí .jpg/.jpeg/.png. Bez ".." a bez úvodního "/".
+    if(!/^([A-Za-z0-9_-]+\/)?[A-Za-z0-9._-]+\.(jpe?g|png)$/i.test(filename)) {
       res.status(400).json({ error: 'Neplatné jméno souboru' }); return;
     }
     if(!content || content.length > 12 * 1024 * 1024) { // ~9 MB binárně
