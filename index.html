@@ -1054,6 +1054,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
+  <button id="btn-notes-evidence" onclick="openNotesEvidence()" title="Evidence poznámek" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📝</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
   <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span></div>
   <button id="btn-layers" onclick="toggleLayers()">☰ Vrstvy</button>
@@ -2364,6 +2365,9 @@ function loadNotes() {
     }
     hideSync();
     renderNoteMarkers();
+    // pokud je otevřená evidence poznámek, aktualizuj ji
+    var nem = document.getElementById('notes-evidence-modal');
+    if(nem && nem.style.display === 'flex') renderNotesEvidence();
   }, function(error) {
     console.error('Firebase chyba:', error);
     hideSync();
@@ -2398,6 +2402,101 @@ function deleteNote_fromFirebase(noteId, callback) {
       hideSync();
       showToast('❌ Chyba mazání', 2500);
     });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//   EVIDENCE POZNÁMEK – přehledová tabulka
+// ════════════════════════════════════════════════════════════════════
+function _noteKm(note){
+  try { return fmtKm(gpxCumToRealKm(nearestOnRoute(note.lat, note.lng).cum)); }
+  catch(e){ return ''; }
+}
+function openNotesEvidence(){
+  document.getElementById('notes-evidence-modal').style.display = 'flex';
+  var sb = document.getElementById('notes-ev-search'); if(sb) sb.value = '';
+  renderNotesEvidence();
+}
+function closeNotesEvidence(){
+  document.getElementById('notes-evidence-modal').style.display = 'none';
+}
+function _notesEvidenceFiltered(){
+  var q = ((document.getElementById('notes-ev-search') || {}).value || '').trim().toLowerCase();
+  var rows = (window.notesData || notesData || []).slice();
+  if(q){
+    rows = rows.filter(function(n){
+      var cat = (NOTE_CATS[n.cat] || NOTE_CATS[0]).label;
+      return ((n.nazev || '') + ' ' + (n.text || '') + ' ' + (n.author || '') + ' ' + cat).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+  // nejnovější nahoře (id = timestamp vzniku)
+  rows.sort(function(a,b){ return (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0); });
+  return rows;
+}
+function renderNotesEvidence(){
+  var body = document.getElementById('notes-ev-body');
+  var cnt  = document.getElementById('notes-ev-count');
+  if(!body) return;
+  var rows = _notesEvidenceFiltered();
+  if(cnt) cnt.textContent = rows.length + ' ' + (rows.length === 1 ? 'poznámka' : (rows.length < 5 ? 'poznámky' : 'poznámek'));
+  if(rows.length === 0){
+    body.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:14px 4px;">Zatím žádné poznámky.</div>';
+    return;
+  }
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+    + '<thead><tr style="color:var(--text2);text-align:left;">'
+    + '<th style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:600;">Nadpis</th>'
+    + '<th style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap;">📍 Staničení</th>'
+    + '<th style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:600;">Kdo</th>'
+    + '<th style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap;">Kdy</th>'
+    + '<th style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:600;"></th>'
+    + '</tr></thead><tbody>';
+  rows.forEach(function(n){
+    var cat = NOTE_CATS[n.cat] || NOTE_CATS[0];
+    var km = _noteKm(n);
+    var nadpis = n.nazev || '(bez názvu)';
+    html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="openNoteFromEvidence(\'' + n.id + '\')">'
+      + '<td style="padding:6px 6px;color:var(--text);font-weight:600;"><span style="font-size:11px;">' + escapeHtml(cat.label) + '</span><br>' + escapeHtml(nadpis) + '</td>'
+      + '<td style="padding:6px 6px;color:var(--accent2);white-space:nowrap;font-weight:700;">' + escapeHtml(km) + '</td>'
+      + '<td style="padding:6px 6px;color:var(--text2);">' + escapeHtml(n.author || '') + '</td>'
+      + '<td style="padding:6px 6px;color:var(--text2);white-space:nowrap;font-size:11px;">' + escapeHtml(n.time || '') + '</td>'
+      + '<td style="padding:6px 6px;text-align:right;"><button onclick="event.stopPropagation();deleteNoteFromEvidence(\'' + n.id + '\')" title="Smazat poznámku" style="background:transparent;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:2px 4px;">🗑</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+function openNoteFromEvidence(id){
+  var note = (window.notesData || notesData || []).filter(function(n){ return n.id === id; })[0];
+  closeNotesEvidence();
+  if(note && note.lat && note.lng && typeof map !== 'undefined') {
+    try { map.setView([note.lat, note.lng], 18); } catch(e){}
+  }
+  openNoteDetail(id);
+}
+function deleteNoteFromEvidence(id){
+  if(!confirm('Smazat tuto poznámku?')) return;
+  deleteNote_fromFirebase(id, function(){ renderNotesEvidence(); });
+}
+// Založení poznámky bez mapy – pozici určí staničení
+function newNoteFromEvidence(){
+  window._noteReturnToEvidence = true;
+  closeNotesEvidence();
+  openNoteModalManual();
+}
+function openNoteModalManual(){
+  newNoteLat = null; newNoteLng = null;   // pozici doplní staničení při uložení
+  newNotePhotos = [];
+  newNoteCat = 0;
+  document.getElementById('note-nazev').value = '';
+  var stEl = document.getElementById('note-stanic'); if(stEl) stEl.value = '';
+  document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || (window.currentUser ? window.currentUser.name : '');
+  document.getElementById('note-text').value = '';
+  document.getElementById('note-photos-preview').innerHTML = '';
+  var stampToggle = document.getElementById('note-stamp-toggle');
+  if(stampToggle) stampToggle.checked = getStampPref();
+  selectCat(0);
+  document.getElementById('note-modal').classList.add('open');
+  if(stEl) setTimeout(function(){ stEl.focus(); }, 100);
 }
 
 // ── Markery ────────────────────────────────────────────
@@ -2566,6 +2665,7 @@ function lpChoose(kind) {
     newNoteCat = 0;
     document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || (window.currentUser ? window.currentUser.name : '');
     document.getElementById('note-text').value = '';
+    var stEl = document.getElementById('note-stanic'); if(stEl) stEl.value = '';
     document.getElementById('note-photos-preview').innerHTML = '';
     var stampToggle = document.getElementById('note-stamp-toggle');
     if(stampToggle) stampToggle.checked = getStampPref();
@@ -2614,6 +2714,10 @@ function selectCat(idx) {
 function closeNoteModal() {
   document.getElementById('note-modal').classList.remove('open');
   newNotePhotos = [];
+  if(window._noteReturnToEvidence){
+    window._noteReturnToEvidence = false;
+    openNotesEvidence();
+  }
 }
 
 // ── Fotky v poznámkách - kamera (sekvenční) + galerie (multi) ──
@@ -2805,6 +2909,19 @@ function saveNote() {
   if(!author) { showToast('Zadejte jméno!', 2000); return; }
   localStorage.setItem('noteAuthor', author);
   var nazev = document.getElementById('note-nazev').value.trim();
+  // Staničení → pokud vyplněno, určí pozici na mapě (přepíše bod z mapy / umožní založit bez mapy)
+  var stanicEl = document.getElementById('note-stanic');
+  var stanicStr = stanicEl ? (stanicEl.value || '').trim() : '';
+  if(stanicStr){
+    var rk = parseKmStr(stanicStr);
+    if(rk === null){ showToast('Neplatné staničení – zadej např. 1+250', 2800); return; }
+    var ll = realKmToLatLng(rk);
+    if(!ll){ showToast('Staničení je mimo trasu', 2800); return; }
+    newNoteLat = ll[0]; newNoteLng = ll[1];
+  }
+  if(newNoteLat == null || newNoteLng == null){
+    showToast('Zadej staničení nebo vyber bod na mapě', 2800); return;
+  }
   var noteId = Date.now().toString();
   var toUpload = newNotePhotos.filter(function(p){ var s=p.dataUrl||p; return s.startsWith('data:'); });
   var keepUrls = newNotePhotos.filter(function(p){ var s=p.dataUrl||p; return !s.startsWith('data:'); }).map(function(p){ return p.dataUrl||p; });
@@ -8238,6 +8355,7 @@ function copyDiaryExport(){
       <div class="note-cat nc-6" data-cat="6" onclick="selectCat(6)" ondblclick="promptCat6()">🏷️ Vlastní</div>
     </div>
     <input id="note-nazev" class="note-field" type="text" placeholder="📛 Název (nepovinný)" maxlength="60" style="font-weight:600;">
+    <input id="note-stanic" class="note-field" type="text" placeholder="📍 Staničení (např. 1+250) – umístí na mapu" maxlength="12" inputmode="text">
     <input id="note-author" class="note-field" type="text" placeholder="Vaše jméno *" maxlength="40">
     <textarea id="note-text" class="note-field" placeholder="Text poznámky..."></textarea>
     <div id="note-photos-preview" class="note-photos-preview"></div>
@@ -8816,6 +8934,24 @@ function copyDiaryExport(){
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="closeStrojeModal()">✓ Hotovo</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Evidence poznámek -->
+<div id="notes-evidence-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4900;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(98vw,720px);max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="font-size:15px;color:var(--accent2);">📝 Evidence poznámek</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="newNoteFromEvidence()" title="Nová poznámka (bez mapy, podle staničení)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">+ Nová poznámka</button>
+        <button onclick="closeNotesEvidence()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">Zavřít</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="notes-ev-search" oninput="renderNotesEvidence()" placeholder="🔍 Hledat nadpis / text / autora…" class="diary-field" style="flex:1;min-width:160px;">
+      <span id="notes-ev-count" style="font-size:11px;color:var(--text2);"></span>
+    </div>
+    <div id="notes-ev-body" style="overflow-x:auto;"></div>
   </div>
 </div>
 
