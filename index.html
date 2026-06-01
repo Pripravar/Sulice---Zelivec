@@ -961,6 +961,9 @@ textarea.kzp-field { resize:none; min-height:60px; }
 #lp-chooser .box { background:var(--panel); border-radius:14px; padding:18px; width:min(92vw,320px); display:flex; flex-direction:column; gap:10px; }
 #lp-chooser h3 { font-size:14px; color:var(--accent2); text-align:center; }
 #lp-chooser button { border:none; border-radius:10px; padding:12px; font-size:14px; font-weight:700; cursor:pointer; }
+/* Jednotný zavírací křížek vpravo nahoře pro všechna okna */
+.win-x { position:absolute; top:8px; right:8px; width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; font-size:16px; line-height:1; cursor:pointer; z-index:30; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+.win-x:hover, .win-x:active { background:#ff6b6b; color:#fff; border-color:#ff6b6b; }
 </style>
 
 <script>
@@ -2454,8 +2457,13 @@ function renderNotesEvidence(){
     var cat = NOTE_CATS[n.cat] || NOTE_CATS[0];
     var km = _noteKm(n);
     var nadpis = n.nazev || '(bez názvu)';
+    // Náhled začátku textu poznámky (max 5 slov)
+    var words = (n.text || '').trim().split(/\s+/).filter(Boolean);
+    var snippet = words.slice(0, 5).join(' ') + (words.length > 5 ? '…' : '');
     html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="openNoteFromEvidence(\'' + n.id + '\')">'
-      + '<td style="padding:6px 6px;color:var(--text);font-weight:600;"><span style="font-size:11px;">' + escapeHtml(cat.label) + '</span><br>' + escapeHtml(nadpis) + '</td>'
+      + '<td style="padding:6px 6px;color:var(--text);font-weight:600;"><span style="font-size:11px;">' + escapeHtml(cat.label) + '</span><br>' + escapeHtml(nadpis)
+      +   (snippet ? '<br><span style="font-weight:400;color:var(--text2);font-size:11px;">' + escapeHtml(snippet) + '</span>' : '')
+      + '</td>'
       + '<td style="padding:6px 6px;color:var(--accent2);white-space:nowrap;font-weight:700;">' + escapeHtml(km) + '</td>'
       + '<td style="padding:6px 6px;color:var(--text2);">' + escapeHtml(n.author || '') + '</td>'
       + '<td style="padding:6px 6px;color:var(--text2);white-space:nowrap;font-size:11px;">' + escapeHtml(n.time || '') + '</td>'
@@ -2498,6 +2506,55 @@ function openNoteModalManual(){
   document.getElementById('note-modal').classList.add('open');
   if(stEl) setTimeout(function(){ stEl.focus(); }, 100);
 }
+
+// ════════════════════════════════════════════════════════════════════
+//   JEDNOTNÝ ZAVÍRACÍ KŘÍŽEK (✕ vpravo nahoře) pro všechna okna
+// ════════════════════════════════════════════════════════════════════
+function _addWindowCloseButtons(){
+  var wins = [
+    ['note-modal',           function(){ closeNoteModal(); }],
+    ['note-edit-modal',      function(){ closeEditModal(); }],
+    ['prikop-stav-modal',    function(){ closePrikopModal(); }],
+    ['task-new-modal',       function(){ closeNewTaskModal(); }],
+    ['task-detail',          function(){ closeTaskDetail(); }],
+    ['photo-prompt-modal',   function(){ if(typeof ppAnswer==='function') ppAnswer(false); }],
+    ['dl-stamp-modal',       function(){ if(typeof _resolveStampChoice==='function') _resolveStampChoice(null); }],
+    ['prop-edit-modal',      function(){ closePropEdit(); }],
+    ['diary-filter-modal',   function(){ closeDiaryFilter(); }],
+    ['diary-export-modal',   function(){ closeDiaryExport(); }],
+    ['firmy-modal',          function(){ closeFirmyModal(); }],
+    ['stroje-modal',         function(){ closeStrojeModal(); }],
+    ['notes-evidence-modal', function(){ closeNotesEvidence(); }],
+    ['sign-evidence-modal',  function(){ closeSignEvidence(); }],
+    ['stroj-edit-modal',     function(){ closeStrojEdit(); }],
+    ['osoba-edit-modal',     function(){ closeOsobaEdit(); }],
+    ['kzp-modal',            function(){ closeKzpAddModal(); }],
+    ['sign-modal',           function(){ closeSignModal(); }],
+    ['lp-chooser',           function(){ lpCancel(); }]
+  ];
+  wins.forEach(function(w){
+    var overlay = document.getElementById(w[0]);
+    if(!overlay) return;
+    var box = overlay.firstElementChild;
+    if(!box) return;
+    if(box.getAttribute('data-winx')) return; // už přidáno
+    box.setAttribute('data-winx', '1');
+    try {
+      var cs = window.getComputedStyle(box);
+      if(cs.position === 'static') box.style.position = 'relative';
+    } catch(e){ box.style.position = 'relative'; }
+    var btn = document.createElement('button');
+    btn.className = 'win-x';
+    btn.type = 'button';
+    btn.textContent = '✕';
+    btn.title = 'Zavřít';
+    btn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { w[1](); } catch(err){ console.warn('win-x close err', w[0], err); } });
+    box.appendChild(btn);
+  });
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _addWindowCloseButtons);
+else _addWindowCloseButtons();
+window.addEventListener('load', _addWindowCloseButtons);
 
 // ── Markery ────────────────────────────────────────────
 function renderNoteMarkers() {
@@ -8662,7 +8719,7 @@ function copyDiaryExport(){
 <!-- Modal: detail úkolu -->
 <div class="task-modal" id="task-detail">
   <div class="tm-box">
-    <div style="display:flex;align-items:flex-start;gap:8px;">
+    <div style="display:flex;align-items:flex-start;gap:8px;padding-right:34px;">
       <h3 style="flex:1;" id="td-title">…</h3>
       <span class="td-status" id="td-status">…</span>
     </div>
@@ -8940,11 +8997,10 @@ function copyDiaryExport(){
 <!-- Modal: Evidence poznámek -->
 <div id="notes-evidence-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:4900;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(98vw,720px);max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-right:38px;">
       <h3 style="font-size:15px;color:var(--accent2);">📝 Evidence poznámek</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button onclick="newNoteFromEvidence()" title="Nová poznámka (bez mapy, podle staničení)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">+ Nová poznámka</button>
-        <button onclick="closeNotesEvidence()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">Zavřít</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -8960,10 +9016,9 @@ function copyDiaryExport(){
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(98vw,720px);max-height:96vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3 style="font-size:15px;color:var(--accent2);">📋 Evidence podpisů</h3>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding-right:38px;">
         <button onclick="signFromEvidence()" title="Přidat podpis (na vybrané TePř)" style="background:var(--accent2);border:none;border-radius:6px;color:#0f3460;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✍️ Přidat podpis</button>
         <button onclick="downloadSignEvidenceCsv()" title="Stáhnout jako CSV" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">⬇ CSV</button>
-        <button onclick="closeSignEvidence()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">Zavřít</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
