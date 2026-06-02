@@ -4611,6 +4611,7 @@ function updatePrikopLabel(id, stav) {
 
 var galleryTab = 0;
 var galleryGrouped = false;   // false = klasická mřížka, true = složky po stavebních objektech
+var gallerySort = 'date';     // 'date' = datum pořízení (nejnovější první), 'km' = staničení (vzestupně)
 
 // ── Stavební objekty (složky pro fotky) ──────────────────────────
 // Liniové objekty mají rozsah km (kmOd–kmDo, odvozeno z výkresů situací/profilů),
@@ -5045,7 +5046,7 @@ function renderGallery() {
       snap.forEach(function(ch) { var v = ch.val(); v.fbKey = ch.key; items.push(v); });
       items.reverse();
       fillGalleryAuthorOptions(items);
-      var filtered = applyGalleryFilters(items);
+      var filtered = sortGalleryItems(applyGalleryFilters(items));
       galleryCurrentItems = filtered;
       if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
       if(filtered.length === 0) {
@@ -5065,7 +5066,7 @@ function renderGallery() {
     });
     items.reverse();
     fillGalleryAuthorOptions(items);
-    var filtered = applyGalleryFilters(items);
+    var filtered = sortGalleryItems(applyGalleryFilters(items));
     galleryCurrentItems = filtered;
     if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
     if(filtered.length === 0) {
@@ -5074,6 +5075,34 @@ function renderGallery() {
     }
     _paintGallery(filtered);
   }
+}
+
+// Seřadí fotky podle zvoleného kritéria. Vrací NOVÉ pole (nemutuje vstup).
+// 'date' = datum pořízení sestupně (nejnovější první, zachovává dosavadní chování),
+// 'km'   = staničení vzestupně od ZÚ; fotky bez km jdou na konec.
+// Řadí se vyfiltrované pole, takže stejné pořadí platí i ve složkách (Po objektech).
+function sortGalleryItems(items) {
+  var arr = items.slice();
+  if(gallerySort === 'km') {
+    arr.sort(function(a, b) {
+      var ka = parseKmStr(a.km), kb = parseKmStr(b.km);
+      if(ka === null && kb === null) return 0;
+      if(ka === null) return 1;   // bez staničení až za fotky s km
+      if(kb === null) return -1;
+      return ka - kb;
+    });
+  } else {
+    arr.sort(function(a, b) {
+      return photoCreationDate(b).getTime() - photoCreationDate(a).getTime();
+    });
+  }
+  return arr;
+}
+
+// Změna řazení galerie ze selectu v liště filtru.
+function setGallerySort(mode) {
+  gallerySort = (mode === 'km') ? 'km' : 'date';
+  renderGallery();
 }
 
 // Přepínač klasická mřížka ↔ složky po stavebních objektech.
@@ -8591,6 +8620,15 @@ function copyDiaryExport(){
     <div class="gallery-tab" id="gtab-1" onclick="switchGalleryTab(1)">&#128204; Z poznámek</div>
   </div>
   <div id="gallery-filter-bar" style="display:none;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">↕️ Řadit podle</div>
+        <select id="gallery-sort-sel" onchange="setGallerySort(this.value)" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+          <option value="date">📅 Datum pořízení (nejnovější první)</option>
+          <option value="km">📏 Staničení (od začátku stavby)</option>
+        </select>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
       <div style="flex:1;min-width:120px;">
         <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">📏 KM od</div>
