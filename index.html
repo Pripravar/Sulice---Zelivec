@@ -1228,6 +1228,61 @@ document.addEventListener('touchend', function(e){
   <div id="pdf-nosit"><span>📄</span><div>Pro toto staničení nejsou výkresy k dispozici</div></div>
 </div>
 
+<!-- MODAL: nahrání nového PDF výkresu z aplikace -->
+<div id="vykres-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:440px;width:100%;max-height:92vh;overflow-y:auto;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent2);">➕ Přidat výkres</div>
+      <button onclick="closeVykresUpload()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+        Stavební objekt (SO)
+        <select id="vyk-so" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);"></select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+        Druh výkresu
+        <select id="vyk-kat" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+          <option value="📐 Situace">📐 Situace</option>
+          <option value="📊 Pod. profil">📊 Podélný profil</option>
+          <option value="✂️ Vzor. řezy">✂️ Vzorové řezy</option>
+          <option value="✂️ Char. řezy">✂️ Charakteristické řezy</option>
+          <option value="🧱 Klad. plán">🧱 Kladečský plán</option>
+          <option value="🚦 Sit. DZ">🚦 Dopravní značení</option>
+          <option value="📋 Tech. zpráva">📋 Technická zpráva</option>
+          <option value="📎 Výkres" selected>📎 Jiný výkres</option>
+        </select>
+      </label>
+      <div style="display:flex;gap:10px;">
+        <label style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+          km od
+          <input id="vyk-km-od" type="text" inputmode="decimal" placeholder="2,350" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+        </label>
+        <label style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+          km do
+          <input id="vyk-km-do" type="text" inputmode="decimal" placeholder="2,460" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+        </label>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+        Název (popisek záložky/seznamu)
+        <input id="vyk-nazev" type="text" placeholder="např. Detail vpusti km 2,4" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+        PDF soubor (max ~10 MB)
+        <input id="vyk-file" type="file" accept="application/pdf,.pdf" style="padding:10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+      </label>
+      <div id="vyk-status" style="font-size:12px;color:var(--text2);min-height:16px;"></div>
+      <button id="vyk-submit" onclick="submitVykresUpload()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;">
+        Nahrát výkres
+      </button>
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Nahrané výkresy na tomto úseku:</div>
+        <div id="vyk-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 var MAPY_API_KEY = 'n4vDG-d4mkhllq8P_9783hgyMtm9U6RU6WwwGvvpvuY';
 var FIREBASE_URL = 'https://sulice-zelivec-default-rtdb.europe-west1.firebasedatabase.app';
@@ -1279,6 +1334,8 @@ var GITHUB_USER_REPO = 'Pripravar/Sulice---Zelivec';
 var GITHUB_BRANCH_PDF = 'main';
 // Upload fotek jde přes Cloud Function (GitHub token zůstává na serveru, ne v prohlížeči).
 var UPLOAD_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadFoto';
+// Upload PDF výkresů jde přes vlastní Cloud Function (commit do pdf/SO_xxx/).
+var UPLOAD_VYKRES_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadVykres';
 // Bázová cesta k PDF výkresům - RELATIVNÍ k aplikaci (na GitHub Pages).
 // Důvod: raw.githubusercontent.com servíruje PDF jako application/octet-stream
 // → iframe je nezobrazí. Pages servírují PDF jako application/pdf → iframe OK.
@@ -1901,6 +1958,205 @@ function findDocsForKm(docs, realKm) {
   return found;
 }
 
+// ── Uživatelské výkresy (nahrané z aplikace, uložené v /vykresy) ──
+var vykresyData = [];
+function loadVykresy() {
+  try {
+    db.ref('vykresy').on('value', function(snap){
+      var v = snap.val() || {};
+      vykresyData = Object.keys(v).map(function(k){
+        var r = v[k] || {}; r._key = k; return r;
+      });
+    }, function(err){ console.warn('loadVykresy:', err && err.message); });
+  } catch(e){ console.warn('loadVykresy výjimka:', e); }
+}
+// Najdi nahrané výkresy spadající do daného km (seřazené dle blízkosti středu)
+function findVykresyForKm(realKm) {
+  var found = vykresyData.filter(function(d){
+    var od = (typeof d.kmOd==='number')?d.kmOd:parseFloat(d.kmOd);
+    var doKm = (typeof d.kmDo==='number')?d.kmDo:parseFloat(d.kmDo);
+    if(isNaN(od)||isNaN(doKm)) return false;
+    return realKm>=od && realKm<=doKm;
+  });
+  found.sort(function(a,b){
+    var mA=(parseFloat(a.kmOd)+parseFloat(a.kmDo))/2, mB=(parseFloat(b.kmOd)+parseFloat(b.kmDo))/2;
+    return Math.abs(realKm-mA)-Math.abs(realKm-mB);
+  });
+  return found;
+}
+
+// ── UI nahrávání výkresů ──
+// Volný parser km z textu: "2,350" / "2.350" / "2+350" / "2350" (m)
+function parseKmInput(s){
+  if(s==null) return null;
+  s = String(s).trim().replace(',', '.');
+  if(!s) return null;
+  var m = s.match(/^(\d+)\+(\d+)$/);           // formát staničení 2+350
+  if(m) return parseInt(m[1],10) + parseInt(m[2],10)/Math.pow(10,m[2].length);
+  var f = parseFloat(s);
+  if(isNaN(f)) return null;
+  if(f > 100) return f/1000;                   // zadáno v metrech (2350 → 2,350)
+  return f;
+}
+// Seznam SO složek z výkresů (z DOCS_* cest + dynamicky z nahraných)
+function getVykresSOFolders(){
+  var set = {};
+  var arrs = [DOCS_SITUACE, DOCS_PP, DOCS_VPR, DOCS_DZ,
+              (typeof DOCS_CHPR!=='undefined'?DOCS_CHPR:[]),
+              (typeof DOCS_KLAD!=='undefined'?DOCS_KLAD:[]),
+              (typeof DOCS_TZ!=='undefined'?DOCS_TZ:[])];
+  arrs.forEach(function(arr){ (arr||[]).forEach(function(d){
+    var mm = String(d.soubor||'').match(/(SO_[0-9]+)\//);
+    if(mm) set[mm[1]] = true;
+  });});
+  // přidat SO z už nahraných výkresů
+  vykresyData.forEach(function(d){ if(d.so) set[d.so] = true; });
+  return Object.keys(set).sort(function(a,b){
+    return a.localeCompare(b, undefined, {numeric:true});
+  });
+}
+
+var _vykUploadKm = null;
+function openVykresUpload(realKm){
+  var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
+  if(!user){ showToast('Pro nahrání výkresu se přihlas (úkolníček → přihlášení)', 3500); return; }
+  _vykUploadKm = (typeof realKm==='number') ? realKm : null;
+  // Naplnit SO select
+  var soSel = document.getElementById('vyk-so');
+  var folders = getVykresSOFolders();
+  soSel.innerHTML = folders.map(function(f){
+    return '<option value="'+f+'">'+f.replace('_',' ')+'</option>';
+  }).join('');
+  // Předvyplnit km dle staničení (±0,05 km okno)
+  if(_vykUploadKm!=null){
+    document.getElementById('vyk-km-od').value = (Math.max(0,_vykUploadKm-0.05)).toFixed(3).replace('.', ',');
+    document.getElementById('vyk-km-do').value = (_vykUploadKm+0.05).toFixed(3).replace('.', ',');
+    // Pokud existuje SO trefující se do km, předvybrat ho
+    var hit = findDocsForKm(DOCS_SITUACE, _vykUploadKm)[0];
+    if(hit){ var mm=String(hit.soubor).match(/(SO_[0-9]+)\//); if(mm && folders.indexOf(mm[1])!==-1) soSel.value=mm[1]; }
+  } else {
+    document.getElementById('vyk-km-od').value = '';
+    document.getElementById('vyk-km-do').value = '';
+  }
+  document.getElementById('vyk-nazev').value = '';
+  document.getElementById('vyk-file').value = '';
+  document.getElementById('vyk-status').textContent = '';
+  document.getElementById('vykres-modal').style.display = 'flex';
+  renderVykresList();
+}
+function closeVykresUpload(){
+  document.getElementById('vykres-modal').style.display = 'none';
+}
+function renderVykresList(){
+  var box = document.getElementById('vyk-list');
+  if(!box) return;
+  var list = (_vykUploadKm!=null) ? findVykresyForKm(_vykUploadKm) : vykresyData.slice();
+  if(!list.length){ box.innerHTML = '<div style="font-size:12px;color:var(--text2);opacity:0.7;">Zatím žádné.</div>'; return; }
+  box.innerHTML = '';
+  list.forEach(function(d){
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:8px;padding:8px 10px;';
+    var info = document.createElement('div');
+    info.style.cssText = 'flex:1;font-size:12px;color:var(--text);overflow:hidden;';
+    info.innerHTML = '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+
+      escapeHtml(d.nazev||'Výkres')+'</div><div style="font-size:11px;color:var(--text2);">'+
+      escapeHtml((d.kat||'📎')+' · '+(d.so||'')+' · '+fmtKm(parseFloat(d.kmOd))+'–'+fmtKm(parseFloat(d.kmDo)))+'</div>';
+    row.appendChild(info);
+    if(canDelete(d.uid)){
+      var del = document.createElement('button');
+      del.textContent = '🗑';
+      del.style.cssText = 'background:none;border:none;color:#e57373;font-size:18px;cursor:pointer;min-width:40px;min-height:40px;';
+      del.onclick = (function(key){ return function(){ deleteVykres(key); }; })(d._key);
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+  });
+}
+function deleteVykres(key){
+  var d = vykresyData.filter(function(x){return x._key===key;})[0];
+  if(!d){ return; }
+  if(!canDelete(d.uid)){ showToast('Smazat může jen autor nebo koordinátor', 2500); return; }
+  if(!confirm('Smazat výkres "'+(d.nazev||'')+'" ze seznamu?\n(PDF soubor v repu zůstane, zmizí jen odkaz v aplikaci.)')) return;
+  db.ref('vykresy/'+key).remove().then(function(){
+    showToast('Výkres odebrán', 1800); renderVykresList();
+  }).catch(function(e){ showToast('Chyba mazání: '+(e&&e.message||''), 3000); });
+}
+function submitVykresUpload(){
+  var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
+  if(!user){ showToast('Nejsi přihlášen', 3000); return; }
+  var so   = document.getElementById('vyk-so').value;
+  var kat  = document.getElementById('vyk-kat').value;
+  var kmOd = parseKmInput(document.getElementById('vyk-km-od').value);
+  var kmDo = parseKmInput(document.getElementById('vyk-km-do').value);
+  var nazev= document.getElementById('vyk-nazev').value.trim();
+  var fileInput = document.getElementById('vyk-file');
+  var file = fileInput.files && fileInput.files[0];
+  var status = document.getElementById('vyk-status');
+  if(!so){ status.textContent='⚠️ Vyber SO objekt'; return; }
+  if(kmOd==null || kmDo==null){ status.textContent='⚠️ Vyplň km od i km do'; return; }
+  if(kmDo < kmOd){ var t=kmOd; kmOd=kmDo; kmDo=t; }
+  if(!file){ status.textContent='⚠️ Vyber PDF soubor'; return; }
+  if(!/\.pdf$/i.test(file.name)){ status.textContent='⚠️ Soubor musí být PDF'; return; }
+  if(file.size > 10*1024*1024){ status.textContent='⚠️ PDF je větší než 10 MB'; return; }
+  if(!nazev) nazev = file.name.replace(/\.pdf$/i,'');
+
+  var btn = document.getElementById('vyk-submit');
+  btn.disabled = true; btn.style.opacity='0.6';
+  status.textContent = '⏳ Nahrávám…';
+
+  // Bezpečný název souboru v repu (bez diakritiky/mezer), unikátní
+  var safe = file.name.replace(/\.pdf$/i,'')
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60) || 'vykres';
+  var repoPath = so + '/' + safe + '_' + Date.now() + '.pdf';
+
+  var reader = new FileReader();
+  reader.onload = function(){
+    var base64 = String(reader.result).replace(/^data:application\/pdf;base64,/, '').replace(/^data:[^;]+;base64,/, '');
+    user.getIdToken().then(function(idToken){
+      return fetch(UPLOAD_VYKRES_FN_URL, {
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+idToken, 'Content-Type':'application/json' },
+        body: JSON.stringify({ path: repoPath, content: base64 })
+      });
+    })
+    .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+    .then(function(res){
+      if(res.ok && res.data && res.data.path){
+        // Zapsat odkaz do DB (soubor = relativní cesta pdf/SO_xxx/...)
+        var rec = {
+          so: so, kat: kat, kmOd: kmOd, kmDo: kmDo, nazev: nazev,
+          soubor: res.data.path, uid: user.uid,
+          author: (window.currentUser && window.currentUser.name) || user.displayName || '',
+          ts: Date.now()
+        };
+        db.ref('vykresy').push(rec).then(function(){
+          status.textContent = '✅ Hotovo';
+          showToast('Výkres nahrán', 2000);
+          btn.disabled=false; btn.style.opacity='1';
+          document.getElementById('vyk-file').value='';
+          document.getElementById('vyk-nazev').value='';
+          renderVykresList();
+        }).catch(function(e){
+          status.textContent='⚠️ Nahráno do repa, ale zápis odkazu selhal: '+(e&&e.message||'');
+          btn.disabled=false; btn.style.opacity='1';
+        });
+      } else {
+        var msg = (res.data && res.data.error) ? res.data.error : 'neznámá chyba';
+        status.textContent = '❌ '+msg;
+        btn.disabled=false; btn.style.opacity='1';
+      }
+    })
+    .catch(function(e){
+      console.error('uploadVykres exc:', e);
+      status.textContent = '❌ Síťová chyba uploadu';
+      btn.disabled=false; btn.style.opacity='1';
+    });
+  };
+  reader.onerror = function(){ status.textContent='❌ Soubor se nepodařilo přečíst'; btn.disabled=false; btn.style.opacity='1'; };
+  reader.readAsDataURL(file);
+}
+
 function onStaniceniClick(realKm) {
   showToast('km '+fmtKm(realKm),1500);
   var sPos = realKmToLatLng(realKm);
@@ -1940,6 +2196,10 @@ function onStaniceniClick(realKm) {
       pages.push({soubor:d.soubor, nazev:d.nazev, typ:'📋 Tech. zpráva'});
     });
   }
+  // Výkresy nahrané z aplikace (uživatelské) – přidat na konec záložek
+  findVykresyForKm(realKm).forEach(function(d, i) {
+    pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres')+(i?' '+(i+1):'')});
+  });
   openDocPanel(pages, realKm, 0);
 }
 
@@ -1967,6 +2227,13 @@ function openDocPanel(pages, realKm, startIdx) {
     btn.onclick = (function(idx){return function(){docGoTo(idx);};})(i);
     tabs.appendChild(btn);
   });
+  // Tlačítko pro přidání nového výkresu na toto staničení (jen přihlášený)
+  var addBtn = document.createElement('button');
+  addBtn.className = 'pdf-tab';
+  addBtn.style.cssText = 'background:var(--accent);color:#fff;font-weight:700;flex-shrink:0;';
+  addBtn.textContent = '➕ Výkres';
+  addBtn.onclick = function(){ openVykresUpload(realKm); };
+  tabs.appendChild(addBtn);
 
   // Malé zpoždění aby se about:blank stihl nastavit
   setTimeout(function(){ renderDocPage(realKm); }, 50);
@@ -2315,6 +2582,7 @@ function init() {
   map.fitBounds(L.latLngBounds(GPX_POINTS.map(function(p){return[p[0],p[1]];})),{padding:[40,40]});
   startGPS();
   loadNotes();
+  loadVykresy();
   initLongPress();
   // Zastavit touch eventy z panelů aby nešly do Leaflet mapy
   ['pdf-panel','prop-panel'].forEach(function(id) {

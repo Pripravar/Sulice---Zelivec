@@ -194,3 +194,83 @@ exports.uploadFoto = functions
       res.status(500).json({ error: 'Chyba serveru při uploadu' });
     }
   });
+
+/* ════════════════════════════════════════════════════════════════
+   HTTPS FUNKCE – upload PDF výkresu do GitHubu (pdf/SO_xxx/...)
+   - Klient pošle POST { path, content (base64 PDF) } + Firebase ID token
+   - path má tvar "SO_104/nazev-souboru.pdf" (jedna SO podsložka + .pdf)
+   - Funkce ověří přihlášení, validuje cestu a commitne do repa do pdf/
+   - Stejný GitHub token ze Secret Manageru jako uploadFoto
+   URL po deployi:
+     https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadVykres
+   ════════════════════════════════════════════════════════════════ */
+exports.uploadVykres = functions
+  .region('europe-west1')
+  .runWith({ secrets: ['GITHUB_TOKEN'] })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if(req.method !== 'POST')    { res.status(405).json({ error: 'Jen POST' }); return; }
+
+    // 1) Ověřit přihlášeného uživatele (Firebase ID token)
+    const authHeader = req.get('Authorization') || '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if(!idToken) { res.status(401).json({ error: 'Chybí přihlášení' }); return; }
+    try {
+      await admin.auth().verifyIdToken(idToken);
+    } catch(e) {
+      res.status(401).json({ error: 'Neplatné přihlášení' }); return;
+    }
+
+    // 2) Validovat vstup
+    const body = req.body || {};
+    const path    = String(body.path    || '');
+    const content = String(body.content || '');
+    // jen "SO_<čísla>/nazev.pdf": jedna podsložka SO_xxx, bezpečný název, .pdf, bez ".."
+    if(!/^SO_[0-9]+\/[A-Za-z0-9._-]+\.pdf$/i.test(path) || path.indexOf('..') !== -1) {
+      res.status(400).json({ error: 'Neplatná cesta výkresu' }); return;
+    }
+    if(!content || content.length > 14 * 1024 * 1024) { // ~10 MB binárně (gen1 limit požadavku)
+      res.status(400).json({ error: 'Chybí nebo příliš velký obsah (max ~10 MB)' }); return;
+    }
+
+    // 3) Commit do GitHubu (token ze Secret Manageru)
+    const apiUrl = 'https://api.github.com/repos/' + GH_REPO + '/contents/pdf/' + path;
+    try {
+      // Pokud soubor existuje, GitHub vyžaduje sha pro update – zjistíme ho.
+      let sha = null;
+      try {
+        const head = await fetch(apiUrl + '?ref=' + GH_BRANCH, {
+          headers: {
+            'Authorization': 'token ' + process.env.GITHUB_TOKEN,
+            'User-Agent':    'sulice-zelivec-fn'
+          }
+        });
+        if(head.ok) { const hd = await head.json(); if(hd && hd.sha) sha = hd.sha; }
+      } catch(_) { /* soubor neexistuje – ok */ }
+
+      const payload = { message: 'Výkres: ' + path, content: content, branch: GH_BRANCH };
+      if(sha) payload.sha = sha;
+      const ghResp = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'token ' + process.env.GITHUB_TOKEN,
+          'Content-Type':  'application/json',
+          'User-Agent':    'sulice-zelivec-fn'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await ghResp.json();
+      if(ghResp.ok && data && data.content && data.content.download_url) {
+        res.status(200).json({ download_url: data.content.download_url, path: 'pdf/' + path });
+      } else {
+        console.error('GitHub upload výkresu err:', ghResp.status, JSON.stringify(data));
+        res.status(502).json({ error: (data && data.message) || 'GitHub upload selhal' });
+      }
+    } catch(e) {
+      console.error('uploadVykres výjimka:', e);
+      res.status(500).json({ error: 'Chyba serveru při uploadu' });
+    }
+  });
