@@ -1200,6 +1200,7 @@ document.addEventListener('touchend', function(e){
     <button id="btn-pdf-zoom-out" onclick="pdfZoom(-1)" title="Zmenšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">−</button>
     <button id="btn-pdf-zoom-in"  onclick="pdfZoom(+1)" title="Zvětšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">+</button>
     <button onclick="if(currentPdfSrc)window.open(currentPdfSrc,'_blank')" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
+    <button id="btn-add-vykres" onclick="openVykresUpload(window._docPanelKm)" title="Přidat výkres na tomto staničení" style="background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;padding:0 8px;flex-shrink:0;min-width:44px;min-height:44px;">➕</button>
     <button id="btn-pdf-fs" onclick="togglePdfFs()">⛶</button>
     <button id="btn-pdf-close" onclick="closePdf()">✕</button>
   </div>
@@ -1816,6 +1817,7 @@ function addPRMarker(group, lat, lng, realKm, bear, pr) {
 }
 
 function openPRPanel(realKm, pr) {
+  window._docPanelKm = (typeof realKm==='number') ? realKm : null;
   showToast('PŘ km '+fmtKm(realKm)+' (řez č.'+pr.rezIdx+'/'+pr.total+')', 2000);
   var prPos = realKmToLatLng(realKm);
   if(prPos) showSelectionRing(L.latLng(prPos[0], prPos[1]));
@@ -2206,6 +2208,7 @@ function onStaniceniClick(realKm) {
 function openDocPanel(pages, realKm, startIdx) {
   docPages   = pages;
   docPageIdx = startIdx || 0;
+  window._docPanelKm = (typeof realKm==='number') ? realKm : null;
 
   // Resetuj iframe vždy před novým načtením
   var frame = document.getElementById('pdf-frame');
@@ -2227,13 +2230,6 @@ function openDocPanel(pages, realKm, startIdx) {
     btn.onclick = (function(idx){return function(){docGoTo(idx);};})(i);
     tabs.appendChild(btn);
   });
-  // Tlačítko pro přidání nového výkresu na toto staničení (jen přihlášený)
-  var addBtn = document.createElement('button');
-  addBtn.className = 'pdf-tab';
-  addBtn.style.cssText = 'background:var(--accent);color:#fff;font-weight:700;flex-shrink:0;';
-  addBtn.textContent = '➕ Výkres';
-  addBtn.onclick = function(){ openVykresUpload(realKm); };
-  tabs.appendChild(addBtn);
 
   // Malé zpoždění aby se about:blank stihl nastavit
   setTimeout(function(){ renderDocPage(realKm); }, 50);
