@@ -107,6 +107,16 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #btn-gps { position:fixed; bottom:24px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
 #btn-gps.active { border-color:var(--green); color:var(--green); box-shadow:0 0 16px rgba(72,187,120,.4); }
 
+/* Vkládání poznámky/úkolu přes tlačítko + křížek (spolehlivější než držení prstu) */
+#btn-place { position:fixed; bottom:84px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent); border:2px solid var(--border); color:#fff; font-size:24px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); }
+#btn-place.active { background:var(--accent2); color:#0f3460; }
+#place-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#fff; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
+#place-crosshair.open { display:block; }
+#place-bar { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:1600; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px 12px; align-items:center; gap:10px; max-width:94vw; box-shadow:0 4px 16px rgba(0,0,0,.5); }
+#place-bar.open { display:flex; }
+#place-bar #place-hint { font-size:13px; color:var(--text); }
+#place-bar button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
+
 #toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 16px; font-size:13px; z-index:3000; opacity:0; transition:all .3s; white-space:nowrap; pointer-events:none; }
 #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -1172,6 +1182,13 @@ document.addEventListener('touchend', function(e){
 </div>
 
 <button id="btn-gps" onclick="toggleGpsBtn()" title="GPS zapnout/vypnout / centrovat">📍</button>
+<button id="btn-place" onclick="startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
+<div id="place-crosshair">✛</div>
+<div id="place-bar">
+  <span id="place-hint">Najeď křížkem na místo</span>
+  <button onclick="confirmPlacing()" style="background:var(--accent2);color:#0f3460;">✓ Sem</button>
+  <button onclick="cancelPlacing()" style="background:var(--panel2);color:var(--text);">✕ Zrušit</button>
+</div>
 <div id="toast"></div>
 
 <div id="pdf-panel" style="touch-action:pan-x pan-y pinch-zoom;">
@@ -2752,6 +2769,52 @@ function lpChoose(kind) {
   _lpLat = _lpLng = null;
 }
 
+// ── Vkládání přes tlačítko + křížek ───────────────────
+// Spolehlivější než long-press (ten se na mobilu pere s taháním mapy). Uživatel posune
+// mapu tak, aby cíl byl pod pevným křížkem uprostřed, a potvrdí → vezme se map.getCenter().
+var placingMode = false;
+function positionPlaceCrosshair() {
+  var mapEl = document.getElementById('map');
+  if(!mapEl) return;
+  var r = mapEl.getBoundingClientRect();
+  var ch = document.getElementById('place-crosshair');
+  ch.style.left = (r.left + r.width / 2) + 'px';
+  ch.style.top  = (r.top  + r.height / 2) + 'px';
+}
+function startPlacingMode() {
+  placingMode = true;
+  positionPlaceCrosshair();
+  document.getElementById('place-crosshair').classList.add('open');
+  document.getElementById('place-bar').classList.add('open');
+  var btn = document.getElementById('btn-place'); if(btn) btn.classList.add('active');
+  window.addEventListener('resize', positionPlaceCrosshair);
+}
+function cancelPlacing() {
+  placingMode = false;
+  document.getElementById('place-crosshair').classList.remove('open');
+  document.getElementById('place-bar').classList.remove('open');
+  var btn = document.getElementById('btn-place'); if(btn) btn.classList.remove('active');
+  window.removeEventListener('resize', positionPlaceCrosshair);
+}
+function confirmPlacing() {
+  if(!placingMode) return;
+  var c = map.getCenter();
+  cancelPlacing();
+  _lpLat = c.lat;
+  _lpLng = c.lng;
+  // Legacy mód (bez Auth) → rovnou poznámka, žádný chooser (stejně jako long-press)
+  if(typeof authConfigOk === 'function' && !authConfigOk()) { lpChoose('note'); return; }
+  var kmTxt = '';
+  try {
+    if(typeof gpsToKm === 'function') {
+      var km = gpsToKm(c.lat, c.lng);
+      if(km !== null && km !== undefined) kmTxt = ' (km ' + km.toFixed(3) + ')';
+    }
+  } catch(e){}
+  document.getElementById('lp-km-info').textContent = '📍 Co tady přidat?' + kmTxt;
+  document.getElementById('lp-chooser').classList.add('open');
+}
+
 // ── Preference razítka (km, datum, jméno) do fotek ──
 // Hodnota v localStorage: '1' = zapnuto, '0' = vypnuto. Default = '1' (zapnuto)
 function getStampPref() {
@@ -2977,7 +3040,7 @@ function saveNote() {
   var keepUrls = newNotePhotos.filter(function(p){ var s=p.dataUrl||p; return !s.startsWith('data:'); }).map(function(p){ return p.dataUrl||p; });
   function finish(uploadedUrls) {
     var note = { id:noteId, lat:newNoteLat, lng:newNoteLng, cat:newNoteCat,
-      author:author, nazev:nazev, text:text,
+      author:author, authorUid:(window.currentUser ? window.currentUser.uid : ''), nazev:nazev, text:text,
       photos:keepUrls.concat(uploadedUrls), time:new Date().toLocaleString('cs-CZ') };
     saveNote_toFirebase(note, null);
   }
@@ -3070,6 +3133,10 @@ function openNoteDetail(id) {
     }
   }
 
+  // Mazat smí jen autor / koordinátor (legacy bez uid zůstává smazatelný)
+  var nDelBtn = document.querySelector('#note-detail-footer .note-del-btn');
+  if(nDelBtn) nDelBtn.style.display = canDelete(note.authorUid) ? '' : 'none';
+
   document.getElementById('note-detail').classList.add('open');
 }
 
@@ -3104,7 +3171,7 @@ function openPhotoFs(src, firebaseKey, item) {
   _photoFsItem = item || (typeof src === 'object' ? src : { url: url });
   if(!_photoFsItem.url) _photoFsItem.url = url;
   var delBtn = document.getElementById('photo-fs-delete');
-  if(delBtn) delBtn.style.display = _photoFsKey ? 'inline-block' : 'none';
+  if(delBtn) delBtn.style.display = (_photoFsKey && canDelete((_photoFsItem||{}).uid)) ? 'inline-block' : 'none';
   document.getElementById('photo-fs').classList.add('open');
   unlockViewport();
 }
@@ -3574,6 +3641,7 @@ function downloadSelectedGalleryPhotos() { return downloadSelectedGalleryPhotosS
 
 function deleteStandalonePhoto() {
   if(!_photoFsKey) return;
+  if(!canDelete((_photoFsItem||{}).uid)) { showToast('Smazat může jen autor nebo koordinátor', 2500); return; }
   if(!confirm('Smazat tuto fotku?')) return;
   var key = _photoFsKey;
   closePhotoFs();
@@ -3601,6 +3669,8 @@ function deleteNotePhoto(noteId, photoIdx) {
 
 function deleteCurrentNote() {
   if(!currentNoteId) return;
+  var _n = notesData.filter(function(n){ return n.id === currentNoteId; })[0];
+  if(_n && !canDelete(_n.authorUid)) { showToast('Smazat může jen autor nebo koordinátor', 2500); return; }
   if(!confirm('Smazat tuto poznámku?')) return;
   var id = currentNoteId;
   closeNoteDetail();
@@ -4781,6 +4851,7 @@ function ppAnswer(yes) {
               stamped: !!yes,   // true = v galerii verze s razítkem
               so: (meta.so || ''),   // přiřazený stavební objekt (složka), '' = Nezařazené
               km: meta.km, author: meta.author,
+              uid: (window.currentUser ? window.currentUser.uid : ''),
               lat: meta.lat, lng: meta.lng,
               time: new Date().toLocaleString('cs-CZ'),
               date: new Date().toLocaleDateString('cs-CZ'),
@@ -5121,6 +5192,23 @@ function toggleGalleryGrouped() {
 
 // ── AUTH STATE ──────────────────────────────────────────────────────
 window.currentUser = null;     // {uid, name, email, photo}
+
+// ── Mazání jen vlastních záznamů ────────────────────────────────────
+// Doplň sem uid koordinátora/koordinátorů (admin smí mazat cokoliv).
+// uid najdeš po přihlášení v konzoli: window.currentUser.uid, nebo ve
+// Firebase v /uzivatele. Prázdné pole = admina nemá nikdo.
+var ADMIN_UIDS = [ /* 'uid-koordinatora' */ ];
+// Vrací true, když aktuální uživatel smí smazat záznam daného vlastníka:
+//  - vlastník (shodné uid) smí,
+//  - admin (v ADMIN_UIDS) smí cokoliv,
+//  - starý záznam bez uid (legacy) necháme smazatelný, jinak by ho nešlo nikdy uklidit.
+function canDelete(ownerUid) {
+  if(!ownerUid) return true;                 // legacy záznam bez uid
+  var me = window.currentUser ? window.currentUser.uid : null;
+  if(!me) return false;                      // nepřihlášený nesmí mazat uid-ované záznamy
+  if(ADMIN_UIDS.indexOf(me) !== -1) return true;
+  return me === ownerUid;
+}
 window.allUsers    = {};       // {uid: {uid,name,email,photo,fcmToken,lastSeen}}
 window.allTasks    = [];       // [taskObj, ...]
 window.profSet     = new Set();// známé profese (z existujících úkolů)
@@ -5868,6 +5956,9 @@ function renderTaskDetail(t) {
   document.getElementById('td-btn-done').style.display   = t.stav === 'done' ? 'none' : '';
   document.getElementById('td-btn-reopen').style.display = t.stav === 'done' ? '' : 'none';
   document.getElementById('td-btn-map').style.display    = (t.lat !== undefined && t.lat !== null) ? '' : 'none';
+  // Smazat úkol smí jen zadavatel / koordinátor (legacy bez uid zůstává smazatelný)
+  var tDelBtn = document.getElementById('td-btn-del');
+  if(tDelBtn) tDelBtn.style.display = canDelete(t.zadalUid) ? '' : 'none';
 
   // Komentáře
   renderComments(t);
@@ -5953,6 +6044,7 @@ function editTask() {
 function deleteTaskConfirm() {
   var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
   if(!t) return;
+  if(!canDelete(t.zadalUid)) { showToast('Smazat může jen zadavatel nebo koordinátor', 2500); return; }
   if(!confirm('Smazat úkol "' + (t.title || '') + '"? Tato akce je nevratná.')) return;
   deleteTaskFromFirebase(t.id, function(){ closeTaskDetail(); });
 }
@@ -8885,7 +8977,7 @@ function copyDiaryExport(){
       <button class="btn-success" id="td-btn-done" onclick="markTaskDone()">✅ Hotovo</button>
       <button class="btn-secondary" id="td-btn-reopen" onclick="reopenTask()" style="display:none;">↩ Znovu otevřít</button>
       <button class="btn-secondary" onclick="editTask()">✏ Upravit</button>
-      <button class="btn-danger" onclick="deleteTaskConfirm()">🗑</button>
+      <button class="btn-danger" id="td-btn-del" onclick="deleteTaskConfirm()">🗑</button>
       <button class="btn-secondary" id="td-btn-map" onclick="showTaskOnMap()" style="display:none;">📍 Mapa</button>
       <button class="btn-secondary" onclick="closeTaskDetail()">Zavřít</button>
     </div>
