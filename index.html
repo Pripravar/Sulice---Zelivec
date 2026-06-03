@@ -2019,13 +2019,15 @@ function getVykresSOFolders(){
 }
 
 var _vykUploadKm = null;
-function openVykresUpload(realKm){
+function openVykresUpload(realKm, preferSO){
   var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
   if(!user){ showToast('Pro nahrání výkresu se přihlas (úkolníček → přihlášení)', 3500); return; }
   _vykUploadKm = (typeof realKm==='number') ? realKm : null;
   // Naplnit SO select
   var soSel = document.getElementById('vyk-so');
   var folders = getVykresSOFolders();
+  // preferSO nemusí být v seznamu (např. SO bez statických výkresů) – přidej ho
+  if(preferSO && folders.indexOf(preferSO)===-1){ folders.push(preferSO); folders.sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true});}); }
   soSel.innerHTML = folders.map(function(f){
     return '<option value="'+f+'">'+f.replace('_',' ')+'</option>';
   }).join('');
@@ -2040,6 +2042,8 @@ function openVykresUpload(realKm){
     document.getElementById('vyk-km-od').value = '';
     document.getElementById('vyk-km-do').value = '';
   }
+  // preferSO má přednost (klik z konkrétního SO objektu/propustku)
+  if(preferSO && folders.indexOf(preferSO)!==-1) soSel.value = preferSO;
   document.getElementById('vyk-nazev').value = '';
   document.getElementById('vyk-file').value = '';
   document.getElementById('vyk-status').textContent = '';
@@ -4545,6 +4549,11 @@ function openPropPanel(prop) {
   // Aktualizuj globální currentPropSrc pro tlačítko 'Otevřít externě'
   currentPropSrc = propPages[0].soubor;
   propPageIdx = 0;
+
+  // Zapamatuj km + SO objektu pro tlačítko ➕ (nahrání výkresu k tomuto SO)
+  window._propPanelKm = (typeof prop.km==='number') ? prop.km : null;
+  var _soM = String((propPages[0] && propPages[0].soubor) || prop.soubor || '').match(/(SO_[0-9]+)\//);
+  window._propPanelSO = _soM ? _soM[1] : null;
 
   var panel = document.getElementById('prop-panel');
   var title = document.getElementById('prop-title');
@@ -9073,6 +9082,7 @@ function copyDiaryExport(){
     <button id="btn-prop-zoom-out" onclick="pdfZoom(-1)" title="Zmenšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">−</button>
     <button id="btn-prop-zoom-in"  onclick="pdfZoom(+1)" title="Zvětšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">+</button>
     <button onclick="if(currentPropSrc)window.open(currentPropSrc,'_blank')" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
+    <button id="btn-prop-add-vykres" onclick="openVykresUpload(window._propPanelKm, window._propPanelSO)" title="Přidat výkres k tomuto SO" style="background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;padding:0 8px;flex-shrink:0;min-width:44px;min-height:44px;">➕</button>
     <button id="btn-prop-fs" onclick="togglePropFs()">⛶</button>
     <button id="btn-prop-close" onclick="closePropPanel()">✕</button>
   </div>
