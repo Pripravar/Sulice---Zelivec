@@ -117,6 +117,19 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #place-bar #place-hint { font-size:13px; color:var(--text); }
 #place-bar button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
 
+/* ── Měření vzdálenosti a plochy (obecný nástroj, nezávislý na drone) ── */
+#btn-measure { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+#btn-measure.active { background:#0e7490; border-color:#22d3ee; color:#fff; box-shadow:0 0 16px rgba(34,211,238,.5); }
+/* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
+#measure-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#22d3ee; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
+#measure-crosshair.open { display:block; }
+#measure-hud { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:1600; background:var(--panel); border:1px solid #22d3ee; border-radius:12px; padding:10px 12px; flex-direction:column; gap:8px; max-width:94vw; box-shadow:0 4px 16px rgba(0,0,0,.5); }
+#measure-hud.open { display:flex; }
+#measure-readout { font-size:14px; color:var(--text); font-weight:700; text-align:center; white-space:nowrap; }
+#measure-readout .mr-area { color:#22d3ee; }
+#measure-hud .mh-row { display:flex; align-items:center; gap:8px; justify-content:center; flex-wrap:wrap; }
+#measure-hud button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
+
 #toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 16px; font-size:13px; z-index:3000; opacity:0; transition:all .3s; white-space:nowrap; pointer-events:none; }
 #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -1174,6 +1187,10 @@ document.addEventListener('touchend', function(e){
     <label>📍 GPS poloha</label>
     <label class="toggle"><input type="checkbox" id="lyr-gps" checked onchange="toggleGPS(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div class="layer-row">
+    <label>📏 Měření (uložená)</label>
+    <label class="toggle"><input type="checkbox" id="lyr-mereni" checked onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
+  </div>
   <h3>📷 Fotky</h3>
   <div class="layer-row">
     <label>🏷️ Razítko (km, datum, jméno)</label>
@@ -1183,11 +1200,45 @@ document.addEventListener('touchend', function(e){
 
 <button id="btn-gps" onclick="toggleGpsBtn()" title="GPS zapnout/vypnout / centrovat">📍</button>
 <button id="btn-place" onclick="startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
+<button id="btn-measure" onclick="toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
 <div id="place-crosshair">✛</div>
 <div id="place-bar">
   <span id="place-hint">Najeď křížkem na místo</span>
   <button onclick="confirmPlacing()" style="background:var(--accent2);color:#0f3460;">✓ Sem</button>
   <button onclick="cancelPlacing()" style="background:var(--panel2);color:var(--text);">✕ Zrušit</button>
+</div>
+<div id="measure-crosshair">✛</div>
+<div id="measure-hud">
+  <div id="measure-readout">Najeď křížkem a přidej první bod</div>
+  <div class="mh-row">
+    <button onclick="measureAddPoint()" style="background:#22d3ee;color:#0f3460;">➕ Bod</button>
+    <button onclick="measureUndo()" style="background:var(--panel2);color:var(--text);">↩️ Zpět</button>
+    <button onclick="measureClear()" style="background:var(--panel2);color:var(--text);">🗑️ Vyčistit</button>
+    <button onclick="measureSave()" style="background:var(--green);color:#0f3460;">💾 Uložit</button>
+    <button onclick="stopMeasureMode()" style="background:var(--accent);color:#fff;">✕ Konec</button>
+  </div>
+</div>
+<!-- MODAL: uložení měření pro tým -->
+<div id="measure-save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:420px;width:100%;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:15px;font-weight:700;color:#22d3ee;">💾 Uložit měření pro tým</div>
+      <button onclick="closeMeasureSave()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      <div id="measure-save-info" style="font-size:13px;color:var(--text2);"></div>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+        Název (povinný)
+        <input id="measure-save-name" type="text" placeholder="např. Zábor – mezideponie km 2,4" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+        Popis (volitelný)
+        <textarea id="measure-save-desc" rows="2" placeholder="poznámka k měření…" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);resize:vertical;"></textarea>
+      </label>
+      <div id="measure-save-status" style="font-size:12px;color:var(--text2);min-height:16px;"></div>
+      <button onclick="confirmMeasureSave()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;">Uložit</button>
+    </div>
+  </div>
 </div>
 <div id="toast"></div>
 
@@ -1608,7 +1659,7 @@ var gpsActive = false;
 var gpsCentering = false;
 var gpxCumulative = [];
 var calibSorted = null;
-var layerGroups = {trasa:null, st100:null, st20:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null};
+var layerGroups = {trasa:null, st100:null, st20:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null};
 
 // ── MATH ──────────────────────────────
 function haversine(lat1,lon1,lat2,lon2) {
@@ -2583,6 +2634,7 @@ function init() {
   startGPS();
   loadNotes();
   loadVykresy();
+  loadMereni();
   initLongPress();
   // Zastavit touch eventy z panelů aby nešly do Leaflet mapy
   ['pdf-panel','prop-panel'].forEach(function(id) {
@@ -2983,6 +3035,7 @@ function clearSelectionRing() {
 var _lpLat = null, _lpLng = null;
 function initLongPress() {
   map.on('mousedown touchstart', function(e) {
+    if(measureMode) return;   // v měřicím módu long-press nepoužívat
     var latlng = e.latlng;
     longPressTimer = setTimeout(function() {
       if(navigator.vibrate) navigator.vibrate(50);
@@ -3081,6 +3134,217 @@ function confirmPlacing() {
   } catch(e){}
   document.getElementById('lp-km-info').textContent = '📍 Co tady přidat?' + kmTxt;
   document.getElementById('lp-chooser').classList.add('open');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MĚŘENÍ vzdálenosti a plochy (obecný nástroj, nezávislý na drone)
+// Křížek uprostřed mapy (azurový) + tlačítko ➕ Bod → map.getCenter().
+// Délka přes haversine (reuse), plocha přes ekvirektangulární projekci + shoelace.
+// ══════════════════════════════════════════════════════════════════
+var measureMode = false;
+var measurePts  = [];      // [[lat,lng], …] aktuálně rozměřované
+var measureLayer = null;   // živá editační vrstva (mimo layerGroups)
+var mereniData = {};       // uložená měření z /mereni, keyed by push key
+
+function fmtLen(m){
+  if(m == null || isNaN(m)) return '–';
+  if(m < 1000) return (m<10 ? m.toFixed(2) : m.toFixed(1)).replace('.',',')+' m';
+  return Math.round(m)+' m ('+(m/1000).toFixed(2).replace('.',',')+' km)';
+}
+function fmtArea(m2){
+  if(m2 == null || isNaN(m2)) return '–';
+  var s = Math.round(m2)+' m²';
+  if(m2 >= 100)   s += ' = '+(m2/100).toFixed(2).replace('.',',')+' a';
+  if(m2 >= 10000) s += ' = '+(m2/10000).toFixed(3).replace('.',',')+' ha';
+  return s;
+}
+function pathLenM(pts, closed){
+  var s = 0;
+  for(var i=1;i<pts.length;i++) s += haversine(pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1]);
+  if(closed && pts.length>2) s += haversine(pts[pts.length-1][0],pts[pts.length-1][1],pts[0][0],pts[0][1]);
+  return s;
+}
+function polygonAreaM2(pts){
+  if(pts.length < 3) return 0;
+  var R = 6371000, lat0 = pts.reduce(function(s,p){return s+p[0];},0)/pts.length;
+  var cosLat0 = Math.cos(lat0*Math.PI/180);
+  var xy = pts.map(function(p){
+    return [ R*(p[1]-pts[0][1])*Math.PI/180*cosLat0,
+             R*(p[0]-pts[0][0])*Math.PI/180 ];
+  });
+  var a = 0;
+  for(var i=0;i<xy.length;i++){ var j=(i+1)%xy.length;
+    a += xy[i][0]*xy[j][1] - xy[j][0]*xy[i][1]; }
+  return Math.abs(a)/2;
+}
+
+function positionMeasureCrosshair(){
+  var mapEl = document.getElementById('map');
+  if(!mapEl) return;
+  var r = mapEl.getBoundingClientRect();
+  var ch = document.getElementById('measure-crosshair');
+  if(!ch) return;
+  ch.style.left = (r.left + r.width/2) + 'px';
+  ch.style.top  = (r.top  + r.height/2) + 'px';
+}
+function toggleMeasureMode(){
+  if(measureMode){ stopMeasureMode(); return; }
+  if(placingMode) cancelPlacing();   // ať se křížky nepletou
+  measureMode = true;
+  measurePts = [];
+  if(!measureLayer) measureLayer = L.layerGroup().addTo(map);
+  measureLayer.clearLayers();
+  positionMeasureCrosshair();
+  document.getElementById('measure-crosshair').classList.add('open');
+  document.getElementById('measure-hud').classList.add('open');
+  var b = document.getElementById('btn-measure'); if(b) b.classList.add('active');
+  var pb = document.getElementById('btn-place'); if(pb) pb.style.display='none';
+  window.addEventListener('resize', positionMeasureCrosshair);
+  updateMeasureReadout();
+}
+function stopMeasureMode(){
+  measureMode = false;
+  document.getElementById('measure-crosshair').classList.remove('open');
+  document.getElementById('measure-hud').classList.remove('open');
+  var b = document.getElementById('btn-measure'); if(b) b.classList.remove('active');
+  var pb = document.getElementById('btn-place'); if(pb) pb.style.display='';
+  window.removeEventListener('resize', positionMeasureCrosshair);
+  if(measureLayer) measureLayer.clearLayers();
+  measurePts = [];
+}
+function measureAddPoint(){
+  if(!measureMode) return;
+  var c = map.getCenter();
+  measurePts.push([c.lat, c.lng]);
+  if(navigator.vibrate) navigator.vibrate(30);
+  redrawMeasure();
+}
+function measureUndo(){ if(measurePts.length){ measurePts.pop(); redrawMeasure(); } }
+function measureClear(){ measurePts = []; redrawMeasure(); }
+function redrawMeasure(){
+  if(!measureLayer) measureLayer = L.layerGroup().addTo(map);
+  measureLayer.clearLayers();
+  var pts = measurePts;
+  if(pts.length >= 3)
+    L.polygon(pts, {color:'#0e7490', weight:1.5, fillColor:'#22d3ee', fillOpacity:0.15, interactive:false}).addTo(measureLayer);
+  if(pts.length >= 2)
+    L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+  pts.forEach(function(p){
+    L.circleMarker(p, {radius:5, color:'#0f3460', weight:2, fillColor:'#22d3ee', fillOpacity:1, interactive:false}).addTo(measureLayer);
+  });
+  updateMeasureReadout();
+}
+function updateMeasureReadout(){
+  var el = document.getElementById('measure-readout');
+  if(!el) return;
+  var n = measurePts.length;
+  if(n === 0){ el.textContent = 'Najeď křížkem a přidej první bod'; return; }
+  if(n === 1){ el.textContent = 'Bod 1 — přidej další (➕ Bod)'; return; }
+  if(n >= 3){
+    el.innerHTML = '<span class="mr-area">Plocha: '+fmtArea(polygonAreaM2(measurePts))+'</span><br>'+
+                   'Obvod: '+fmtLen(pathLenM(measurePts,true))+' · bodů '+n;
+  } else {
+    el.innerHTML = 'Délka: '+fmtLen(pathLenM(measurePts,false))+' · bodů '+n;
+  }
+}
+
+// ── Uložení měření pro tým (/mereni) ──
+function measureSave(){
+  if(!measureMode) return;
+  if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
+  if(!window.currentUser){ showToast('Pro uložení se přihlas (úkolníček → přihlášení)', 3500); return; }
+  var typ = measurePts.length >= 3 ? 'plocha' : 'delka';
+  var info = (typ === 'plocha')
+    ? ('Plocha: '+fmtArea(polygonAreaM2(measurePts))+' · obvod '+fmtLen(pathLenM(measurePts,true)))
+    : ('Délka: '+fmtLen(pathLenM(measurePts,false)));
+  document.getElementById('measure-save-info').textContent = info + ' · bodů '+measurePts.length;
+  document.getElementById('measure-save-name').value = '';
+  document.getElementById('measure-save-desc').value = '';
+  document.getElementById('measure-save-status').textContent = '';
+  document.getElementById('measure-save-modal').style.display = 'flex';
+}
+function closeMeasureSave(){ document.getElementById('measure-save-modal').style.display = 'none'; }
+function confirmMeasureSave(){
+  var name = document.getElementById('measure-save-name').value.trim();
+  var desc = document.getElementById('measure-save-desc').value.trim();
+  var status = document.getElementById('measure-save-status');
+  if(!name){ status.textContent = '⚠️ Vyplň název'; return; }
+  if(!window.currentUser){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
+  if(measurePts.length < 2){ status.textContent = '⚠️ Málo bodů'; return; }
+  var typ = measurePts.length >= 3 ? 'plocha' : 'delka';
+  var rec = {
+    nazev: name, popis: desc, typ: typ,
+    body: measurePts.map(function(p){ return [p[0], p[1]]; }),
+    delkaM:  (typ === 'plocha') ? pathLenM(measurePts,true) : pathLenM(measurePts,false),
+    plochaM2:(typ === 'plocha') ? polygonAreaM2(measurePts) : 0,
+    ownerUid: window.currentUser.uid,
+    author: window.currentUser.name || '',
+    ts: Date.now()
+  };
+  status.textContent = '⏳ Ukládám…';
+  db.ref('mereni').push(rec).then(function(){
+    closeMeasureSave();
+    showToast('✅ Měření uloženo pro tým', 2000);
+    measureClear();
+  }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba ukládání'); });
+}
+
+// ── Načtení a vykreslení uložených měření ──
+function loadMereni(){
+  if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup().addTo(map);
+  try {
+    db.ref('mereni').on('value', function(snap){
+      var v = snap.val() || {};
+      mereniData = v;
+      layerGroups.mereni.clearLayers();
+      Object.keys(v).forEach(function(k){
+        var r = v[k];
+        if(!r || !r.body || r.body.length < 2) return;
+        renderSavedMereni(k, r);
+      });
+    }, function(err){ console.warn('loadMereni:', err && err.message); });
+  } catch(e){ console.warn('loadMereni výjimka:', e); }
+}
+function mereniPopupHtml(key, r){
+  var meta = (r.typ === 'plocha')
+    ? ('Plocha: '+fmtArea(r.plochaM2||0)+'<br>Obvod: '+fmtLen(r.delkaM||0))
+    : ('Délka: '+fmtLen(r.delkaM||0));
+  var html = '<div style="min-width:170px;">'+
+    '<b>'+escapeHtml(r.nazev||'Měření')+'</b><br>'+
+    (r.popis ? ('<span style="color:#888;">'+escapeHtml(r.popis)+'</span><br>') : '')+
+    meta+'<br>'+
+    '<span style="font-size:11px;color:#888;">'+escapeHtml(r.author||'')+'</span>';
+  if(canDelete(r.ownerUid)){
+    html += '<br><button onclick="deleteMereni(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Smazat</button>';
+  }
+  return html + '</div>';
+}
+function renderSavedMereni(key, r){
+  var pts = r.body;
+  var shape;
+  if(r.typ === 'plocha'){
+    shape = L.polygon(pts, {color:'#0e7490', weight:2, fillColor:'#22d3ee', fillOpacity:0.18});
+  } else {
+    shape = L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.9});
+  }
+  shape.bindPopup(mereniPopupHtml(key, r));
+  shape.addTo(layerGroups.mereni);
+  // Štítek s názvem na prvním bodě
+  var labelVal = (r.typ === 'plocha') ? fmtArea(r.plochaM2||0) : fmtLen(r.delkaM||0);
+  L.marker(pts[0], {interactive:false, icon: L.divIcon({
+    className:'',
+    html:'<div style="background:rgba(14,116,144,.9);color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;transform:translate(8px,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5);">📏 '+escapeHtml(r.nazev||'')+'</div>',
+    iconSize:[0,0], iconAnchor:[0,0]
+  })}).addTo(layerGroups.mereni);
+}
+function deleteMereni(key){
+  var r = mereniData[key];
+  if(!r) return;
+  if(!canDelete(r.ownerUid)){ showToast('Smazat může jen autor nebo koordinátor', 2500); return; }
+  if(!confirm('Smazat měření "'+(r.nazev||'')+'"?')) return;
+  db.ref('mereni/'+key).remove().then(function(){
+    showToast('Měření smazáno', 1500);
+  }).catch(function(e){ showToast('Chyba mazání: '+(e && e.message||''), 3000); });
 }
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
