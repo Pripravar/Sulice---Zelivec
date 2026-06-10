@@ -1118,6 +1118,16 @@ document.addEventListener('touchend', function(e){
     <label>🗺️ Katastr (KN)</label>
     <label class="toggle"><input type="checkbox" id="lyr-katastr" onchange="toggleKatastr(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div style="padding:4px 0 2px;">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">🛰️ Dron snímky (klikni datum = zobraz)</div>
+    <div id="drone-date-row" style="display:flex;flex-wrap:wrap;gap:6px;">
+      <span style="font-size:12px;color:var(--text2);opacity:.7;">zatím žádné</span>
+    </div>
+    <div id="drone-layer-opacity-row" style="display:none;align-items:center;gap:8px;margin-top:7px;">
+      <span style="font-size:11px;color:var(--text2);white-space:nowrap;">Průhlednost vrstvy</span>
+      <input id="drone-layer-opacity" type="range" min="10" max="100" value="70" oninput="setDroneLayerOpacity(this.value)" style="flex:1;">
+    </div>
+  </div>
   <h3>📍 Vrstvy</h3>
   <div class="layer-row">
     <label>🛣️ Trasa</label>
@@ -1195,10 +1205,6 @@ document.addEventListener('touchend', function(e){
     <label>📏 Měření (uložená)</label>
     <label class="toggle"><input type="checkbox" id="lyr-mereni" checked onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
   </div>
-  <div class="layer-row">
-    <label>🛰️ Dron snímky</label>
-    <label class="toggle"><input type="checkbox" id="lyr-drone" checked onchange="toggleLayer('drone',this.checked)"><span class="toggle-slider"></span></label>
-  </div>
   <h3>📷 Fotky</h3>
   <div class="layer-row">
     <label>🏷️ Razítko (km, datum, jméno)</label>
@@ -1253,10 +1259,10 @@ document.addEventListener('touchend', function(e){
 <!-- Drone overlay: skrytý file input + editační lišta -->
 <input type="file" id="drone-file-input" accept="image/*" style="display:none">
 <div id="drone-edit-bar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:1650;background:var(--panel);border:1px solid #f5a623;border-radius:12px;padding:10px 12px;flex-direction:column;gap:8px;max-width:94vw;box-shadow:0 4px 16px rgba(0,0,0,.5);">
-  <div style="font-size:12px;color:var(--text);text-align:center;">Zarovnej snímek na podklad pod ním — tahej rohy (posun/měřítko) nebo otáčej.</div>
-  <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
-    <button id="drone-mode-distort" onclick="droneSetMode('distort')" style="background:#f5a623;color:#0f3460;border:none;border-radius:9px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;">✥ Posun/měřítko</button>
-    <button id="drone-mode-rotate" onclick="droneSetMode('freeRotate')" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;">⟳ Otočit</button>
+  <div style="font-size:12px;color:var(--text);text-align:center;">Tahej <b style="color:#22d3ee;">rohové body</b> (posun/měřítko/otočení), <b style="color:#f5a623;">prostřední</b> posune celý snímek.</div>
+  <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
+    <span style="font-size:12px;color:var(--text2);">Datum snímků</span>
+    <input id="drone-date" type="date" style="padding:8px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
   </div>
   <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
     <span style="font-size:12px;color:var(--text2);">Průhlednost</span>
@@ -3379,11 +3385,18 @@ function deleteMereni(key){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// DRONE OVERLAY – vložení fotky z dronu na mapu (Leaflet.DistortableImage)
-// Ruční zarovnání (posun/měřítko/rotace) + průhlednost. NE ortofoto → orientační.
+// DRONE OVERLAY – vložení fotky z dronu na mapu
+// Plugin Leaflet.DistortableImage VYKRESLUJE čtyřúhelník (matrix3d), ale jeho
+// editační modul v CDN buildu chybí → používáme JEN renderer (_corners + _reset)
+// a vlastní velké tahací body. Snímky se ukládají po DATU = vrstvy postupu v čase.
+// NE ortofoto → orientační podklad.
 // ══════════════════════════════════════════════════════════════════
-var droneEditOverlay = null;   // aktuálně editovaný distortable overlay
+var droneEditOverlay = null;   // aktuálně editovaný overlay
+var droneCornerMarkers = [];   // 4 rohové tahací body
+var droneCenterMarker = null;  // prostřední bod (posun celku)
 var droneOverlaysData = {};    // uložené overlaye z /drone_overlays
+var droneActiveDate = null;    // právě zobrazené datum (vrstva)
+var droneRendered = [];        // aktuálně vykreslené uložené overlaye + markery (na mapě)
 
 // Zmenší obrázek na max maxPx (delší strana) a vrátí JPEG dataURL (kvalita q)
 function resizeImageMax(dataUrl, maxPx, q, cb){
@@ -3417,10 +3430,10 @@ function exifGpsFromDataUrl(dataUrl){
     return { lat: lat, lng: lng };
   } catch(e){ return null; }
 }
-// 4 počáteční rohy (NW, NE, SW, SE) – čtverec ~half metrů kolem středu
-function droneInitialCorners(lat, lng, half){
-  var dLat = half / 111320;
-  var dLng = half / (111320 * Math.cos(lat*Math.PI/180));
+// 4 počáteční rohy (NW, NE, SW, SE) – obdélník halfW × halfH metrů kolem středu
+function droneInitialCorners(lat, lng, halfW, halfH){
+  var dLat = halfH / 111320;
+  var dLng = halfW / (111320 * Math.cos(lat*Math.PI/180));
   return [
     L.latLng(lat+dLat, lng-dLng), // NW
     L.latLng(lat+dLat, lng+dLng), // NE
@@ -3455,17 +3468,71 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 });
 
+// Vykreslí overlay na aktuální _corners (interní renderer pluginu)
+function droneRerender(ov){ try { if(ov && ov._reset) ov._reset(); } catch(e){} }
+function droneCentroid(corners){
+  var la=0, ln=0; corners.forEach(function(c){ la+=c.lat; ln+=c.lng; }); return L.latLng(la/4, ln/4);
+}
+function droneCornerIcon(){
+  return L.divIcon({ className:'', iconSize:[32,32], iconAnchor:[16,16],
+    html:'<div style="width:32px;height:32px;border-radius:50%;background:#22d3ee;border:3px solid #0f3460;box-shadow:0 1px 5px rgba(0,0,0,.6);"></div>' });
+}
+function droneCenterIcon(){
+  return L.divIcon({ className:'', iconSize:[36,36], iconAnchor:[18,18],
+    html:'<div style="width:36px;height:36px;border-radius:50%;background:#f5a623;border:3px solid #0f3460;display:flex;align-items:center;justify-content:center;font-size:18px;color:#0f3460;box-shadow:0 1px 5px rgba(0,0,0,.6);">✥</div>' });
+}
+function clearDroneEditHandles(){
+  droneCornerMarkers.forEach(function(m){ try{ map.removeLayer(m); }catch(e){} });
+  droneCornerMarkers = [];
+  if(droneCenterMarker){ try{ map.removeLayer(droneCenterMarker); }catch(e){} droneCenterMarker = null; }
+}
+function addDroneEditHandles(){
+  clearDroneEditHandles();
+  if(!droneEditOverlay) return;
+  var cs = droneEditOverlay.getCorners();
+  cs.forEach(function(c, i){
+    var m = L.marker(c, { draggable:true, icon:droneCornerIcon(), zIndexOffset:1000 }).addTo(map);
+    m.on('drag', function(e){
+      droneEditOverlay._corners[i] = e.target.getLatLng();
+      droneRerender(droneEditOverlay);
+      if(droneCenterMarker) droneCenterMarker.setLatLng(droneCentroid(droneEditOverlay.getCorners()));
+    });
+    droneCornerMarkers.push(m);
+  });
+  // prostřední bod = posun celého snímku
+  droneCenterMarker = L.marker(droneCentroid(cs), { draggable:true, icon:droneCenterIcon(), zIndexOffset:1001 }).addTo(map);
+  var prev = droneCenterMarker.getLatLng();
+  droneCenterMarker.on('dragstart', function(e){ prev = e.target.getLatLng(); });
+  droneCenterMarker.on('drag', function(e){
+    var cur = e.target.getLatLng();
+    var dLat = cur.lat - prev.lat, dLng = cur.lng - prev.lng; prev = cur;
+    var corners = droneEditOverlay.getCorners();
+    for(var i=0;i<4;i++){ droneEditOverlay._corners[i] = L.latLng(corners[i].lat+dLat, corners[i].lng+dLng); }
+    droneRerender(droneEditOverlay);
+    droneCornerMarkers.forEach(function(mm, idx){ mm.setLatLng(droneEditOverlay.getCorners()[idx]); });
+  });
+}
+
 function placeDroneEditOverlay(dataUrl, gps){
   var center = (gps && !isNaN(gps.lat)) ? L.latLng(gps.lat, gps.lng) : map.getCenter();
-  var corners = droneInitialCorners(center.lat, center.lng, 75); // ~150 m box
+  // Zjistit poměr stran fotky → počáteční obdélník (delší strana ~150 m)
+  var probe = new Image();
+  probe.onload  = function(){ _placeDroneWith(dataUrl, center, gps, (probe.naturalWidth||3)/(probe.naturalHeight||2)); };
+  probe.onerror = function(){ _placeDroneWith(dataUrl, center, gps, 1.5); };
+  probe.src = dataUrl;
+}
+function _placeDroneWith(dataUrl, center, gps, aspect){
+  if(!aspect || isNaN(aspect) || aspect<=0) aspect = 1.5;
+  var halfW = aspect >= 1 ? 75 : 75*aspect;
+  var halfH = aspect >= 1 ? 75/aspect : 75;
+  var corners = droneInitialCorners(center.lat, center.lng, halfW, halfH);
   try {
     droneEditOverlay = L.distortableImageOverlay(dataUrl, {
-      selected: true,
-      mode: 'distort',
       corners: corners,
-      suppressToolbar: true   // vlastní lišta místo vestavěné
+      editable: false,        // editing modul v buildu chybí – ovládáme vlastními body
+      suppressToolbar: true
     }).addTo(map);
-    droneEditOverlay.setOpacity(0.7);
+    try { droneEditOverlay.setOpacity(0.7); } catch(e){}
   } catch(e){
     console.error('drone overlay err:', e);
     showToast('Nepodařilo se vložit snímek', 3000);
@@ -3473,28 +3540,22 @@ function placeDroneEditOverlay(dataUrl, gps){
   }
   if(gps && !isNaN(gps.lat)){
     map.panTo(center);
-    showToast('📍 Předumístěno podle GPS z fotky — doladi ručně', 3000);
+    showToast('📍 Osazeno podle GPS z fotky — doladi ručně a ulož', 3200);
+  } else {
+    showToast('ℹ️ Fotka nemá GPS — umísti ručně doprostřed mapy', 3200);
   }
   document.getElementById('drone-opacity').value = 70;
   document.getElementById('drone-edit-status').textContent = '';
-  droneSetMode('distort');
-  var bar = document.getElementById('drone-edit-bar');
-  bar.style.display = 'flex';
-}
-function droneSetMode(mode){
-  if(!droneEditOverlay) return;
-  try { if(droneEditOverlay.editing && droneEditOverlay.editing.setMode) droneEditOverlay.editing.setMode(mode); } catch(e){}
-  var d = document.getElementById('drone-mode-distort'), r = document.getElementById('drone-mode-rotate');
-  var on = '#f5a623', onC = '#0f3460', off = 'var(--panel2)', offC = 'var(--text)';
-  if(d && r){
-    d.style.background = (mode==='distort') ? on : off; d.style.color = (mode==='distort') ? onC : offC;
-    r.style.background = (mode==='freeRotate') ? on : off; r.style.color = (mode==='freeRotate') ? onC : offC;
-  }
+  var dt = document.getElementById('drone-date'); if(dt && !dt.value) dt.value = new Date().toISOString().slice(0,10);
+  // počkat na vykreslení snímku, pak přidat rohové body (potřebují _reset s _image)
+  setTimeout(function(){ addDroneEditHandles(); }, 300);
+  document.getElementById('drone-edit-bar').style.display = 'flex';
 }
 function setDroneEditOpacity(val){
-  if(droneEditOverlay) droneEditOverlay.setOpacity(val/100);
+  if(droneEditOverlay){ try { droneEditOverlay.setOpacity(val/100); } catch(e){} }
 }
 function cancelDroneOverlay(){
+  clearDroneEditHandles();
   if(droneEditOverlay){ try { map.removeLayer(droneEditOverlay); } catch(e){} droneEditOverlay = null; }
   var bar = document.getElementById('drone-edit-bar'); if(bar) bar.style.display = 'none';
 }
@@ -3502,16 +3563,18 @@ function saveDroneOverlay(){
   if(!droneEditOverlay){ return; }
   if(!window.currentUser){ showToast('Nejsi přihlášen', 3000); return; }
   var status = document.getElementById('drone-edit-status');
+  var datum = document.getElementById('drone-date').value || new Date().toISOString().slice(0,10);
   var cornersLL;
   try { cornersLL = droneEditOverlay.getCorners(); } catch(e){ cornersLL = null; }
   if(!cornersLL || cornersLL.length !== 4){ status.textContent = '⚠️ Nelze získat rohy snímku'; return; }
   var corners = cornersLL.map(function(c){ return [c.lat, c.lng]; });
   var opacity = (parseInt(document.getElementById('drone-opacity').value,10) || 70) / 100;
-  var srcDataUrl = droneEditOverlay._image ? droneEditOverlay._image.src : null;
+  var imgEl = droneEditOverlay.getElement ? droneEditOverlay.getElement() : null;
+  var srcDataUrl = imgEl ? imgEl.src : (droneEditOverlay._image ? droneEditOverlay._image.src : null);
   if(!srcDataUrl){ status.textContent = '⚠️ Chybí obrázek'; return; }
 
   status.textContent = '⏳ Zmenšuji a nahrávám…';
-  // Originál (dataURL) zmenšit na max 3000 px / Q0.85 (NE 1600 – kvůli čitelnosti při měření)
+  // Zmenšit na max 3000 px / Q0.85 (NE 1600 – kvůli čitelnosti při měření)
   resizeImageMax(srcDataUrl, 3000, 0.85, function(resized){
     if(!resized){ status.textContent = '❌ Chyba zpracování obrázku'; return; }
     var base64 = resized.replace(/^data:image\/\w+;base64,/, '');
@@ -3532,12 +3595,14 @@ function saveDroneOverlay(){
           url: res.data.path,            // relativní 'drone/drone_xxx.jpg' (Pages)
           corners: corners,
           opacity: opacity,
+          datum: datum,                  // YYYY-MM-DD → vrstva
           ownerUid: window.currentUser.uid,
           author: window.currentUser.name || '',
           ts: Date.now()
         };
         db.ref('drone_overlays').push(rec).then(function(){
-          showToast('✅ Dron uložen pro tým', 2000);
+          droneActiveDate = datum;       // hned zobrazit vrstvu, kam jsme přidali
+          showToast('✅ Dron uložen do vrstvy ' + droneFmtDatum(datum), 2200);
           cancelDroneOverlay();
         }).catch(function(e){ status.textContent = '⚠️ Nahráno, ale zápis selhal: '+(e && e.message||''); });
       } else {
@@ -3548,48 +3613,99 @@ function saveDroneOverlay(){
   });
 }
 
-// ── Načtení a vykreslení uložených drone overlayů (zamčené) ──
-function loadDroneOverlays(){
-  if(!layerGroups.drone) layerGroups.drone = L.layerGroup().addTo(map);
-  try {
-    db.ref('drone_overlays').on('value', function(snap){
-      var v = snap.val() || {};
-      droneOverlaysData = v;
-      layerGroups.drone.clearLayers();
-      Object.keys(v).forEach(function(k){
-        var r = v[k];
-        if(!r || !r.url || !r.corners || r.corners.length !== 4) return;
-        renderSavedDrone(k, r);
-      });
-    }, function(err){ console.warn('loadDroneOverlays:', err && err.message); });
-  } catch(e){ console.warn('loadDroneOverlays výjimka:', e); }
+// ── Datové vrstvy: seznam dat + přepínání + vykreslení ──
+function droneFmtDatum(d){
+  var p = String(d).split('-'); return (p.length===3) ? (parseInt(p[2],10)+'.'+parseInt(p[1],10)+'.'+p[0]) : String(d);
+}
+function droneDates(){
+  var set = {};
+  Object.keys(droneOverlaysData).forEach(function(k){ var r = droneOverlaysData[k]; if(r && r.datum) set[r.datum] = 1; });
+  return Object.keys(set).sort(); // YYYY-MM-DD vzestupně = chronologicky
+}
+function rebuildDroneDateButtons(){
+  var row = document.getElementById('drone-date-row'); if(!row) return;
+  var dates = droneDates();
+  if(!dates.length){ row.innerHTML = '<span style="font-size:12px;color:var(--text2);opacity:.7;">zatím žádné</span>'; return; }
+  row.innerHTML = '';
+  dates.forEach(function(d){
+    var b = document.createElement('button');
+    b.className = 'bm-btn' + (d===droneActiveDate ? ' active' : '');
+    b.textContent = '🛰️ ' + droneFmtDatum(d);
+    b.onclick = (function(dd){ return function(){ selectDroneDate(dd); }; })(d);
+    row.appendChild(b);
+  });
+}
+function selectDroneDate(d){
+  droneActiveDate = (droneActiveDate === d) ? null : d;  // klik na aktivní = skrýt
+  // nastav posuvník vrstvy podle uložené průhlednosti prvního snímku v datu
+  if(droneActiveDate){
+    var first = null;
+    Object.keys(droneOverlaysData).forEach(function(k){ var r=droneOverlaysData[k]; if(!first && r && r.datum===droneActiveDate) first=r; });
+    var op = (first && first.opacity != null) ? Math.round(first.opacity*100) : 70;
+    var sl = document.getElementById('drone-layer-opacity'); if(sl) sl.value = op;
+  }
+  rebuildDroneDateButtons();
+  renderActiveDroneDate();
+}
+function clearRenderedDrone(){
+  droneRendered.forEach(function(l){ try { map.removeLayer(l); } catch(e){} });
+  droneRendered = [];
+}
+function setDroneLayerOpacity(val){
+  var o = (parseInt(val,10)||70)/100;
+  droneRendered.forEach(function(l){
+    try {
+      var el = l.getElement && l.getElement();
+      if(el && el.tagName === 'IMG' && l.setOpacity) l.setOpacity(o);
+    } catch(e){}
+  });
+}
+function renderActiveDroneDate(){
+  clearRenderedDrone();
+  var row = document.getElementById('drone-layer-opacity-row');
+  if(!droneActiveDate){ if(row) row.style.display = 'none'; return; }
+  Object.keys(droneOverlaysData).forEach(function(k){
+    var r = droneOverlaysData[k];
+    if(!r || r.datum !== droneActiveDate || !r.url || !r.corners || r.corners.length !== 4) return;
+    renderSavedDrone(k, r);
+  });
+  if(row) row.style.display = 'flex';
+  // aplikuj zvolenou průhlednost na celou vrstvu
+  var sl = document.getElementById('drone-layer-opacity');
+  if(sl) setDroneLayerOpacity(sl.value);
 }
 function renderSavedDrone(key, r){
   if(typeof L.distortableImageOverlay === 'undefined') return;
   var corners = r.corners.map(function(c){ return L.latLng(c[0], c[1]); });
   try {
-    var ov = L.distortableImageOverlay(r.url, {
-      corners: corners,
-      mode: 'lock',
-      selected: false,
-      editable: false,        // jen zobrazení, bez editačních úchytů
-      suppressToolbar: true
-    });
-    ov.addTo(layerGroups.drone);
-    if(typeof ov.setOpacity === 'function') ov.setOpacity(r.opacity != null ? r.opacity : 0.7);
+    var ov = L.distortableImageOverlay(r.url, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
+    if(typeof ov.setOpacity === 'function'){ try { ov.setOpacity(r.opacity != null ? r.opacity : 0.7); } catch(e){} }
+    droneRendered.push(ov);
   } catch(e){ console.warn('renderSavedDrone err:', e); }
-  // Štítek + popup pro mazání na těžišti rohů
+  // 🛰️ marker na těžišti rohů s popupem (info + mazání)
   var clat = r.corners.reduce(function(s,c){return s+c[0];},0)/4;
   var clng = r.corners.reduce(function(s,c){return s+c[1];},0)/4;
-  var html = '<div style="min-width:150px;"><b>🛰️ Dron</b><br>'+
+  var html = '<div style="min-width:150px;"><b>🛰️ Dron '+droneFmtDatum(r.datum||'')+'</b><br>'+
     '<span style="font-size:11px;color:#888;">'+escapeHtml(r.author||'')+'</span>'+
     '<br><span style="font-size:10px;color:#f5a623;">orientační podklad, ne geodetické zaměření</span>';
   if(canDelete(r.ownerUid)){
     html += '<br><button onclick="deleteDroneOverlay(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Odebrat z mapy</button>';
   }
   html += '</div>';
-  L.marker([clat, clng], { icon: L.divIcon({ className:'', html:'<div style="font-size:20px;filter:drop-shadow(0 1px 2px #000);">🛰️</div>', iconSize:[20,20], iconAnchor:[10,10] }) })
-    .bindPopup(html).addTo(layerGroups.drone);
+  var mk = L.marker([clat, clng], { icon: L.divIcon({ className:'', html:'<div style="font-size:20px;filter:drop-shadow(0 1px 2px #000);">🛰️</div>', iconSize:[20,20], iconAnchor:[10,10] }) })
+    .bindPopup(html).addTo(map);
+  droneRendered.push(mk);
+}
+function loadDroneOverlays(){
+  try {
+    db.ref('drone_overlays').on('value', function(snap){
+      droneOverlaysData = snap.val() || {};
+      // pokud zmizelo aktivní datum, zruš výběr
+      if(droneActiveDate && droneDates().indexOf(droneActiveDate) === -1) droneActiveDate = null;
+      rebuildDroneDateButtons();
+      renderActiveDroneDate();
+    }, function(err){ console.warn('loadDroneOverlays:', err && err.message); });
+  } catch(e){ console.warn('loadDroneOverlays výjimka:', e); }
 }
 function deleteDroneOverlay(key){
   var r = droneOverlaysData[key];
