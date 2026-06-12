@@ -2064,9 +2064,11 @@ function loadVykresy() {
     }, function(err){ console.warn('loadVykresy:', err && err.message); });
   } catch(e){ console.warn('loadVykresy výjimka:', e); }
 }
-// Najdi nahrané výkresy spadající do daného km (seřazené dle blízkosti středu)
-function findVykresyForKm(realKm) {
+// Najdi nahrané výkresy spadající do daného km (seřazené dle blízkosti středu).
+// Výchozí: jen PLATNÉ. includeInvalid=true → i zneplatněné (pro správu / ⛔ záložky).
+function findVykresyForKm(realKm, includeInvalid) {
   var found = vykresyData.filter(function(d){
+    if(!includeInvalid && d.neplatny) return false;
     var od = (typeof d.kmOd==='number')?d.kmOd:parseFloat(d.kmOd);
     var doKm = (typeof d.kmDo==='number')?d.kmDo:parseFloat(d.kmDo);
     if(isNaN(od)||isNaN(doKm)) return false;
@@ -2111,6 +2113,7 @@ function getVykresSOFolders(){
 }
 
 var _vykUploadKm = null;
+var _vykReplaceKey = null;   // klíč výkresu, který se aktualizací nahrazuje (po uploadu se zneplatní)
 function openVykresUpload(realKm, preferSO){
   var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
   if(!user){ showToast('Pro nahrání výkresu se přihlas (úkolníček → přihlášení)', 3500); return; }
@@ -2139,36 +2142,60 @@ function openVykresUpload(realKm, preferSO){
   document.getElementById('vyk-nazev').value = '';
   document.getElementById('vyk-file').value = '';
   document.getElementById('vyk-status').textContent = '';
+  _vykReplaceKey = null;
+  var subBtn = document.getElementById('vyk-submit'); if(subBtn) subBtn.textContent = 'Nahrát výkres';
   document.getElementById('vykres-modal').style.display = 'flex';
   renderVykresList();
 }
 function closeVykresUpload(){
+  _vykReplaceKey = null;
+  var subBtn = document.getElementById('vyk-submit'); if(subBtn) subBtn.textContent = 'Nahrát výkres';
   document.getElementById('vykres-modal').style.display = 'none';
+}
+function vykBtn(txt, title, color, fn){
+  var b = document.createElement('button');
+  b.textContent = txt; b.title = title;
+  b.style.cssText = 'background:none;border:none;color:'+color+';font-size:17px;cursor:pointer;min-width:38px;min-height:38px;';
+  b.onclick = fn; return b;
+}
+function vykRow(d, isInvalid){
+  var row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:4px;background:var(--panel2);border-radius:8px;padding:8px 10px;'+(isInvalid?'opacity:.6;':'');
+  var info = document.createElement('div');
+  info.style.cssText = 'flex:1;font-size:12px;color:var(--text);overflow:hidden;';
+  info.innerHTML = '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+(isInvalid?'text-decoration:line-through;':'')+'">'+
+    escapeHtml(d.nazev||'Výkres')+'</div><div style="font-size:11px;color:var(--text2);">'+
+    escapeHtml((d.kat||'📎')+' · '+(d.so||'')+' · '+fmtKm(parseFloat(d.kmOd))+'–'+fmtKm(parseFloat(d.kmDo)))+'</div>';
+  row.appendChild(info);
+  var allow = canDelete(d.uid);
+  if(allow && !isInvalid){
+    row.appendChild(vykBtn('🔄','Aktualizovat (nahrát novou verzi, starou zneplatní)','#4fc3f7',(function(k){return function(){ startUpdateVykres(k); };})(d._key)));
+    row.appendChild(vykBtn('🗄️','Zneplatnit (schovat z hlavních záložek)','#f5a623',(function(k){return function(){ invalidateVykres(k); };})(d._key)));
+  }
+  if(allow && isInvalid){
+    row.appendChild(vykBtn('♻️','Obnovit jako platný','#48bb78',(function(k){return function(){ restoreVykres(k); };})(d._key)));
+  }
+  if(allow){
+    row.appendChild(vykBtn('🗑','Smazat úplně','#e57373',(function(k){return function(){ deleteVykres(k); };})(d._key)));
+  }
+  return row;
 }
 function renderVykresList(){
   var box = document.getElementById('vyk-list');
   if(!box) return;
-  var list = (_vykUploadKm!=null) ? findVykresyForKm(_vykUploadKm) : vykresyData.slice();
-  if(!list.length){ box.innerHTML = '<div style="font-size:12px;color:var(--text2);opacity:0.7;">Zatím žádné.</div>'; return; }
+  var all = (_vykUploadKm!=null) ? findVykresyForKm(_vykUploadKm, true) : vykresyData.slice();
+  if(!all.length){ box.innerHTML = '<div style="font-size:12px;color:var(--text2);opacity:0.7;">Zatím žádné.</div>'; return; }
+  var valid = all.filter(function(d){ return !d.neplatny; });
+  var invalid = all.filter(function(d){ return d.neplatny; });
   box.innerHTML = '';
-  list.forEach(function(d){
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:8px;padding:8px 10px;';
-    var info = document.createElement('div');
-    info.style.cssText = 'flex:1;font-size:12px;color:var(--text);overflow:hidden;';
-    info.innerHTML = '<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+
-      escapeHtml(d.nazev||'Výkres')+'</div><div style="font-size:11px;color:var(--text2);">'+
-      escapeHtml((d.kat||'📎')+' · '+(d.so||'')+' · '+fmtKm(parseFloat(d.kmOd))+'–'+fmtKm(parseFloat(d.kmDo)))+'</div>';
-    row.appendChild(info);
-    if(canDelete(d.uid)){
-      var del = document.createElement('button');
-      del.textContent = '🗑';
-      del.style.cssText = 'background:none;border:none;color:#e57373;font-size:18px;cursor:pointer;min-width:40px;min-height:40px;';
-      del.onclick = (function(key){ return function(){ deleteVykres(key); }; })(d._key);
-      row.appendChild(del);
-    }
-    box.appendChild(row);
-  });
+  valid.forEach(function(d){ box.appendChild(vykRow(d, false)); });
+  if(invalid.length){
+    var h = document.createElement('div');
+    h.style.cssText = 'font-size:11px;color:var(--text2);margin:8px 0 2px;opacity:.85;';
+    h.textContent = '⛔ Zneplatněné ('+invalid.length+')';
+    box.appendChild(h);
+    invalid.forEach(function(d){ box.appendChild(vykRow(d, true)); });
+  }
 }
 function deleteVykres(key){
   var d = vykresyData.filter(function(x){return x._key===key;})[0];
@@ -2178,6 +2205,50 @@ function deleteVykres(key){
   db.ref('vykresy/'+key).remove().then(function(){
     showToast('Výkres odebrán', 1800); renderVykresList();
   }).catch(function(e){ showToast('Chyba mazání: '+(e&&e.message||''), 3000); });
+}
+// km číslo → text do inputu ("2,350")
+function fmtKmInputVal(num){ var n=parseFloat(num); return isNaN(n) ? '' : n.toFixed(3).replace('.', ','); }
+// Zneplatnit výkres (schová z hlavních záložek, zůstane jako ⛔)
+function invalidateVykres(key){
+  var d = vykresyData.filter(function(x){return x._key===key;})[0]; if(!d) return;
+  if(!canDelete(d.uid)){ showToast('Zneplatnit může jen autor nebo koordinátor', 2500); return; }
+  if(!confirm('Zneplatnit výkres "'+(d.nazev||'')+'"?\nZmizí z hlavních záložek, ale zůstane dostupný jako ⛔ neplatný.')) return;
+  db.ref('vykresy/'+key).update({
+    neplatny:true,
+    zneplatnilUid:(window.currentUser&&window.currentUser.uid)||'',
+    zneplatnenoTs:Date.now()
+  }).then(function(){ showToast('Výkres zneplatněn', 1800); renderVykresList(); })
+    .catch(function(e){ showToast('Chyba: '+(e&&e.message||''), 3000); });
+}
+// Obnovit zneplatněný výkres zpět jako platný
+function restoreVykres(key){
+  var d = vykresyData.filter(function(x){return x._key===key;})[0]; if(!d) return;
+  if(!canDelete(d.uid)){ showToast('Obnovit může jen autor nebo koordinátor', 2500); return; }
+  db.ref('vykresy/'+key).update({ neplatny:false, nahrazenoKym:null }).then(function(){
+    showToast('Výkres obnoven jako platný', 1800); renderVykresList();
+  }).catch(function(e){ showToast('Chyba: '+(e&&e.message||''), 3000); });
+}
+// Aktualizovat výkres: předvyplní formulář starým výkresem; po nahrání nové verze starou zneplatní
+function startUpdateVykres(key){
+  var d = vykresyData.filter(function(x){return x._key===key;})[0]; if(!d) return;
+  if(!canDelete(d.uid)){ showToast('Aktualizovat může jen autor nebo koordinátor', 2500); return; }
+  _vykReplaceKey = key;
+  var soSel = document.getElementById('vyk-so');
+  if(d.so){
+    if([].slice.call(soSel.options).every(function(o){ return o.value!==d.so; })){
+      var o=document.createElement('option'); o.value=d.so; o.textContent=d.so.replace('_',' '); soSel.appendChild(o);
+    }
+    soSel.value = d.so;
+  }
+  if(d.kat) document.getElementById('vyk-kat').value = d.kat;
+  document.getElementById('vyk-km-od').value = fmtKmInputVal(d.kmOd);
+  document.getElementById('vyk-km-do').value = fmtKmInputVal(d.kmDo);
+  document.getElementById('vyk-nazev').value = d.nazev || '';
+  document.getElementById('vyk-file').value = '';
+  var btn = document.getElementById('vyk-submit');
+  if(btn) btn.textContent = '⬆️ Nahrát novou verzi (starou zneplatní)';
+  document.getElementById('vyk-status').textContent = '🔄 Aktualizace „'+(d.nazev||'')+'": vyber nové PDF a nahraj.';
+  var fi = document.getElementById('vyk-file'); if(fi && fi.scrollIntoView) fi.scrollIntoView({block:'center'});
 }
 function submitVykresUpload(){
   var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
@@ -2228,10 +2299,21 @@ function submitVykresUpload(){
           author: (window.currentUser && window.currentUser.name) || user.displayName || '',
           ts: Date.now()
         };
-        db.ref('vykresy').push(rec).then(function(){
-          status.textContent = '✅ Hotovo';
-          showToast('Výkres nahrán', 2000);
-          btn.disabled=false; btn.style.opacity='1';
+        var newRef = db.ref('vykresy').push(rec);
+        newRef.then(function(){
+          // Aktualizace: nahrazený výkres zneplatnit a propojit
+          if(_vykReplaceKey){
+            db.ref('vykresy/'+_vykReplaceKey).update({
+              neplatny:true, zneplatnilUid:user.uid, zneplatnenoTs:Date.now(), nahrazenoKym:newRef.key
+            });
+            _vykReplaceKey = null;
+            status.textContent = '✅ Nová verze nahrána, stará zneplatněna';
+            showToast('Výkres aktualizován', 2200);
+          } else {
+            status.textContent = '✅ Hotovo';
+            showToast('Výkres nahrán', 2000);
+          }
+          btn.disabled=false; btn.style.opacity='1'; btn.textContent='Nahrát výkres';
           document.getElementById('vyk-file').value='';
           document.getElementById('vyk-nazev').value='';
           renderVykresList();
@@ -2294,9 +2376,13 @@ function onStaniceniClick(realKm) {
       pages.push({soubor:d.soubor, nazev:d.nazev, typ:'📋 Tech. zpráva'});
     });
   }
-  // Výkresy nahrané z aplikace (uživatelské) – přidat na konec záložek
+  // Výkresy nahrané z aplikace – PLATNÉ jako normální záložky
   findVykresyForKm(realKm).forEach(function(d, i) {
     pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres')+(i?' '+(i+1):'')});
+  });
+  // ZNEPLATNĚNÉ výkresy – na konec jako šedé ⛔ záložky (přehledný odkaz na staré verze)
+  findVykresyForKm(realKm, true).filter(function(d){ return d.neplatny; }).forEach(function(d) {
+    pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres')+' — ZNEPLATNĚNO', typ:'⛔ '+(d.nazev||'Výkres'), _invalid:true});
   });
   openDocPanel(pages, realKm, 0);
 }
@@ -2323,6 +2409,7 @@ function openDocPanel(pages, realKm, startIdx) {
     var btn = document.createElement('button');
     btn.className = 'pdf-tab' + (i===docPageIdx?' active':'');
     btn.textContent = p.typ;
+    if(p._invalid){ btn.style.opacity = '0.55'; btn.style.fontStyle = 'italic'; btn.title = 'Zneplatněný výkres (stará verze)'; }
     btn.onclick = (function(idx){return function(){docGoTo(idx);};})(i);
     tabs.appendChild(btn);
   });
