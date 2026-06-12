@@ -1223,6 +1223,11 @@ document.addEventListener('touchend', function(e){
 </div>
 <div id="measure-crosshair">✛</div>
 <div id="measure-hud">
+  <div class="mh-row" style="margin-bottom:2px;">
+    <button id="mt-vzdalenost" onclick="setMeasureType('vzdalenost')" style="background:#22d3ee;color:#0f3460;padding:9px 12px;font-size:13px;">📏 Vzdálenost</button>
+    <button id="mt-obvod" onclick="setMeasureType('obvod')" style="background:var(--panel2);color:var(--text);padding:9px 12px;font-size:13px;">⭕ Obvod</button>
+    <button id="mt-plocha" onclick="setMeasureType('plocha')" style="background:var(--panel2);color:var(--text);padding:9px 12px;font-size:13px;">⬛ Plocha</button>
+  </div>
   <div id="measure-readout">Najeď křížkem a přidej první bod</div>
   <div class="mh-row">
     <button onclick="measureAddPoint()" style="background:#22d3ee;color:#0f3460;">➕ Bod</button>
@@ -3349,6 +3354,18 @@ var measureMode = false;
 var measurePts  = [];      // [[lat,lng], …] aktuálně rozměřované
 var measureLayer = null;   // živá editační vrstva (mimo layerGroups)
 var mereniData = {};       // uložená měření z /mereni, keyed by push key
+var measureType = 'vzdalenost';  // 'vzdalenost' (lomená čára) | 'obvod' (uzavřený) | 'plocha'
+
+function setMeasureType(t){
+  measureType = t;
+  ['vzdalenost','obvod','plocha'].forEach(function(k){
+    var b = document.getElementById('mt-'+k); if(!b) return;
+    var on = (k===t);
+    b.style.background = on ? '#22d3ee' : 'var(--panel2)';
+    b.style.color = on ? '#0f3460' : 'var(--text)';
+  });
+  if(measureMode) redrawMeasure();
+}
 
 function fmtLen(m){
   if(m == null || isNaN(m)) return '–';
@@ -3404,6 +3421,7 @@ function toggleMeasureMode(){
   var b = document.getElementById('btn-measure'); if(b) b.classList.add('active');
   var pb = document.getElementById('btn-place'); if(pb) pb.style.display='none';
   window.addEventListener('resize', positionMeasureCrosshair);
+  setMeasureType(measureType);   // zvýrazni aktivní režim
   updateMeasureReadout();
 }
 function stopMeasureMode(){
@@ -3429,10 +3447,17 @@ function redrawMeasure(){
   if(!measureLayer) measureLayer = L.layerGroup().addTo(map);
   measureLayer.clearLayers();
   var pts = measurePts;
-  if(pts.length >= 3)
+  if(measureType === 'plocha' && pts.length >= 3){
+    // výplň + uzavřený obrys
     L.polygon(pts, {color:'#0e7490', weight:1.5, fillColor:'#22d3ee', fillOpacity:0.15, interactive:false}).addTo(measureLayer);
-  if(pts.length >= 2)
+    L.polyline(pts.concat([pts[0]]), {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+  } else if(measureType === 'obvod' && pts.length >= 3){
+    // uzavřená lomená čára (bez výplně)
+    L.polyline(pts.concat([pts[0]]), {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+  } else if(pts.length >= 2){
+    // otevřená lomená čára (vzdálenost = spojnice bodů)
     L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+  }
   pts.forEach(function(p){
     L.circleMarker(p, {radius:5, color:'#0f3460', weight:2, fillColor:'#22d3ee', fillOpacity:1, interactive:false}).addTo(measureLayer);
   });
@@ -3444,11 +3469,14 @@ function updateMeasureReadout(){
   var n = measurePts.length;
   if(n === 0){ el.textContent = 'Najeď křížkem a přidej první bod'; return; }
   if(n === 1){ el.textContent = 'Bod 1 — přidej další (➕ Bod)'; return; }
-  if(n >= 3){
+  if(measureType === 'plocha'){
+    if(n < 3){ el.innerHTML = 'Plocha potřebuje ≥3 body · bodů '+n; return; }
     el.innerHTML = '<span class="mr-area">Plocha: '+fmtArea(polygonAreaM2(measurePts))+'</span><br>'+
                    'Obvod: '+fmtLen(pathLenM(measurePts,true))+' · bodů '+n;
+  } else if(measureType === 'obvod'){
+    el.innerHTML = 'Obvod: '+fmtLen(pathLenM(measurePts, n>=3))+' · bodů '+n;
   } else {
-    el.innerHTML = 'Délka: '+fmtLen(pathLenM(measurePts,false))+' · bodů '+n;
+    el.innerHTML = 'Vzdálenost: '+fmtLen(pathLenM(measurePts,false))+' · bodů '+n;
   }
 }
 
@@ -3456,11 +3484,13 @@ function updateMeasureReadout(){
 function measureSave(){
   if(!measureMode) return;
   if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
+  if(measureType === 'plocha' && measurePts.length < 3){ showToast('Plocha potřebuje aspoň 3 body', 2500); return; }
   if(!window.currentUser){ showToast('Pro uložení se přihlas (úkolníček → přihlášení)', 3500); return; }
-  var typ = measurePts.length >= 3 ? 'plocha' : 'delka';
-  var info = (typ === 'plocha')
-    ? ('Plocha: '+fmtArea(polygonAreaM2(measurePts))+' · obvod '+fmtLen(pathLenM(measurePts,true)))
-    : ('Délka: '+fmtLen(pathLenM(measurePts,false)));
+  var typ = measureType;
+  var info;
+  if(typ === 'plocha') info = 'Plocha: '+fmtArea(polygonAreaM2(measurePts))+' · obvod '+fmtLen(pathLenM(measurePts,true));
+  else if(typ === 'obvod') info = 'Obvod: '+fmtLen(pathLenM(measurePts, measurePts.length>=3));
+  else info = 'Vzdálenost: '+fmtLen(pathLenM(measurePts,false));
   document.getElementById('measure-save-info').textContent = info + ' · bodů '+measurePts.length;
   document.getElementById('measure-save-name').value = '';
   document.getElementById('measure-save-desc').value = '';
@@ -3475,11 +3505,15 @@ function confirmMeasureSave(){
   if(!name){ status.textContent = '⚠️ Vyplň název'; return; }
   if(!window.currentUser){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
   if(measurePts.length < 2){ status.textContent = '⚠️ Málo bodů'; return; }
-  var typ = measurePts.length >= 3 ? 'plocha' : 'delka';
+  if(measureType === 'plocha' && measurePts.length < 3){ status.textContent = '⚠️ Plocha potřebuje ≥3 body'; return; }
+  var typ = measureType;
+  var delkaM = (typ === 'plocha') ? pathLenM(measurePts,true)
+             : (typ === 'obvod')  ? pathLenM(measurePts, measurePts.length>=3)
+             : pathLenM(measurePts,false);
   var rec = {
     nazev: name, popis: desc, typ: typ,
     body: measurePts.map(function(p){ return [p[0], p[1]]; }),
-    delkaM:  (typ === 'plocha') ? pathLenM(measurePts,true) : pathLenM(measurePts,false),
+    delkaM:  delkaM,
     plochaM2:(typ === 'plocha') ? polygonAreaM2(measurePts) : 0,
     ownerUid: window.currentUser.uid,
     author: window.currentUser.name || '',
@@ -3510,9 +3544,10 @@ function loadMereni(){
   } catch(e){ console.warn('loadMereni výjimka:', e); }
 }
 function mereniPopupHtml(key, r){
-  var meta = (r.typ === 'plocha')
-    ? ('Plocha: '+fmtArea(r.plochaM2||0)+'<br>Obvod: '+fmtLen(r.delkaM||0))
-    : ('Délka: '+fmtLen(r.delkaM||0));
+  var meta;
+  if(r.typ === 'plocha') meta = 'Plocha: '+fmtArea(r.plochaM2||0)+'<br>Obvod: '+fmtLen(r.delkaM||0);
+  else if(r.typ === 'obvod') meta = 'Obvod: '+fmtLen(r.delkaM||0);
+  else meta = 'Vzdálenost: '+fmtLen(r.delkaM||0);   // 'vzdalenost' i legacy 'delka'
   var html = '<div style="min-width:170px;">'+
     '<b>'+escapeHtml(r.nazev||'Měření')+'</b><br>'+
     (r.popis ? ('<span style="color:#888;">'+escapeHtml(r.popis)+'</span><br>') : '')+
@@ -3528,8 +3563,10 @@ function renderSavedMereni(key, r){
   var shape;
   if(r.typ === 'plocha'){
     shape = L.polygon(pts, {color:'#0e7490', weight:2, fillColor:'#22d3ee', fillOpacity:0.18});
+  } else if(r.typ === 'obvod'){
+    shape = L.polygon(pts, {color:'#22d3ee', weight:4, opacity:0.9, fill:false});  // uzavřený obrys bez výplně
   } else {
-    shape = L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.9});
+    shape = L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.9});             // otevřená lomená čára
   }
   shape.bindPopup(mereniPopupHtml(key, r));
   shape.addTo(layerGroups.mereni);
