@@ -1291,6 +1291,7 @@ document.addEventListener('touchend', function(e){
     <button id="btn-pdf-zoom-in"  onclick="pdfZoom(+1)" title="Zvětšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">+</button>
     <button onclick="if(currentPdfSrc)window.open(currentPdfSrc,'_blank')" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
     <button id="btn-add-vykres" onclick="openVykresUpload(window._docPanelKm)" title="Přidat výkres na tomto staničení" style="background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;padding:0 8px;flex-shrink:0;min-width:44px;min-height:44px;">➕</button>
+    <button id="btn-pdf-invalidate" onclick="toggleInvalidateCurrentDoc()" title="Zneplatnit tento výkres" style="background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer;padding:4px 6px;flex-shrink:0;min-width:44px;min-height:44px;">🗄️</button>
     <button id="btn-pdf-fs" onclick="togglePdfFs()">⛶</button>
     <button id="btn-pdf-close" onclick="closePdf()">✕</button>
   </div>
@@ -2064,6 +2065,18 @@ function loadVykresy() {
     }, function(err){ console.warn('loadVykresy:', err && err.message); });
   } catch(e){ console.warn('loadVykresy výjimka:', e); }
 }
+// Zneplatněné STATICKÉ výkresy (z DOCS_* / GitHub) – DB seznam podle cesty souboru.
+// (Uživatelské nahrané výkresy řeší příznak `neplatny` přímo na záznamu /vykresy.)
+var invalidStaticSoubory = {};   // soubor → { key }
+function loadVykresRevize(){
+  try {
+    db.ref('vykres_revize').on('value', function(snap){
+      var v = snap.val() || {}, m = {};
+      Object.keys(v).forEach(function(k){ var r=v[k]; if(r && r.soubor) m[r.soubor] = { key:k }; });
+      invalidStaticSoubory = m;
+    }, function(err){ console.warn('loadVykresRevize:', err && err.message); });
+  } catch(e){ console.warn('loadVykresRevize výjimka:', e); }
+}
 // Najdi nahrané výkresy spadající do daného km (seřazené dle blízkosti středu).
 // Výchozí: jen PLATNÉ. includeInvalid=true → i zneplatněné (pro správu / ⛔ záložky).
 function findVykresyForKm(realKm, includeInvalid) {
@@ -2337,10 +2350,28 @@ function submitVykresUpload(){
   reader.readAsDataURL(file);
 }
 
+// Rozdělí stránky na platné + neplatné (neplatné = uživatelský výkres s neplatny, NEBO
+// statický výkres, jehož cesta je v /vykres_revize). Neplatné přesune na konec a označí ⛔.
+function finalizeDocPages(pages){
+  var valid=[], invalid=[];
+  pages.forEach(function(p){
+    var inv = p._invalid || !!(p.soubor && invalidStaticSoubory[p.soubor]);
+    if(inv){
+      p._invalid = true;
+      if(String(p.typ||'').indexOf('⛔')!==0) p.typ = '⛔ ' + (p.typ||'Výkres');
+      invalid.push(p);
+    } else valid.push(p);
+  });
+  return valid.concat(invalid);
+}
 function onStaniceniClick(realKm) {
   showToast('km '+fmtKm(realKm),1500);
   var sPos = realKmToLatLng(realKm);
   if(sPos) showSelectionRing(L.latLng(sPos[0], sPos[1]));
+  openStaniceniPanel(realKm);
+}
+// Sestaví a otevře panel výkresů pro staničení (bez toastu/prstence — pro (pře)kreslení)
+function openStaniceniPanel(realKm) {
   var pages = [];
   // Situace – VŠECHNY pasující SO listy (101, 102, 103, 104, 105, 106, 107)
   findDocsForKm(DOCS_SITUACE, realKm).forEach(function(d, i) {
@@ -2376,15 +2407,50 @@ function onStaniceniClick(realKm) {
       pages.push({soubor:d.soubor, nazev:d.nazev, typ:'📋 Tech. zpráva'});
     });
   }
-  // Výkresy nahrané z aplikace – PLATNÉ jako normální záložky
-  findVykresyForKm(realKm).forEach(function(d, i) {
-    pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres')+(i?' '+(i+1):'')});
+  // Výkresy nahrané z aplikace (i zneplatněné) – neplatnost vyřeší finalizeDocPages
+  findVykresyForKm(realKm, true).forEach(function(d) {
+    pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres'), _invalid: !!d.neplatny});
   });
-  // ZNEPLATNĚNÉ výkresy – na konec jako šedé ⛔ záložky (přehledný odkaz na staré verze)
-  findVykresyForKm(realKm, true).filter(function(d){ return d.neplatny; }).forEach(function(d) {
-    pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres')+' — ZNEPLATNĚNO', typ:'⛔ '+(d.nazev||'Výkres'), _invalid:true});
-  });
-  openDocPanel(pages, realKm, 0);
+  openDocPanel(finalizeDocPages(pages), realKm, 0);
+}
+// Překresli otevřený panel staničení (po změně platnosti)
+function rebuildDocPanel(){
+  var panel = document.getElementById('pdf-panel');
+  if(window._docPanelKm != null && panel && panel.classList.contains('open')) openStaniceniPanel(window._docPanelKm);
+}
+// Tlačítko 🗄️/♻️ v panelu – zneplatní/obnoví PRÁVĚ ZOBRAZENÝ výkres (statický i nahraný)
+function toggleInvalidateCurrentDoc(){
+  if(!window.currentUser){ showToast('Pro zneplatnění se přihlas (úkolníček → přihlášení)', 3500); return; }
+  if(!docPages || !docPages.length) return;
+  var p = docPages[docPageIdx]; if(!p || !p.soubor) return;
+  // 1) Uživatelský nahraný výkres → řídí se příznakem `neplatny`
+  var uv = vykresyData.filter(function(d){ return d.soubor === p.soubor; })[0];
+  if(uv){
+    if(!canDelete(uv.uid)){ showToast('Zneplatnit může jen autor nebo koordinátor', 2500); return; }
+    var toInvalidU = !uv.neplatny;
+    if(!confirm(toInvalidU ? ('Zneplatnit výkres „'+(uv.nazev||'')+'"?') : ('Obnovit výkres „'+(uv.nazev||'')+'" jako platný?'))) return;
+    uv.neplatny = toInvalidU;  // optimisticky pro okamžité překreslení
+    db.ref('vykresy/'+uv._key).update(toInvalidU
+      ? { neplatny:true, zneplatnilUid:window.currentUser.uid, zneplatnenoTs:Date.now() }
+      : { neplatny:false, nahrazenoKym:null });
+    showToast(toInvalidU ? 'Výkres zneplatněn' : 'Výkres obnoven', 1800);
+    rebuildDocPanel();
+    return;
+  }
+  // 2) Statický výkres (DOCS_*) → DB seznam /vykres_revize podle cesty souboru
+  var rec = invalidStaticSoubory[p.soubor];
+  if(rec){
+    if(!confirm('Obnovit výkres „'+(p.nazev||'')+'" jako platný?')) return;
+    delete invalidStaticSoubory[p.soubor];   // optimisticky
+    db.ref('vykres_revize/'+rec.key).remove();
+    showToast('Výkres obnoven jako platný', 1800);
+  } else {
+    if(!confirm('Zneplatnit výkres „'+(p.nazev||'')+'"?\nPřesune se mezi ⛔ neplatné (stará verze zůstane dohledatelná).')) return;
+    var ref = db.ref('vykres_revize').push({ soubor:p.soubor, nazev:(p.nazev||''), uid:window.currentUser.uid, ts:Date.now() });
+    invalidStaticSoubory[p.soubor] = { key: ref.key };   // optimisticky
+    showToast('Výkres zneplatněn', 1800);
+  }
+  rebuildDocPanel();
 }
 
 function openDocPanel(pages, realKm, startIdx) {
@@ -2466,16 +2532,24 @@ function renderDocPage(realKm) {
     b.classList.toggle('active', i===docPageIdx);
   });
 
+  var invBtn = document.getElementById('btn-pdf-invalidate');
+
   if(docPages.length===0){
     if(frameWrap) frameWrap.style.display='none';
     if(openWrap)  openWrap.style.display='none';
     nosit.style.display='flex';
     title.textContent='Výkresy — km '+(realKm?fmtKm(realKm):'');
     ctr.textContent=''; btnP.disabled=true; btnN.disabled=true;
+    if(invBtn) invBtn.style.display='none';
     return;
   }
 
   var p = docPages[docPageIdx];
+  if(invBtn){
+    invBtn.style.display = 'inline-flex';
+    if(p && p._invalid){ invBtn.textContent='♻️'; invBtn.title='Obnovit výkres jako platný'; }
+    else { invBtn.textContent='🗄️'; invBtn.title='Zneplatnit tento výkres'; }
+  }
   title.textContent = p.nazev || p.typ || '';
   ctr.textContent   = (docPageIdx+1)+' / '+docPages.length;
   btnP.disabled = docPageIdx===0;
@@ -2762,6 +2836,7 @@ function init() {
   startGPS();
   loadNotes();
   loadVykresy();
+  loadVykresRevize();
   loadMereni();
   loadDroneOverlays();
   initLongPress();
