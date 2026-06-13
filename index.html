@@ -1127,6 +1127,7 @@ document.addEventListener('touchend', function(e){
       <span style="font-size:11px;color:var(--text2);white-space:nowrap;">Průhlednost vrstvy</span>
       <input id="drone-layer-opacity" type="range" min="10" max="100" value="70" oninput="setDroneLayerOpacity(this.value)" style="flex:1;">
     </div>
+    <button onclick="openDroneEvidence()" style="margin-top:7px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;cursor:pointer;width:100%;">🗂️ Evidence / smazat dron snímky</button>
   </div>
   <h3>📍 Vrstvy</h3>
   <div class="layer-row">
@@ -1284,6 +1285,45 @@ document.addEventListener('touchend', function(e){
   </div>
   <div id="drone-edit-status" style="font-size:11px;color:var(--text2);text-align:center;min-height:14px;"></div>
   <div style="font-size:10px;color:#f5a623;text-align:center;line-height:1.3;">⚠️ Orientační podklad — ruční zarovnání jednoho snímku, NE ortofoto. Pro hrubý odhad výměr a lokalizaci, ne pro fakturaci ani geodetické zaměření.</div>
+</div>
+
+<!-- Vložení fotek z knihovny do galerie -->
+<input type="file" id="standalone-library-input" accept="image/*" multiple style="display:none">
+<div id="lib-import-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3300;align-items:center;justify-content:center;padding:12px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent2);">📥 Vložit fotky z knihovny</div>
+      <button onclick="closeLibraryImport()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel2);">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Společně pro všechny (z EXIF předvyplním, kde to jde):</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+        <label style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text2);">Datum
+          <input id="lib-bulk-date" type="date" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+        </label>
+        <label style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text2);">Staničení (km)
+          <input id="lib-bulk-km" type="text" inputmode="decimal" placeholder="např. 2,350" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+        </label>
+        <button onclick="libApplyBulk()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:42px;">Použít u všech</button>
+      </div>
+    </div>
+    <div id="lib-import-list" style="padding:10px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:1;"></div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);">
+      <div id="lib-import-status" style="font-size:12px;color:var(--text2);min-height:16px;margin-bottom:6px;"></div>
+      <button id="lib-import-submit" onclick="submitLibImport()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;width:100%;min-height:48px;">Nahrát do galerie</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: evidence / mazání dron snímků -->
+<div id="drone-evidence-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:15px;font-weight:700;color:#f5a623;">🗂️ Evidence dron snímků</div>
+      <button onclick="closeDroneEvidence()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="drone-evidence-list" style="padding:12px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
 </div>
 
 <div id="pdf-panel" style="touch-action:pan-x pan-y pinch-zoom;">
@@ -3978,6 +4018,8 @@ function loadDroneOverlays(){
       if(droneActiveDate && droneDates().indexOf(droneActiveDate) === -1) droneActiveDate = null;
       rebuildDroneDateButtons();
       renderActiveDroneDate();
+      var em = document.getElementById('drone-evidence-modal');
+      if(em && em.style.display === 'flex') renderDroneEvidence();
     }, function(err){ console.warn('loadDroneOverlays:', err && err.message); });
   } catch(e){ console.warn('loadDroneOverlays výjimka:', e); }
 }
@@ -3989,6 +4031,56 @@ function deleteDroneOverlay(key){
   db.ref('drone_overlays/'+key).remove().then(function(){
     showToast('Dron odebrán', 1500);
   }).catch(function(e){ showToast('Chyba mazání: '+(e && e.message||''), 3000); });
+}
+// ── Evidence / mazání dron snímků ──
+function openDroneEvidence(){
+  document.getElementById('drone-evidence-modal').style.display = 'flex';
+  renderDroneEvidence();
+}
+function closeDroneEvidence(){ document.getElementById('drone-evidence-modal').style.display = 'none'; }
+function renderDroneEvidence(){
+  var box = document.getElementById('drone-evidence-list'); if(!box) return;
+  var keys = Object.keys(droneOverlaysData);
+  if(!keys.length){ box.innerHTML = '<div style="font-size:13px;color:var(--text2);opacity:.7;">Zatím žádné dron snímky.</div>'; return; }
+  // seřaď podle data (vzestupně), pak ts
+  keys.sort(function(a,b){
+    var ra=droneOverlaysData[a], rb=droneOverlaysData[b];
+    var da=(ra.datum||''), db_=(rb.datum||'');
+    if(da!==db_) return da<db_?-1:1;
+    return (ra.ts||0)-(rb.ts||0);
+  });
+  box.innerHTML = '';
+  var lastDatum = null;
+  keys.forEach(function(k){
+    var r = droneOverlaysData[k];
+    if(r.datum !== lastDatum){
+      lastDatum = r.datum;
+      var h = document.createElement('div');
+      h.style.cssText = 'font-size:12px;font-weight:700;color:#f5a623;margin-top:4px;';
+      h.textContent = '🛰️ ' + droneFmtDatum(r.datum||'(bez data)');
+      box.appendChild(h);
+    }
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;background:var(--panel2);border-radius:8px;padding:8px 10px;';
+    var img = document.createElement('img');
+    img.src = r.url; img.loading = 'lazy';
+    img.style.cssText = 'width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer;';
+    img.onclick = (function(d){ return function(){ if(d) selectDroneDate(d); closeDroneEvidence(); toggleLayers(); }; })(r.datum);
+    row.appendChild(img);
+    var info = document.createElement('div');
+    info.style.cssText = 'flex:1;font-size:12px;color:var(--text);overflow:hidden;';
+    info.innerHTML = '<div style="font-weight:600;">'+escapeHtml(droneFmtDatum(r.datum||''))+'</div>'+
+      '<div style="font-size:11px;color:var(--text2);">'+escapeHtml(r.author||'')+'</div>';
+    row.appendChild(info);
+    if(canDelete(r.ownerUid)){
+      var del = document.createElement('button');
+      del.textContent = '🗑'; del.title = 'Smazat snímek';
+      del.style.cssText = 'background:none;border:none;color:#e57373;font-size:18px;cursor:pointer;min-width:40px;min-height:40px;';
+      del.onclick = (function(key){ return function(){ deleteDroneOverlay(key); }; })(k);
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+  });
 }
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
@@ -6104,6 +6196,164 @@ window.addEventListener('load', function() {
     reader.readAsDataURL(file);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// VLOŽENÍ FOTEK Z KNIHOVNY do galerie (ruční/EXIF datum + staničení, hromadně)
+// ══════════════════════════════════════════════════════════════════
+var libImportItems = [];   // [{dataUrl, date:'YYYY-MM-DD', km:'2+350', lat, lng, name}]
+
+function libParseKm(s){   // "2,350" / "2.350" / "2+350" / "2350" → realKm number
+  if(s==null) return null;
+  s = String(s).trim().replace(',', '.'); if(!s) return null;
+  var m = s.match(/^(\d+)\+(\d+)$/);
+  if(m) return parseInt(m[1],10)+parseInt(m[2],10)/Math.pow(10,m[2].length);
+  var f = parseFloat(s); if(isNaN(f)) return null;
+  return f > 100 ? f/1000 : f;
+}
+function libKmFromLatLng(lat,lng){
+  try { return fmtKm(gpxCumToRealKm(nearestOnRoute(lat,lng).cum)); } catch(e){ return ''; }
+}
+function libExifDate(dataUrl){   // EXIF datum pořízení → 'YYYY-MM-DD' nebo ''
+  try {
+    if(typeof piexif==='undefined' || dataUrl.indexOf('data:image/jpeg')!==0) return '';
+    var ex = piexif.load(dataUrl);
+    var dt = (ex.Exif && ex.Exif[piexif.ExifIFD.DateTimeOriginal]) || (ex['0th'] && ex['0th'][piexif.ImageIFD.DateTime]) || '';
+    var m = String(dt).match(/^(\d{4}):(\d{2}):(\d{2})/);
+    return m ? (m[1]+'-'+m[2]+'-'+m[3]) : '';
+  } catch(e){ return ''; }
+}
+function libTodayYmd(){ return new Date().toISOString().slice(0,10); }
+function libSoForKm(realKm){
+  try { var hit=findDocsForKm(DOCS_SITUACE, realKm)[0]; if(hit){ var m=String(hit.soubor).match(/(SO_[0-9]+)\//); if(m) return m[1]; } } catch(e){}
+  return '';
+}
+function openLibraryImport(){
+  if(!window.currentUser){ showToast('Pro vložení fotek se přihlas (úkolníček → přihlášení)', 3500); return; }
+  var inp = document.getElementById('standalone-library-input');
+  inp.value = ''; inp.click();
+}
+window.addEventListener('load', function(){
+  var inp = document.getElementById('standalone-library-input'); if(!inp) return;
+  inp.addEventListener('change', function(e){
+    var files = Array.prototype.slice.call(e.target.files||[]); if(!files.length) return;
+    libImportItems = []; var pending = files.length;
+    files.forEach(function(file, idx){
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        var dataUrl = String(ev.target.result);
+        var gps = exifGpsFromDataUrl(dataUrl);
+        var km='', lat=null, lng=null;
+        if(gps && !isNaN(gps.lat)){ lat=gps.lat; lng=gps.lng; km=libKmFromLatLng(gps.lat,gps.lng); }
+        libImportItems[idx] = { dataUrl:dataUrl, date:(libExifDate(dataUrl)||libTodayYmd()), km:km, lat:lat, lng:lng, name:file.name };
+        if(--pending===0){ libImportItems = libImportItems.filter(Boolean); showLibImportModal(); }
+      };
+      reader.onerror = function(){ if(--pending===0){ libImportItems = libImportItems.filter(Boolean); showLibImportModal(); } };
+      reader.readAsDataURL(file);
+    });
+  });
+});
+function showLibImportModal(){
+  if(!libImportItems.length){ showToast('Nevybral jsi žádnou fotku', 2500); return; }
+  document.getElementById('lib-bulk-date').value = libTodayYmd();
+  document.getElementById('lib-bulk-km').value = '';
+  document.getElementById('lib-import-status').textContent = '';
+  var btn = document.getElementById('lib-import-submit'); btn.disabled=false; btn.style.opacity='1';
+  btn.textContent = 'Nahrát '+libImportItems.length+' do galerie';
+  renderLibImportList();
+  document.getElementById('lib-import-modal').style.display = 'flex';
+}
+function closeLibraryImport(){ document.getElementById('lib-import-modal').style.display = 'none'; libImportItems = []; }
+function libApplyBulk(){
+  var d = document.getElementById('lib-bulk-date').value;
+  var kmRaw = document.getElementById('lib-bulk-km').value.trim();
+  var rk = kmRaw ? libParseKm(kmRaw) : null;
+  libImportItems.forEach(function(it){
+    if(d) it.date = d;
+    if(rk!=null){ it.km = fmtKm(rk); if(it.lat==null){ var ll=realKmToLatLng(rk); if(ll){ it.lat=ll[0]; it.lng=ll[1]; } } }
+  });
+  renderLibImportList();
+  showToast('Vyplněno u všech', 1500);
+}
+function renderLibImportList(){
+  var box = document.getElementById('lib-import-list'); if(!box) return;
+  box.innerHTML = '';
+  libImportItems.forEach(function(it, i){
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;align-items:center;background:var(--panel2);border-radius:8px;padding:8px;';
+    var img = document.createElement('img'); img.src = it.dataUrl;
+    img.style.cssText = 'width:54px;height:54px;object-fit:cover;border-radius:6px;flex-shrink:0;';
+    row.appendChild(img);
+    var fields = document.createElement('div'); fields.style.cssText = 'flex:1;display:flex;gap:6px;flex-wrap:wrap;';
+    var dInp = document.createElement('input'); dInp.type='date'; dInp.value=it.date||'';
+    dInp.style.cssText = 'flex:1;min-width:115px;padding:7px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);';
+    dInp.onchange = (function(idx){ return function(e){ libImportItems[idx].date = e.target.value; }; })(i);
+    var kInp = document.createElement('input'); kInp.type='text'; kInp.placeholder='km (2,350)'; kInp.value=it.km||'';
+    kInp.style.cssText = 'flex:1;min-width:95px;padding:7px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);';
+    kInp.onchange = (function(idx){ return function(e){
+      var rk = libParseKm(e.target.value);
+      libImportItems[idx].km = (rk!=null) ? fmtKm(rk) : '';
+      if(rk!=null){ var ll=realKmToLatLng(rk); if(ll){ libImportItems[idx].lat=ll[0]; libImportItems[idx].lng=ll[1]; } }
+      e.target.value = libImportItems[idx].km;
+    }; })(i);
+    fields.appendChild(dInp); fields.appendChild(kInp); row.appendChild(fields);
+    var rm = document.createElement('button'); rm.textContent='✕'; rm.title='Odebrat z výběru';
+    rm.style.cssText = 'background:none;border:none;color:#e57373;font-size:16px;cursor:pointer;min-width:34px;min-height:34px;';
+    rm.onclick = (function(idx){ return function(){ libImportItems.splice(idx,1); if(!libImportItems.length){ closeLibraryImport(); return; } renderLibImportList(); var b=document.getElementById('lib-import-submit'); b.textContent='Nahrát '+libImportItems.length+' do galerie'; }; })(i);
+    row.appendChild(rm);
+    box.appendChild(row);
+  });
+}
+function submitLibImport(){
+  if(!window.currentUser){ showToast('Nejsi přihlášen', 3000); return; }
+  if(!libImportItems.length) return;
+  for(var i=0;i<libImportItems.length;i++){ if(!libImportItems[i].date){ document.getElementById('lib-import-status').textContent='⚠️ Fotka '+(i+1)+' nemá datum'; return; } }
+  var btn = document.getElementById('lib-import-submit'); btn.disabled=true; btn.style.opacity='0.6';
+  var author = (window.currentUser && window.currentUser.name) || localStorage.getItem('noteAuthor') || '';
+  var baseT = Date.now(), done=0, fail=0;
+  function processOne(idx){
+    if(idx >= libImportItems.length){
+      btn.disabled=false; btn.style.opacity='1';
+      showToast('✅ Vloženo '+done+' fotek'+(fail?(' ('+fail+' selhalo)'):''), 3200);
+      closeLibraryImport();
+      if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+      return;
+    }
+    var it = libImportItems[idx];
+    document.getElementById('lib-import-status').textContent = '⏳ Nahrávám '+(idx+1)+'/'+libImportItems.length+'…';
+    var t = baseT + idx;
+    var dObj = new Date(it.date+'T12:00:00'); if(isNaN(dObj.getTime())) dObj = new Date();
+    var kmDisp = it.km||'';
+    var realKm = libParseKm(it.km);
+    compressImage(it.dataUrl, function(compressed){
+      burnInMetadataWithDate(compressed, kmDisp||'-', author, dObj, function(stamped){
+        var fnOrig='standalone/foto_'+t+'_o.jpg', fnStamp='standalone/foto_'+t+'_s.jpg';
+        uploadPhotoToGitHubP(stamped, fnStamp).then(function(urlS){
+          setTimeout(function(){
+            uploadPhotoToGitHubP(compressed, fnOrig).then(function(urlO){
+              if(!urlS && !urlO){ fail++; processOne(idx+1); return; }
+              var visible = urlS || urlO;
+              var entry = {
+                url: visible, stamped: !!urlS,
+                so: (realKm!=null ? libSoForKm(realKm) : ''),
+                km: kmDisp, author: author,
+                uid: window.currentUser.uid,
+                time: dObj.toLocaleString('cs-CZ'),
+                date: dObj.toLocaleDateString('cs-CZ'),
+                ts: dObj.getTime() + idx
+              };
+              if(urlO) entry.urlOriginal = urlO;
+              if(urlS) entry.urlStamped  = urlS;
+              if(it.lat!=null){ entry.lat = it.lat; entry.lng = it.lng; }
+              db.ref('standalone_photos/'+t).set(entry).then(function(){ done++; processOne(idx+1); })
+                .catch(function(){ fail++; processOne(idx+1); });
+            });
+          }, 500);
+        });
+      });
+    });
+  }
+  processOne(0);
+}
 
 function openGallery() {
   document.getElementById('gallery-modal').classList.add('open');
@@ -9883,6 +10133,7 @@ function copyDiaryExport(){
 <div id="gallery-modal">
   <div id="gallery-header">
     <h3>Fotogalerie <span id="gallery-count" style="color:var(--text2);font-size:11px;font-weight:400;margin-left:6px;"></span></h3>
+    <button id="gallery-import-btn" onclick="openLibraryImport()" title="Vložit fotky z knihovny (s ručním datem a staničením)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-right:6px;">📥 Z knihovny</button>
     <button id="gallery-group-btn" onclick="toggleGalleryGrouped()" title="Zobrazit po stavebních objektech" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">📁 Po objektech</button>
     <button id="gallery-select-btn" onclick="toggleGallerySelectMode()" title="Hromadný výběr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">☑️ Vybrat</button>
     <button onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
