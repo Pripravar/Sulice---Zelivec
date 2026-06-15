@@ -1144,7 +1144,6 @@ document.addEventListener('touchend', function(e){
       <span style="font-size:11px;color:var(--text2);white-space:nowrap;">Průhlednost výplní</span>
       <input id="plochy-opacity" type="range" min="10" max="100" value="55" oninput="setPlochyOpacity(this.value)" style="flex:1;">
     </div>
-    <button onclick="openSituaceCalib()" style="margin-top:7px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;cursor:pointer;width:100%;">🎯 Kalibrovat listy situace</button>
   </div>
   <h3>📍 Vrstvy</h3>
   <div class="layer-row">
@@ -1340,32 +1339,6 @@ document.addEventListener('touchend', function(e){
       <button onclick="closeDroneEvidence()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
     <div id="drone-evidence-list" style="padding:12px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
-  </div>
-</div>
-
-<!-- MODAL: výběr listu situace ke kalibraci -->
-<div id="situace-calib-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
-  <div style="background:var(--panel);border-radius:14px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">
-    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
-      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent2);">🎯 Kalibrace listů situace</div>
-      <button onclick="closeSituaceCalib()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
-    </div>
-    <div style="padding:10px 16px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">Vyber list a přetáhni 2 body (🟢 začátek / 🔴 konec silnice) na správné místo na letecké. Pak ulož.</div>
-    <div id="situace-calib-list" style="padding:12px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;"></div>
-  </div>
-</div>
-
-<!-- Lišta při kalibraci jednoho listu -->
-<div id="situace-calib-bar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:1650;background:var(--panel);border:1px solid var(--accent2);border-radius:12px;padding:10px 12px;flex-direction:column;gap:8px;max-width:94vw;box-shadow:0 4px 16px rgba(0,0,0,.5);">
-  <div id="situace-calib-info" style="font-size:12px;color:var(--text);text-align:center;"><b style="color:#f5a623;">🟠 střed</b> = posun · <b style="color:#27ae60;">🟢A</b>/<b style="color:#c0392b;">🔴B</b> = konce silnice · ➖➕ = velikost</div>
-  <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
-    <span style="font-size:12px;color:var(--text2);">Velikost</span>
-    <button onclick="scaleSituaceCalib(0.8)" title="Zmenšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➖</button>
-    <button onclick="scaleSituaceCalib(1.25)" title="Zvětšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➕</button>
-  </div>
-  <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
-    <button onclick="saveSituaceCalib()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">💾 Uložit</button>
-    <button onclick="exitSituaceCalibMode()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">✕ Konec</button>
   </div>
 </div>
 
@@ -2927,9 +2900,8 @@ function init() {
   loadVykresRevize();
   loadMereni();
   loadDroneOverlays();
-  loadSituaceCalib();
-  // Situační vrstvy ukázat jen když existují data (overlay/situace_index.json) – jinak skryté
-  fetch('overlay/situace_index.json'+SIT_V).then(function(r){ if(r.ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } }).catch(function(){});
+  // Situační vrstvy ukázat jen když existují data (overlay/situace_lines.json) – jinak skryté
+  fetch('overlay/situace_lines.json'+SIT_V, {method:'HEAD'}).then(function(r){ if(r.ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } }).catch(function(){});
   initLongPress();
   // Zastavit touch eventy z panelů aby nešly do Leaflet mapy
   ['pdf-panel','prop-panel'].forEach(function(id) {
@@ -4130,47 +4102,12 @@ function renderDroneEvidence(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// KOORDINAČNÍ SITUACE (DWG) – 2 vektorové vrstvy (čáry + výplně)
-// Listy nejsou v souřadnicích → kalibrace 2 body (konce silnice) na list.
-// Transform = similarity (posun+otočení+měřítko). Sdíleno přes /situace_calib.
+// KOORDINAČNÍ SITUACE (DWG, S-JTSK) – 2 vektorové vrstvy (čáry + výplně)
+// Zdroj: georeferencovaný model od projektanta, EPSG:5514→WGS84 (pyproj).
+// overlay/situace_lines.json = [[[lat,lng]…]…]; situace_plochy.json = {hex:[ring…]}.
 // ══════════════════════════════════════════════════════════════════
-var SIT_V = '?v=20260615';
-var situaceIndex = [];     // [{num,file,bbox}]
-var situaceSheets = {};    // num → {bbox,lines,fills} (lazy)
-var situaceCalib = {};     // num → {a1:[lat,lng], a2:[lat,lng]}
+var SIT_V = '?v=20260615b';
 var situaceLinesLayer = null, situacePlochyLayer = null, _situacePlochyShapes = [];
-
-function loadSituaceIndex(cb){
-  if(situaceIndex.length){ cb && cb(); return; }
-  fetch('overlay/situace_index.json'+SIT_V).then(function(r){return r.json();}).then(function(idx){
-    situaceIndex = idx||[]; cb && cb();
-  }).catch(function(){ showToast('❌ Index situace se nenačetl', 2500); });
-}
-function loadSituaceSheet(num, cb){
-  if(situaceSheets[num]){ cb(situaceSheets[num]); return; }
-  var m = situaceIndex.filter(function(s){return s.num===num;})[0]; if(!m){ cb(null); return; }
-  fetch('overlay/'+m.file+SIT_V).then(function(r){return r.json();}).then(function(d){
-    situaceSheets[num]=d; cb(d);
-  }).catch(function(){ cb(null); });
-}
-function sheetLocalAnchors(bbox){ var ymid=(bbox[1]+bbox[3])/2; return [[bbox[0],ymid],[bbox[2],ymid]]; }
-// similarity: lokální bod p → [lat,lng] dle kalibrace {a1,a2} a kotev listu
-function makeSitTransform(bbox, a1, a2){
-  var anc=sheetLocalAnchors(bbox), aL=anc[0], aR=anc[1];
-  var lat0=a1[0], lng0=a1[1], mlat=111320, mlng=111320*Math.cos(lat0*Math.PI/180);
-  var w=[(a2[1]-lng0)*mlng, (a2[0]-lat0)*mlat];
-  var vloc=[aR[0]-aL[0], aR[1]-aL[1]];
-  var lv=Math.sqrt(vloc[0]*vloc[0]+vloc[1]*vloc[1])||1;
-  var scale=Math.sqrt(w[0]*w[0]+w[1]*w[1])/lv;
-  var rot=Math.atan2(w[1],w[0])-Math.atan2(vloc[1],vloc[0]);
-  var cr=Math.cos(rot), sr=Math.sin(rot);
-  return function(p){
-    var rx=p[0]-aL[0], ry=p[1]-aL[1];
-    var ex=scale*(rx*cr-ry*sr), ey=scale*(rx*sr+ry*cr);
-    return [lat0+ey/mlat, lng0+ex/mlng];
-  };
-}
-function _calibratedNums(){ return situaceIndex.map(function(s){return s.num;}).filter(function(n){return situaceCalib[n];}); }
 function _ensurePlochyPane(){
   if(!map.getPane('plochyPane')){
     var rp=map.getPane('tilePane').parentNode;   // leaflet-rotate: jinak podklad výplně překryje
@@ -4180,158 +4117,35 @@ function _ensurePlochyPane(){
 }
 function setSituaceVisible(on){
   var cb=document.getElementById('lyr-situace'); if(cb) cb.checked=!!on;
-  if(!on){ if(situaceLinesLayer){ map.removeLayer(situaceLinesLayer); situaceLinesLayer=null; } return; }
-  renderSituaceLines();
-}
-function renderSituaceLines(){
-  loadSituaceIndex(function(){
-    var nums=_calibratedNums();
-    if(!nums.length){ showToast('Nejdřív nakalibruj aspoň jeden list (🎯 Kalibrovat)', 3200); var cb=document.getElementById('lyr-situace'); if(cb) cb.checked=false; return; }
-    if(situaceLinesLayer) map.removeLayer(situaceLinesLayer);
-    situaceLinesLayer=L.layerGroup().addTo(map);
+  if(!on){ if(situaceLinesLayer && map.hasLayer(situaceLinesLayer)) map.removeLayer(situaceLinesLayer); return; }
+  if(situaceLinesLayer){ situaceLinesLayer.addTo(map); return; }
+  showToast('⏳ Načítám situaci…', 1500);
+  fetch('overlay/situace_lines.json'+SIT_V).then(function(r){return r.json();}).then(function(lines){
+    situaceLinesLayer=L.layerGroup();
     var lc=L.canvas({padding:0.5});
-    nums.forEach(function(num){
-      loadSituaceSheet(num, function(d){
-        if(!d) return;
-        var T=makeSitTransform(d.bbox, situaceCalib[num].a1, situaceCalib[num].a2);
-        L.polyline(d.lines.map(function(l){return l.map(T);}), {renderer:lc, color:'#1a1a1a', weight:0.7, opacity:1, interactive:false}).addTo(situaceLinesLayer);
-      });
-    });
-  });
+    L.polyline(lines, {renderer:lc, color:'#1a1a1a', weight:0.7, opacity:1, interactive:false}).addTo(situaceLinesLayer);
+    situaceLinesLayer.addTo(map);
+  }).catch(function(){ showToast('❌ Situaci se nepodařilo načíst', 2500); var c=document.getElementById('lyr-situace'); if(c) c.checked=false; });
 }
 function _plochyOp(){ var o=document.getElementById('plochy-opacity'); return o?(+o.value)/100:0.55; }
 function setPlochyVisible(on){
   var cb=document.getElementById('lyr-plochy'); if(cb) cb.checked=!!on;
   var row=document.getElementById('plochy-op-row'); if(row) row.style.display=on?'flex':'none';
-  if(!on){ if(situacePlochyLayer){ map.removeLayer(situacePlochyLayer); situacePlochyLayer=null; } return; }
-  renderSituacePlochy();
-}
-function renderSituacePlochy(){
-  loadSituaceIndex(function(){
-    var nums=_calibratedNums();
-    if(!nums.length){ showToast('Nejdřív nakalibruj aspoň jeden list (🎯 Kalibrovat)', 3200); var cb=document.getElementById('lyr-plochy'); if(cb) cb.checked=false; return; }
-    _ensurePlochyPane();
-    if(situacePlochyLayer) map.removeLayer(situacePlochyLayer);
-    situacePlochyLayer=L.layerGroup().addTo(map); _situacePlochyShapes=[];
+  if(!on){ if(situacePlochyLayer && map.hasLayer(situacePlochyLayer)) map.removeLayer(situacePlochyLayer); return; }
+  if(situacePlochyLayer){ situacePlochyLayer.addTo(map); return; }
+  _ensurePlochyPane();
+  showToast('⏳ Načítám podbarvení…', 1500);
+  fetch('overlay/situace_plochy.json'+SIT_V).then(function(r){return r.json();}).then(function(groups){
+    situacePlochyLayer=L.layerGroup(); _situacePlochyShapes=[];
     var pc=L.canvas({pane:'plochyPane', padding:0.5}); var op=_plochyOp();
-    nums.forEach(function(num){
-      loadSituaceSheet(num, function(d){
-        if(!d) return;
-        var T=makeSitTransform(d.bbox, situaceCalib[num].a1, situaceCalib[num].a2);
-        Object.keys(d.fills).forEach(function(hex){
-          var pg=L.polygon(d.fills[hex].map(function(r){return r.map(T);}), {renderer:pc, pane:'plochyPane', stroke:false, fill:true, fillColor:hex, fillOpacity:op, interactive:false});
-          pg.addTo(situacePlochyLayer); _situacePlochyShapes.push(pg);
-        });
-      });
+    Object.keys(groups).forEach(function(hex){
+      var pg=L.polygon(groups[hex], {renderer:pc, pane:'plochyPane', stroke:false, fill:true, fillColor:hex, fillOpacity:op, interactive:false});
+      _situacePlochyShapes.push(pg); pg.addTo(situacePlochyLayer);
     });
-  });
+    situacePlochyLayer.addTo(map);
+  }).catch(function(){ showToast('❌ Podbarvení se nepodařilo načíst', 2500); var c=document.getElementById('lyr-plochy'); if(c) c.checked=false; });
 }
 function setPlochyOpacity(v){ var op=(+v)/100; _situacePlochyShapes.forEach(function(s){ s.setStyle({fillOpacity:op}); }); }
-
-// ── Kalibrace ──
-function loadSituaceCalib(){
-  try {
-    db.ref('situace_calib').on('value', function(snap){
-      situaceCalib = snap.val() || {};
-      var ls=document.getElementById('lyr-situace'); if(ls&&ls.checked) renderSituaceLines();
-      var lp=document.getElementById('lyr-plochy'); if(lp&&lp.checked) renderSituacePlochy();
-      if(document.getElementById('situace-calib-modal').style.display==='flex') renderSituaceCalibList();
-    }, function(err){ console.warn('loadSituaceCalib:', err&&err.message); });
-  } catch(e){ console.warn('loadSituaceCalib výjimka:', e); }
-}
-function openSituaceCalib(){ loadSituaceIndex(function(){ document.getElementById('situace-calib-modal').style.display='flex'; renderSituaceCalibList(); }); }
-function closeSituaceCalib(){ document.getElementById('situace-calib-modal').style.display='none'; }
-function renderSituaceCalibList(){
-  var box=document.getElementById('situace-calib-list'); if(!box) return;
-  if(!situaceIndex.length){ box.innerHTML='<div style="color:var(--text2);font-size:13px;">Index se nenačetl.</div>'; return; }
-  box.innerHTML='';
-  situaceIndex.forEach(function(s){
-    var done=!!situaceCalib[s.num];
-    var row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;background:var(--panel2);border-radius:8px;padding:9px 11px;';
-    row.innerHTML='<div style="flex:1;font-size:13px;color:var(--text);">List '+escapeHtml(s.num)+' '+(done?'<span style="color:var(--green);">✓</span>':'<span style="color:#f5a623;">—</span>')+'</div>';
-    var b=document.createElement('button');
-    b.textContent=done?'Upravit':'Kalibrovat';
-    b.style.cssText='background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;';
-    b.onclick=(function(num){return function(){ startSituaceCalibMode(num); };})(s.num);
-    row.appendChild(b); box.appendChild(row);
-  });
-}
-var _calibNum=null, _calibA1=null, _calibA2=null, _calibGhost=null, _calibMarkers=[];
-function startSituaceCalibMode(num){
-  if(!window.currentUser){ showToast('Pro kalibraci se přihlas (úkolníček → přihlášení)', 3500); return; }
-  loadSituaceSheet(num, function(d){
-    if(!d){ showToast('List se nenačetl', 2500); return; }
-    _calibNum=num; closeSituaceCalib();
-    if(situaceCalib[num]){ _calibA1=situaceCalib[num].a1.slice(); _calibA2=situaceCalib[num].a2.slice(); }
-    else {
-      var i=situaceIndex.findIndex(function(s){return s.num===num;}); var n=situaceIndex.length||14;
-      var p0=realKmToLatLng((i/n)*4.605)||[map.getCenter().lat, map.getCenter().lng-0.003];
-      var p1=realKmToLatLng(((i+1)/n)*4.605)||[map.getCenter().lat, map.getCenter().lng+0.003];
-      _calibA1=[p0[0],p0[1]]; _calibA2=[p1[0],p1[1]];
-    }
-    try { var b=L.latLngBounds([_calibA1,_calibA2]); var z=Math.min(18,map.getBoundsZoom(b,false,L.point(80,80))); map.setView(b.getCenter(),z,{animate:false}); } catch(e){}
-    _renderCalibGhost(); _makeCalibHandles();
-    document.getElementById('situace-calib-bar').style.display='flex';
-    document.getElementById('situace-calib-info').textContent='List '+num+': přetáhni 🟢 A (začátek) a 🔴 B (konec silnice).';
-  });
-}
-function _renderCalibGhost(){
-  if(_calibGhost) map.removeLayer(_calibGhost);
-  var d=situaceSheets[_calibNum]; if(!d) return;
-  var T=makeSitTransform(d.bbox,_calibA1,_calibA2);
-  _calibGhost=L.layerGroup().addTo(map);
-  var lc=L.canvas({padding:0.5});
-  L.polyline(d.lines.map(function(l){return l.map(T);}), {renderer:lc, color:'#e67e22', weight:0.9, opacity:0.95, interactive:false}).addTo(_calibGhost);
-}
-function _calibIcon(txt,color){ return L.divIcon({className:'',iconSize:[32,32],iconAnchor:[16,16],html:'<div style="width:32px;height:32px;border-radius:50%;background:'+color+';border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;">'+txt+'</div>'}); }
-var _calibMA=null, _calibMB=null, _calibMC=null;
-function _calibCenter(){ return [(_calibA1[0]+_calibA2[0])/2, (_calibA1[1]+_calibA2[1])/2]; }
-function _repositionCalibHandles(){
-  if(_calibMA) _calibMA.setLatLng(_calibA1);
-  if(_calibMB) _calibMB.setLatLng(_calibA2);
-  if(_calibMC) _calibMC.setLatLng(_calibCenter());
-}
-function _makeCalibHandles(){
-  _calibMarkers.forEach(function(m){map.removeLayer(m);}); _calibMarkers=[];
-  _calibMA=L.marker(_calibA1,{draggable:true,icon:_calibIcon('A','#27ae60'),zIndexOffset:1500}).addTo(map);
-  _calibMB=L.marker(_calibA2,{draggable:true,icon:_calibIcon('B','#c0392b'),zIndexOffset:1500}).addTo(map);
-  _calibMC=L.marker(_calibCenter(),{draggable:true,icon:_calibIcon('✥','#f5a623'),zIndexOffset:1499}).addTo(map);
-  _calibMA.on('drag',function(e){ var p=e.target.getLatLng(); _calibA1=[p.lat,p.lng]; if(_calibMC)_calibMC.setLatLng(_calibCenter()); });
-  _calibMA.on('dragend',function(){ _renderCalibGhost(); });
-  _calibMB.on('drag',function(e){ var p=e.target.getLatLng(); _calibA2=[p.lat,p.lng]; if(_calibMC)_calibMC.setLatLng(_calibCenter()); });
-  _calibMB.on('dragend',function(){ _renderCalibGhost(); });
-  var prev=null;
-  _calibMC.on('dragstart',function(e){ prev=e.target.getLatLng(); });
-  _calibMC.on('drag',function(e){
-    var cur=e.target.getLatLng(); var dLat=cur.lat-prev.lat, dLng=cur.lng-prev.lng; prev=cur;
-    _calibA1=[_calibA1[0]+dLat,_calibA1[1]+dLng]; _calibA2=[_calibA2[0]+dLat,_calibA2[1]+dLng];
-    if(_calibMA)_calibMA.setLatLng(_calibA1); if(_calibMB)_calibMB.setLatLng(_calibA2);
-  });
-  _calibMC.on('dragend',function(){ _renderCalibGhost(); });
-  _calibMarkers=[_calibMA,_calibMB,_calibMC];
-}
-// proporční zvětšení/zmenšení výkresu kolem středu (mění rozteč A–B)
-function scaleSituaceCalib(f){
-  if(!_calibNum || !_calibA1) return;
-  var c=_calibCenter();
-  _calibA1=[c[0]+(_calibA1[0]-c[0])*f, c[1]+(_calibA1[1]-c[1])*f];
-  _calibA2=[c[0]+(_calibA2[0]-c[0])*f, c[1]+(_calibA2[1]-c[1])*f];
-  _repositionCalibHandles(); _renderCalibGhost();
-}
-function saveSituaceCalib(){
-  if(!_calibNum||!window.currentUser){ showToast('Nejsi přihlášen', 2500); return; }
-  db.ref('situace_calib/'+_calibNum).set({a1:_calibA1, a2:_calibA2, uid:window.currentUser.uid, ts:Date.now()}).then(function(){
-    showToast('✅ List '+_calibNum+' nakalibrován', 2000); exitSituaceCalibMode();
-  }).catch(function(e){ showToast('Chyba uložení: '+(e&&e.message||''),3000); });
-}
-function exitSituaceCalibMode(){
-  if(_calibGhost){ map.removeLayer(_calibGhost); _calibGhost=null; }
-  _calibMarkers.forEach(function(m){map.removeLayer(m);}); _calibMarkers=[];
-  _calibMA=_calibMB=_calibMC=null;
-  var bar=document.getElementById('situace-calib-bar'); if(bar) bar.style.display='none';
-  _calibNum=null;
-}
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
 // Hodnota v localStorage: '1' = zapnuto, '0' = vypnuto. Default = '1' (zapnuto)
