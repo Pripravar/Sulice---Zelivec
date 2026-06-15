@@ -1356,7 +1356,12 @@ document.addEventListener('touchend', function(e){
 
 <!-- Lišta při kalibraci jednoho listu -->
 <div id="situace-calib-bar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:1650;background:var(--panel);border:1px solid var(--accent2);border-radius:12px;padding:10px 12px;flex-direction:column;gap:8px;max-width:94vw;box-shadow:0 4px 16px rgba(0,0,0,.5);">
-  <div id="situace-calib-info" style="font-size:12px;color:var(--text);text-align:center;">Přetáhni 🟢 na začátek a 🔴 na konec silnice tohoto listu.</div>
+  <div id="situace-calib-info" style="font-size:12px;color:var(--text);text-align:center;"><b style="color:#f5a623;">🟠 střed</b> = posun · <b style="color:#27ae60;">🟢A</b>/<b style="color:#c0392b;">🔴B</b> = konce silnice · ➖➕ = velikost</div>
+  <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+    <span style="font-size:12px;color:var(--text2);">Velikost</span>
+    <button onclick="scaleSituaceCalib(0.8)" title="Zmenšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➖</button>
+    <button onclick="scaleSituaceCalib(1.25)" title="Zvětšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➕</button>
+  </div>
   <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
     <button onclick="saveSituaceCalib()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">💾 Uložit</button>
     <button onclick="exitSituaceCalibMode()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">✕ Konec</button>
@@ -4276,16 +4281,40 @@ function _renderCalibGhost(){
   var lc=L.canvas({padding:0.5});
   L.polyline(d.lines.map(function(l){return l.map(T);}), {renderer:lc, color:'#e67e22', weight:0.9, opacity:0.95, interactive:false}).addTo(_calibGhost);
 }
-function _calibIcon(txt,color){ return L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;">'+txt+'</div>'}); }
+function _calibIcon(txt,color){ return L.divIcon({className:'',iconSize:[32,32],iconAnchor:[16,16],html:'<div style="width:32px;height:32px;border-radius:50%;background:'+color+';border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;">'+txt+'</div>'}); }
+var _calibMA=null, _calibMB=null, _calibMC=null;
+function _calibCenter(){ return [(_calibA1[0]+_calibA2[0])/2, (_calibA1[1]+_calibA2[1])/2]; }
+function _repositionCalibHandles(){
+  if(_calibMA) _calibMA.setLatLng(_calibA1);
+  if(_calibMB) _calibMB.setLatLng(_calibA2);
+  if(_calibMC) _calibMC.setLatLng(_calibCenter());
+}
 function _makeCalibHandles(){
   _calibMarkers.forEach(function(m){map.removeLayer(m);}); _calibMarkers=[];
-  var m1=L.marker(_calibA1,{draggable:true,icon:_calibIcon('A','#27ae60'),zIndexOffset:1500}).addTo(map);
-  var m2=L.marker(_calibA2,{draggable:true,icon:_calibIcon('B','#c0392b'),zIndexOffset:1500}).addTo(map);
-  m1.on('drag',function(e){ var p=e.target.getLatLng(); _calibA1=[p.lat,p.lng]; });
-  m1.on('dragend',function(){ _renderCalibGhost(); });
-  m2.on('drag',function(e){ var p=e.target.getLatLng(); _calibA2=[p.lat,p.lng]; });
-  m2.on('dragend',function(){ _renderCalibGhost(); });
-  _calibMarkers=[m1,m2];
+  _calibMA=L.marker(_calibA1,{draggable:true,icon:_calibIcon('A','#27ae60'),zIndexOffset:1500}).addTo(map);
+  _calibMB=L.marker(_calibA2,{draggable:true,icon:_calibIcon('B','#c0392b'),zIndexOffset:1500}).addTo(map);
+  _calibMC=L.marker(_calibCenter(),{draggable:true,icon:_calibIcon('✥','#f5a623'),zIndexOffset:1499}).addTo(map);
+  _calibMA.on('drag',function(e){ var p=e.target.getLatLng(); _calibA1=[p.lat,p.lng]; if(_calibMC)_calibMC.setLatLng(_calibCenter()); });
+  _calibMA.on('dragend',function(){ _renderCalibGhost(); });
+  _calibMB.on('drag',function(e){ var p=e.target.getLatLng(); _calibA2=[p.lat,p.lng]; if(_calibMC)_calibMC.setLatLng(_calibCenter()); });
+  _calibMB.on('dragend',function(){ _renderCalibGhost(); });
+  var prev=null;
+  _calibMC.on('dragstart',function(e){ prev=e.target.getLatLng(); });
+  _calibMC.on('drag',function(e){
+    var cur=e.target.getLatLng(); var dLat=cur.lat-prev.lat, dLng=cur.lng-prev.lng; prev=cur;
+    _calibA1=[_calibA1[0]+dLat,_calibA1[1]+dLng]; _calibA2=[_calibA2[0]+dLat,_calibA2[1]+dLng];
+    if(_calibMA)_calibMA.setLatLng(_calibA1); if(_calibMB)_calibMB.setLatLng(_calibA2);
+  });
+  _calibMC.on('dragend',function(){ _renderCalibGhost(); });
+  _calibMarkers=[_calibMA,_calibMB,_calibMC];
+}
+// proporční zvětšení/zmenšení výkresu kolem středu (mění rozteč A–B)
+function scaleSituaceCalib(f){
+  if(!_calibNum || !_calibA1) return;
+  var c=_calibCenter();
+  _calibA1=[c[0]+(_calibA1[0]-c[0])*f, c[1]+(_calibA1[1]-c[1])*f];
+  _calibA2=[c[0]+(_calibA2[0]-c[0])*f, c[1]+(_calibA2[1]-c[1])*f];
+  _repositionCalibHandles(); _renderCalibGhost();
 }
 function saveSituaceCalib(){
   if(!_calibNum||!window.currentUser){ showToast('Nejsi přihlášen', 2500); return; }
@@ -4296,6 +4325,7 @@ function saveSituaceCalib(){
 function exitSituaceCalibMode(){
   if(_calibGhost){ map.removeLayer(_calibGhost); _calibGhost=null; }
   _calibMarkers.forEach(function(m){map.removeLayer(m);}); _calibMarkers=[];
+  _calibMA=_calibMB=_calibMC=null;
   var bar=document.getElementById('situace-calib-bar'); if(bar) bar.style.display='none';
   _calibNum=null;
 }
