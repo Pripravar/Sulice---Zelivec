@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 // VERZE cache - při změně příště zvedni, ať si telefony stáhnou novou verzi.
-const CACHE_VERSION = 'sulice-v31-2026-05-15';
+const CACHE_VERSION = 'sulice-v32-2026-06-15';
 
 const CORE_ASSETS = [
   './',
@@ -58,6 +58,19 @@ self.addEventListener('fetch', function(event) {
       }).catch(function() {
         return caches.match(req).then(function(c) { return c || caches.match('./index.html'); });
       })
+    );
+    return;
+  }
+
+  // Overlay data (situace JSON) i fotky/pdf: NETWORK-FIRST (jinak cache servíruje stará data
+  // po pushi a appka pořád ukazuje první verzi). Offline fallback na cache.
+  if(url.pathname.indexOf('/overlay/') !== -1) {
+    event.respondWith(
+      fetch(req).then(function(resp) {
+        var copy = resp.clone();
+        if(resp.status === 200) caches.open(CACHE_VERSION).then(function(cache) { cache.put(req, copy); });
+        return resp;
+      }).catch(function() { return caches.match(req); })
     );
     return;
   }
