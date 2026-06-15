@@ -715,7 +715,8 @@ textarea.note-field { min-height:80px; resize:vertical; }
 /* -- Standalone foto galerie ----------------------------- */
 #gallery-modal { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:4800; display:none; flex-direction:column; }
 #gallery-modal.open { display:flex; }
-#gallery-header { background:var(--panel); padding:12px 14px; padding-top:calc(12px + env(safe-area-inset-top)); display:flex; align-items:center; gap:10px; flex-shrink:0; border-bottom:1px solid var(--border); }
+#gallery-header { background:var(--panel); padding:12px 14px; padding-top:calc(12px + env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex-shrink:0; border-bottom:1px solid var(--border); }
+#gallery-close { order:99; }
 #gallery-header h3 { flex:1; font-size:15px; font-weight:700; color:var(--accent2); }
 #gallery-close { background:none; border:none; color:var(--text2); font-size:22px; cursor:pointer; padding:4px 8px; }
 #gallery-tabs { display:flex; flex-shrink:0; background:var(--panel2); }
@@ -1129,7 +1130,7 @@ document.addEventListener('touchend', function(e){
     </div>
     <button onclick="openDroneEvidence()" style="margin-top:7px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;cursor:pointer;width:100%;">🗂️ Evidence / smazat dron snímky</button>
   </div>
-  <div style="padding:4px 0 2px;">
+  <div id="situace-section" style="display:none;padding:4px 0 2px;">
     <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">📐 Koordinační situace (DWG)</div>
     <div class="layer-row">
       <label>📐 Situace – čáry</label>
@@ -1317,8 +1318,8 @@ document.addEventListener('touchend', function(e){
         <label style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text2);">Datum
           <input id="lib-bulk-date" type="date" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
         </label>
-        <label style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text2);">Staničení (km)
-          <input id="lib-bulk-km" type="text" inputmode="decimal" placeholder="např. 2,350" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+        <label style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text2);">Staničení / poznámka
+          <input id="lib-bulk-km" type="text" placeholder="např. 2,350 nebo ZS" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
         </label>
         <button onclick="libApplyBulk()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:42px;">Použít u všech</button>
       </div>
@@ -2927,6 +2928,8 @@ function init() {
   loadMereni();
   loadDroneOverlays();
   loadSituaceCalib();
+  // Situační vrstvy ukázat jen když existují data (overlay/situace_index.json) – jinak skryté
+  fetch('overlay/situace_index.json'+SIT_V).then(function(r){ if(r.ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } }).catch(function(){});
   initLongPress();
   // Zastavit touch eventy z panelů aby nešly do Leaflet mapy
   ['pdf-panel','prop-panel'].forEach(function(id) {
@@ -4839,7 +4842,8 @@ function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback) {
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     var dStr = dateObj.toLocaleDateString('cs-CZ');
-    var line1 = 'km ' + (km || '-') + '   •   ' + dStr;
+    var _kmlbl = (km && /\d/.test(km)) ? ('km ' + km) : (km || '-');   // text (ZS…) bez „km"
+    var line1 = _kmlbl + '   •   ' + dStr;
     var line2 = author || '';
     var fontSize = Math.max(20, Math.round(img.width / 40));
     ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
@@ -6516,7 +6520,10 @@ function libApplyBulk(){
   var rk = kmRaw ? libParseKm(kmRaw) : null;
   libImportItems.forEach(function(it){
     if(d) it.date = d;
-    if(rk!=null){ it.km = fmtKm(rk); if(it.lat==null){ var ll=realKmToLatLng(rk); if(ll){ it.lat=ll[0]; it.lng=ll[1]; } } }
+    if(kmRaw){
+      if(rk!=null){ it.km = fmtKm(rk); var ll=realKmToLatLng(rk); if(ll){ it.lat=ll[0]; it.lng=ll[1]; } }
+      else { it.km = kmRaw; it.lat=null; it.lng=null; }   // volný text = rychlá poznámka (ZS, …)
+    }
   });
   renderLibImportList();
   showToast('Vyplněno u všech', 1500);
@@ -6534,12 +6541,13 @@ function renderLibImportList(){
     var dInp = document.createElement('input'); dInp.type='date'; dInp.value=it.date||'';
     dInp.style.cssText = 'flex:1;min-width:115px;padding:7px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);';
     dInp.onchange = (function(idx){ return function(e){ libImportItems[idx].date = e.target.value; }; })(i);
-    var kInp = document.createElement('input'); kInp.type='text'; kInp.placeholder='km (2,350)'; kInp.value=it.km||'';
+    var kInp = document.createElement('input'); kInp.type='text'; kInp.placeholder='km nebo ZS'; kInp.value=it.km||'';
     kInp.style.cssText = 'flex:1;min-width:95px;padding:7px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);';
     kInp.onchange = (function(idx){ return function(e){
-      var rk = libParseKm(e.target.value);
-      libImportItems[idx].km = (rk!=null) ? fmtKm(rk) : '';
-      if(rk!=null){ var ll=realKmToLatLng(rk); if(ll){ libImportItems[idx].lat=ll[0]; libImportItems[idx].lng=ll[1]; } }
+      var raw = e.target.value.trim();
+      var rk = raw ? libParseKm(raw) : null;
+      if(rk!=null){ libImportItems[idx].km = fmtKm(rk); var ll=realKmToLatLng(rk); if(ll){ libImportItems[idx].lat=ll[0]; libImportItems[idx].lng=ll[1]; } }
+      else { libImportItems[idx].km = raw; libImportItems[idx].lat=null; libImportItems[idx].lng=null; }  // volný text
       e.target.value = libImportItems[idx].km;
     }; })(i);
     fields.appendChild(dInp); fields.appendChild(kInp); row.appendChild(fields);
@@ -6581,7 +6589,7 @@ function submitLibImport(){
               var visible = urlS || urlO;
               var entry = {
                 url: visible, stamped: !!urlS,
-                so: (realKm!=null ? libSoForKm(realKm) : ''),
+                so: (realKm!=null ? libSoForKm(realKm) : (it.km||'')),   // text (ZS…) = vlastní skupina
                 km: kmDisp, author: author,
                 uid: window.currentUser.uid,
                 time: dObj.toLocaleString('cs-CZ'),
@@ -10380,7 +10388,7 @@ function copyDiaryExport(){
 <div id="gallery-modal">
   <div id="gallery-header">
     <h3>Fotogalerie <span id="gallery-count" style="color:var(--text2);font-size:11px;font-weight:400;margin-left:6px;"></span></h3>
-    <button id="gallery-import-btn" onclick="openLibraryImport()" title="Vložit fotky z knihovny (s ručním datem a staničením)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-right:6px;">📥 Z knihovny</button>
+    <button id="gallery-import-btn" onclick="openLibraryImport()" title="Vložit fotky z knihovny (s ručním datem a staničením)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;">📥</button>
     <button id="gallery-group-btn" onclick="toggleGalleryGrouped()" title="Zobrazit po stavebních objektech" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">📁 Po objektech</button>
     <button id="gallery-select-btn" onclick="toggleGallerySelectMode()" title="Hromadný výběr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">☑️ Vybrat</button>
     <button onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
