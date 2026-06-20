@@ -1128,6 +1128,7 @@ document.addEventListener('touchend', function(e){
       <span style="font-size:11px;color:var(--text2);white-space:nowrap;">Průhlednost vrstvy</span>
       <input id="drone-layer-opacity" type="range" min="10" max="100" value="70" oninput="setDroneLayerOpacity(this.value)" style="flex:1;">
     </div>
+    <button id="btn-drone-editmode" onclick="toggleDroneEditMode()" style="margin-top:7px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;cursor:pointer;width:100%;">✏️ Upravit rozmístění snímků</button>
     <button onclick="openDroneEvidence()" style="margin-top:7px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;cursor:pointer;width:100%;">🗂️ Evidence / smazat dron snímky</button>
   </div>
   <div id="situace-section" style="display:none;padding:4px 0 2px;">
@@ -3660,6 +3661,34 @@ var droneRotateMarker = null;  // bod pro otáčení celého snímku
 var droneOverlaysData = {};    // uložené overlaye z /drone_overlays
 var droneActiveDate = null;    // právě zobrazené datum (vrstva)
 var droneRendered = [];        // aktuálně vykreslené uložené overlaye + markery (na mapě)
+var droneEditMode = false;     // režim úprav: klik na 🛰️ marker otevře editaci uloženého snímku
+var _droneEditKey = null;      // klíč právě upravovaného uloženého snímku (null = nový snímek)
+function toggleDroneEditMode(){
+  droneEditMode = !droneEditMode;
+  var b = document.getElementById('btn-drone-editmode');
+  if(b){ b.style.background = droneEditMode ? '#f5a623' : 'var(--panel2)'; b.style.color = droneEditMode ? '#0f3460' : 'var(--text)'; b.style.fontWeight = droneEditMode ? '700' : '400'; }
+  showToast(droneEditMode ? '✏️ Režim úprav ZAP — klikni na 🛰️ snímek na mapě a uprav ho' : 'Režim úprav vypnut', 2800);
+}
+// Otevři uložený snímek znovu k úpravě (posun/měřítko/rotace/průhlednost)
+function editExistingDrone(key){
+  if(!window.currentUser){ showToast('Pro úpravu se přihlas (úkolníček → přihlášení)', 3500); return; }
+  var r = droneOverlaysData[key]; if(!r || !r.corners || r.corners.length!==4) return;
+  if(!canDelete(r.ownerUid)){ showToast('Upravovat může jen autor nebo koordinátor', 2500); return; }
+  if(droneEditOverlay) cancelDroneOverlay();
+  _droneEditKey = key;
+  var corners = r.corners.map(function(c){ return L.latLng(c[0], c[1]); });
+  try {
+    droneEditOverlay = L.distortableImageOverlay(r.url, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
+    try { droneEditOverlay.setOpacity(r.opacity != null ? r.opacity : 0.7); } catch(e){}
+  } catch(e){ showToast('Snímek se nepodařilo otevřít', 3000); _droneEditKey=null; return; }
+  clearRenderedDrone();   // skryj statickou verzi, ať se nepřekrývají dva obrázky
+  document.getElementById('drone-opacity').value = Math.round((r.opacity != null ? r.opacity : 0.7)*100);
+  var dt = document.getElementById('drone-date'); if(dt) dt.value = r.datum || '';
+  document.getElementById('drone-edit-status').textContent = '✏️ Úprava uloženého snímku — dolaď a 💾 ulož.';
+  try { var b=L.latLngBounds(corners); map.setView(b.getCenter(), Math.min(19, map.getBoundsZoom(b,false,L.point(60,60))), {animate:false}); } catch(e){}
+  setTimeout(function(){ addDroneEditHandles(); }, 300);
+  document.getElementById('drone-edit-bar').style.display = 'flex';
+}
 
 // Zmenší obrázek na max maxPx (delší strana) a vrátí JPEG dataURL (kvalita q)
 function resizeImageMax(dataUrl, maxPx, q, cb){
@@ -3843,6 +3872,7 @@ function placeDroneEditOverlay(dataUrl, gps){
   probe.src = dataUrl;
 }
 function _placeDroneWith(dataUrl, center, gps, aspect){
+  _droneEditKey = null;   // nový snímek, ne úprava existujícího
   if(!aspect || isNaN(aspect) || aspect<=0) aspect = 1.5;
   var halfW = aspect >= 1 ? 75 : 75*aspect;
   var halfH = aspect >= 1 ? 75/aspect : 75;
@@ -3878,7 +3908,9 @@ function setDroneEditOpacity(val){
 function cancelDroneOverlay(){
   clearDroneEditHandles();
   if(droneEditOverlay){ try { map.removeLayer(droneEditOverlay); } catch(e){} droneEditOverlay = null; }
+  _droneEditKey = null;
   var bar = document.getElementById('drone-edit-bar'); if(bar) bar.style.display = 'none';
+  renderActiveDroneDate();   // vrať statické snímky aktivní vrstvy (po úpravě/zrušení)
 }
 function saveDroneOverlay(){
   if(!droneEditOverlay){ return; }
@@ -3890,6 +3922,18 @@ function saveDroneOverlay(){
   if(!cornersLL || cornersLL.length !== 4){ status.textContent = '⚠️ Nelze získat rohy snímku'; return; }
   var corners = cornersLL.map(function(c){ return [c.lat, c.lng]; });
   var opacity = (parseInt(document.getElementById('drone-opacity').value,10) || 70) / 100;
+
+  // ÚPRAVA uloženého snímku: jen aktualizuj rohy/průhlednost/datum (NEnahrávej obrázek znovu)
+  if(_droneEditKey){
+    status.textContent = '⏳ Ukládám úpravu…';
+    db.ref('drone_overlays/'+_droneEditKey).update({ corners: corners, opacity: opacity, datum: datum, ts: Date.now() }).then(function(){
+      droneActiveDate = datum;
+      showToast('✅ Úprava uložena', 2000);
+      _droneEditKey = null; cancelDroneOverlay();
+    }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba uložení'); });
+    return;
+  }
+
   var imgEl = droneEditOverlay.getElement ? droneEditOverlay.getElement() : null;
   var srcDataUrl = imgEl ? imgEl.src : (droneEditOverlay._image ? droneEditOverlay._image.src : null);
   if(!srcDataUrl){ status.textContent = '⚠️ Chybí obrázek'; return; }
@@ -4021,11 +4065,16 @@ function renderSavedDrone(key, r){
     '<span style="font-size:11px;color:#888;">'+escapeHtml(r.author||'')+'</span>'+
     '<br><span style="font-size:10px;color:#f5a623;">orientační podklad, ne geodetické zaměření</span>';
   if(canDelete(r.ownerUid)){
-    html += '<br><button onclick="deleteDroneOverlay(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Odebrat z mapy</button>';
+    html += '<br><button onclick="editExistingDrone(\''+key+'\')" style="margin-top:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Upravit</button>'+
+            '<button onclick="deleteDroneOverlay(\''+key+'\')" style="margin-top:6px;margin-left:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Odebrat</button>';
   }
   html += '</div>';
-  var mk = L.marker([clat, clng], { icon: L.divIcon({ className:'', html:'<div style="font-size:20px;filter:drop-shadow(0 1px 2px #000);">🛰️</div>', iconSize:[20,20], iconAnchor:[10,10] }) })
-    .bindPopup(html).addTo(map);
+  var mk = L.marker([clat, clng], { icon: L.divIcon({ className:'', html:'<div style="font-size:20px;filter:drop-shadow(0 1px 2px #000);">🛰️</div>', iconSize:[20,20], iconAnchor:[10,10] }) }).addTo(map);
+  mk._infoHtml = html;
+  mk.on('click', function(){
+    if(droneEditMode){ editExistingDrone(key); return; }   // režim úprav → rovnou editace
+    mk.bindPopup(mk._infoHtml).openPopup();                 // jinak info popup (Upravit / Odebrat)
+  });
   droneRendered.push(mk);
 }
 function loadDroneOverlays(){
@@ -6142,6 +6191,68 @@ function uploadPhotoToGitHubP(dataUrl, filename) {
   });
 }
 
+// ── FRONTA UPLOADU FOTEK NA POZADÍ ──
+// Po vyfocení se fotka zařadí do fronty a hned můžeš fotit dál; nahrávání běží na pozadí.
+// (GitHub neumí 2 paralelní PUTy do stejné větve → fronta nahrává SEKVENČNĚ.)
+var photoQueue = [];
+var photoUploading = false;
+var photoPending = 0;
+var _lastPhotoT = 0;
+function _uniqueT(){ var t = Date.now(); if(t <= _lastPhotoT) t = _lastPhotoT + 1; _lastPhotoT = t; return t; }
+function _photoBadge(){
+  var el = document.getElementById('photo-upload-badge');
+  if(!el){
+    el = document.createElement('div'); el.id = 'photo-upload-badge';
+    el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:3000;background:rgba(0,0,0,.78);color:#fff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:14px;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.4);';
+    document.body.appendChild(el);
+  }
+  if(photoPending > 0){ el.style.display = 'block'; el.textContent = '⏳ Nahrávám fotky na pozadí: ' + photoPending; }
+  else { el.style.display = 'none'; }
+}
+function enqueuePhoto(compressed, meta, yes){
+  photoQueue.push({ compressed: compressed, meta: meta, yes: yes, tries: 0 });
+  photoPending++; _photoBadge();
+  if(!photoUploading) _processPhotoQueue();
+}
+function _processPhotoQueue(){
+  if(!photoQueue.length){ photoUploading = false; return; }
+  photoUploading = true;
+  var job = photoQueue.shift();
+  var compressed = job.compressed, meta = job.meta, yes = job.yes;
+  function fail(msg){
+    if(job.tries < 1){ job.tries++; photoQueue.push(job); }   // 1× zkus znovu (výpadek sítě)
+    else { photoPending = Math.max(0, photoPending-1); showToast('❌ Fotka se nenahrála ('+(msg||'')+')', 3000); }
+    _photoBadge(); setTimeout(_processPhotoQueue, 400);
+  }
+  burnInMetadata(compressed, meta.km, meta.author, function(stamped){
+    var t = meta.ts || _uniqueT();
+    var fnOrig = 'standalone/foto_' + t + '_o.jpg', fnStamp = 'standalone/foto_' + t + '_s.jpg';
+    var firstSrc, firstFn, secondSrc, secondFn;
+    if(yes){ firstSrc = stamped; firstFn = fnStamp; secondSrc = compressed; secondFn = fnOrig; }
+    else   { firstSrc = compressed; firstFn = fnOrig; secondSrc = stamped; secondFn = fnStamp; }
+    uploadPhotoToGitHubP(firstSrc, firstFn).then(function(url1){
+      if(!url1){ fail('upload'); return; }
+      setTimeout(function(){
+        uploadPhotoToGitHubP(secondSrc, secondFn).then(function(url2){
+          var urlOrig = yes ? url2 : url1, urlStamp = yes ? url1 : url2, visibleUrl = yes ? urlStamp : urlOrig;
+          var entry = {
+            url: visibleUrl, stamped: !!yes, so: (meta.so || ''),
+            km: meta.km, author: meta.author, uid: (window.currentUser ? window.currentUser.uid : ''),
+            lat: meta.lat, lng: meta.lng,
+            time: new Date(t).toLocaleString('cs-CZ'), date: new Date(t).toLocaleDateString('cs-CZ'), ts: t
+          };
+          if(urlOrig) entry.urlOriginal = urlOrig;
+          if(urlStamp) entry.urlStamped = urlStamp;
+          db.ref('standalone_photos/' + t).set(entry).then(function(){
+            photoPending = Math.max(0, photoPending-1); _photoBadge();
+            setTimeout(_processPhotoQueue, 400);
+          }).catch(function(){ fail('db'); });
+        });
+      }, 500);
+    });
+  });
+}
+
 function ppAnswer(yes) {
   document.getElementById('photo-prompt-modal').classList.remove('open');
   var sess = window.photoSession;
@@ -6150,71 +6261,11 @@ function ppAnswer(yes) {
     var meta = sess.pendingMeta;
     sess.pendingPhoto = null;
     if(!compressed || !meta) { _showContinuePrompt(); return; }
-
-    // VŽDY ukládáme obě verze (originál + s razítkem). 'yes' = uživatelova preference pro galerii.
-    // V galerii pak vidí jen tu verzi co si přál; ale obě jsou k dispozici pro download.
-    // Důležité: GitHub API neumí 2 paralelní PUTy do stejné větve - musí jít SEKVENČNĚ,
-    // jinak druhý request selže s 409 (parent SHA konflikt).
-    showSync('⏳ Připravuji razítko...');
-    burnInMetadata(compressed, meta.km, meta.author, function(stampedDataUrl) {
-      var t = Date.now();
-      var fnOrig  = 'standalone/foto_' + t + '_o.jpg';   // _o = original
-      var fnStamp = 'standalone/foto_' + t + '_s.jpg';   // _s = stamped
-
-      // Pořadí uploadu: nejdřív preferovaná verze (aby v případě selhání 2. uploadu
-      // měla galerie aspoň tu správnou). 'yes'=true → nejdřív razítko, jinak originál.
-      var firstSrc, firstFn, secondSrc, secondFn;
-      if(yes) { firstSrc = stampedDataUrl; firstFn = fnStamp; secondSrc = compressed;      secondFn = fnOrig;  }
-      else    { firstSrc = compressed;      firstFn = fnOrig;  secondSrc = stampedDataUrl; secondFn = fnStamp; }
-
-      showSync('⏳ Nahrávám 1/2...');
-      uploadPhotoToGitHubP(firstSrc, firstFn).then(function(url1){
-        if(!url1) {
-          hideSync();
-          showToast('❌ Upload preferované verze selhal', 3000);
-          _showContinuePrompt();
-          return;
-        }
-        showSync('⏳ Nahrávám 2/2...');
-        // Krátké zpoždění aby GitHub stihl propsat předchozí commit
-        setTimeout(function(){
-          uploadPhotoToGitHubP(secondSrc, secondFn).then(function(url2){
-            // Mapování zpět - kterou ze dvou jsme nahráli první/druhou
-            var urlOrig  = yes ? url2 : url1;
-            var urlStamp = yes ? url1 : url2;
-            // 'url' v galerii = co si uživatel přál
-            var visibleUrl = yes ? urlStamp : urlOrig;
-            var entry = {
-              url: visibleUrl,
-              stamped: !!yes,   // true = v galerii verze s razítkem
-              so: (meta.so || ''),   // přiřazený stavební objekt (složka), '' = Nezařazené
-              km: meta.km, author: meta.author,
-              uid: (window.currentUser ? window.currentUser.uid : ''),
-              lat: meta.lat, lng: meta.lng,
-              time: new Date().toLocaleString('cs-CZ'),
-              date: new Date().toLocaleDateString('cs-CZ'),
-              ts: Date.now()
-            };
-            if(urlOrig)  entry.urlOriginal = urlOrig;
-            if(urlStamp) entry.urlStamped  = urlStamp;
-
-            var key = String(t);
-            db.ref('standalone_photos/' + key).set(entry)
-              .then(function() {
-                sess.count++;
-                hideSync();
-                if(!url2) showToast('⚠ Druhá verze se nenahrála, máš jen ' + (yes?'s razítkem':'originál'), 3000);
-                _showContinuePrompt();
-              })
-              .catch(function() {
-                hideSync();
-                showToast('❌ Chyba uložení do DB', 2500);
-                _showContinuePrompt();
-              });
-          });
-        }, 600);
-      });
-    });
+    // Upload jde NA POZADÍ (fronta) – uživatel může hned fotit dál, nečeká na síť.
+    meta.ts = _uniqueT();
+    enqueuePhoto(compressed, meta, yes);
+    sess.count++;
+    _showContinuePrompt();   // ihned, bez čekání na nahrání
   } else if(sess.phase === 'continue') {
     if(yes) {
       // Otevři foťák znovu
