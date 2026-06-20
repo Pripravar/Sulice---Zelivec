@@ -6243,10 +6243,22 @@ function _processPhotoQueue(){
           };
           if(urlOrig) entry.urlOriginal = urlOrig;
           if(urlStamp) entry.urlStamped = urlStamp;
-          db.ref('standalone_photos/' + t).set(entry).then(function(){
-            photoPending = Math.max(0, photoPending-1); _photoBadge();
-            setTimeout(_processPhotoQueue, 400);
-          }).catch(function(){ fail('db'); });
+          function saveEntry(){
+            db.ref('standalone_photos/' + t).set(entry).then(function(){
+              photoPending = Math.max(0, photoPending-1); _photoBadge();
+              setTimeout(_processPhotoQueue, 400);
+            }).catch(function(){ fail('db'); });
+          }
+          // Malý náhled (rychlejší galerie) – best-effort, neblokuje uložení
+          resizeImageMax(visibleUrl === urlStamp ? stamped : compressed, 400, 0.5, function(thumbUrl){
+            if(!thumbUrl){ saveEntry(); return; }
+            setTimeout(function(){
+              uploadPhotoToGitHubP(thumbUrl, 'standalone/foto_' + t + '_t.jpg').then(function(urlT){
+                if(urlT) entry.thumb = urlT;
+                saveEntry();
+              });
+            }, 500);
+          });
         });
       }, 500);
     });
@@ -6464,8 +6476,11 @@ function submitLibImport(){
               if(urlO) entry.urlOriginal = urlO;
               if(urlS) entry.urlStamped  = urlS;
               if(it.lat!=null){ entry.lat = it.lat; entry.lng = it.lng; }
-              db.ref('standalone_photos/'+t).set(entry).then(function(){ done++; processOne(idx+1); })
-                .catch(function(){ fail++; processOne(idx+1); });
+              function saveImp(){ db.ref('standalone_photos/'+t).set(entry).then(function(){ done++; processOne(idx+1); }).catch(function(){ fail++; processOne(idx+1); }); }
+              resizeImageMax(stamped, 400, 0.5, function(thumbUrl){
+                if(!thumbUrl){ saveImp(); return; }
+                setTimeout(function(){ uploadPhotoToGitHubP(thumbUrl, 'standalone/foto_'+t+'_t.jpg').then(function(urlT){ if(urlT) entry.thumb = urlT; saveImp(); }); }, 500);
+              });
             });
           }, 500);
         });
@@ -6571,6 +6586,54 @@ function toggleGalleryFilter(){
   bar.style.display = (bar.style.display === 'none' || !bar.style.display) ? 'block' : 'none';
 }
 
+// ── Náhledy: jednorázové dogenerování miniatur pro starší fotky (bez thumb) ──
+var _thumbMigRunning = false;
+function _thumbMigBadge(cur, total){
+  var el = document.getElementById('thumb-mig-badge');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'thumb-mig-badge';
+    el.style.cssText = 'position:fixed;top:96px;left:50%;transform:translateX(-50%);z-index:4000;background:rgba(0,0,0,.8);color:#fff;font-size:12px;font-weight:600;padding:6px 14px;border-radius:16px;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+    document.body.appendChild(el);
+  }
+  if(total > 0 && cur <= total){ el.style.display = 'block'; el.textContent = '🖼️ Generuji náhledy: ' + cur + '/' + total; }
+  else el.style.display = 'none';
+}
+function generateMissingThumbs(){
+  if(_thumbMigRunning){ showToast('Náhledy se už generují…', 2000); return; }
+  if(!window.currentUser){ showToast('Pro generování náhledů se přihlas', 3000); return; }
+  showToast('Hledám fotky bez náhledu…', 1500);
+  db.ref('standalone_photos').once('value').then(function(snap){
+    var v = snap.val() || {};
+    var todo = Object.keys(v).filter(function(k){ var r = v[k]; return r && r.url && !r.thumb; });
+    if(!todo.length){ showToast('✅ Všechny fotky už mají náhled', 2500); return; }
+    if(!confirm('Vygenerovat náhledy pro ' + todo.length + ' fotek?\nPoběží na pozadí, galerii pak můžeš dál používat.')) return;
+    _thumbMigRunning = true;
+    var done = 0, fail = 0;
+    function next(i){
+      if(i >= todo.length){
+        _thumbMigRunning = false; _thumbMigBadge(0, 0);
+        showToast('✅ Náhledy hotové (' + done + '/' + todo.length + (fail ? ', ' + fail + ' selhalo' : '') + ')', 4500);
+        renderGallery();
+        return;
+      }
+      var key = todo[i], r = v[key];
+      _thumbMigBadge(i + 1, todo.length);
+      fetch(r.url).then(function(rsp){ return rsp.blob(); }).then(blobToDataUrl).then(function(dataUrl){
+        resizeImageMax(dataUrl, 400, 0.5, function(thumbUrl){
+          if(!thumbUrl){ fail++; setTimeout(function(){ next(i + 1); }, 150); return; }
+          var t = r.ts || (i + 1);
+          uploadPhotoToGitHubP(thumbUrl, 'standalone/foto_' + t + '_t.jpg').then(function(urlT){
+            if(urlT){ db.ref('standalone_photos/' + key + '/thumb').set(urlT); done++; } else fail++;
+            setTimeout(function(){ next(i + 1); }, 350);
+          });
+        });
+      }).catch(function(){ fail++; setTimeout(function(){ next(i + 1); }, 250); });
+    }
+    next(0);
+  }).catch(function(){ showToast('Nepodařilo se načíst fotky', 3000); });
+}
+
 function clearGalleryFilters(){
   document.getElementById('gfilt-km-od').value = '';
   document.getElementById('gfilt-km-do').value = '';
@@ -6588,11 +6651,12 @@ function _galleryItemEl(item) {
   div.setAttribute('data-gk', k);
   if(gallerySelectedKeys[k]) div.classList.add('selected');
   var img = document.createElement('img');
-  img.src = item.url; img.loading = 'lazy';
+  img.src = item.thumb || item.url;   // v mřížce malý náhled; plná kvalita až ve fullscreenu/stahování
+  img.loading = 'lazy';
   (function(it, divRef) {
     img.onclick = function() {
       if(gallerySelectMode) { _toggleGallerySelection(it, divRef); }
-      else { openPhotoFs(it.url, it.fbKey || null, it); }
+      else { openPhotoFs(it.url, it.fbKey || null, it); }   // fullscreen = plná verze
     };
   })(item, div);
   var chk = document.createElement('div');
@@ -10301,6 +10365,10 @@ function copyDiaryExport(){
         </select>
       </div>
       <button onclick="clearGalleryFilters()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">⌫ Vynulovat</button>
+    </div>
+    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
+      <button onclick="generateMissingThumbs()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">🖼️ Zrychlit galerii (dogenerovat náhledy)</button>
+      <div style="font-size:10px;color:var(--text2);margin-top:4px;">Jednorázově pro starší fotky – pak se galerie načítá rychleji. Běží na pozadí.</div>
     </div>
   </div>
   <div id="gallery-body">
