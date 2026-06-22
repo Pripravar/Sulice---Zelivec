@@ -1285,8 +1285,8 @@ document.addEventListener('touchend', function(e){
   <div style="font-size:12px;color:var(--text);text-align:center;"><b style="color:#22d3ee;">Rohy</b> = perspektiva · <b style="color:#f5a623;">✥ střed</b> = posun · <b style="color:#27ae60;">⟳ zelený</b> = otočení</div>
   <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
     <span style="font-size:12px;color:var(--text2);">Velikost</span>
-    <button onclick="scaleDroneEdit(0.85)" title="Zmenšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➖</button>
-    <button onclick="scaleDroneEdit(1.18)" title="Zvětšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➕</button>
+    <button onclick="scaleDroneEdit(0.94)" title="Zmenšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➖</button>
+    <button onclick="scaleDroneEdit(1.064)" title="Zvětšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➕</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
     <span style="font-size:12px;color:var(--text2);">Datum snímků</span>
@@ -3691,7 +3691,7 @@ function editExistingDrone(key){
 }
 
 // Zmenší obrázek na max maxPx (delší strana) a vrátí JPEG dataURL (kvalita q)
-function resizeImageMax(dataUrl, maxPx, q, cb){
+function resizeImageMax(dataUrl, maxPx, q, cb, mime){
   var img = new Image();
   img.onload = function(){
     var w = img.width, h = img.height;
@@ -3701,10 +3701,23 @@ function resizeImageMax(dataUrl, maxPx, q, cb){
     }
     var c = document.createElement('canvas'); c.width = w; c.height = h;
     c.getContext('2d').drawImage(img, 0, 0, w, h);
-    try { cb(c.toDataURL('image/jpeg', q)); } catch(e){ cb(null); }
+    try { cb(c.toDataURL(mime || 'image/jpeg', q)); } catch(e){ cb(null); }
   };
   img.onerror = function(){ cb(null); };
   img.src = dataUrl;
+}
+// PNG (s průhledností) zmenši pod limit funkce – zkoušej klesající rozměry, dokud base64 < maxB64.
+function resizePngUnder(srcDataUrl, sizes, maxB64, cb){
+  function attempt(i){
+    if(i >= sizes.length){ cb(null); return; }
+    resizeImageMax(srcDataUrl, sizes[i], 1, function(out){
+      if(!out){ cb(null); return; }
+      var b64 = out.replace(/^data:image\/\w+;base64,/, '');
+      if(b64.length <= maxB64 || i === sizes.length-1) cb({ base64: b64 });
+      else attempt(i+1);
+    }, 'image/png');
+  }
+  attempt(0);
 }
 // EXIF GPS z JPEG dataURL → {lat,lng} nebo null (jen jako hint pro počáteční střed)
 function exifGpsFromDataUrl(dataUrl){
@@ -3782,6 +3795,12 @@ function droneBearingRad(c, p){
   var mLat = 111320, mLng = 111320 * Math.cos(c.lat*Math.PI/180);
   return Math.atan2((p.lat-c.lat)*mLat, (p.lng-c.lng)*mLng);
 }
+// vzdálenost dvou bodů v lokálních metrech (pro proporční měřítko rohem)
+function droneLocalDist(a, b){
+  var mLat = 111320, mLng = 111320 * Math.cos(a.lat*Math.PI/180);
+  var dy = (b.lat-a.lat)*mLat, dx = (b.lng-a.lng)*mLng;
+  return Math.sqrt(dx*dx + dy*dy);
+}
 // otoč bod p kolem středu c o úhel ang (rad)
 function droneRotateLatLng(p, c, ang){
   var mLat = 111320, mLng = 111320 * Math.cos(c.lat*Math.PI/180);
@@ -3820,16 +3839,33 @@ function addDroneEditHandles(){
   clearDroneEditHandles();
   if(!droneEditOverlay) return;
   var cs = droneEditOverlay.getCorners();
-  // 4 rohové body = volný posun rohů (perspektiva)
+  // 4 rohové body = PROPORČNÍ zvětšení/zmenšení celé fotky kolem středu (NE deformace rohů –
+  // ta jen rozhází obrázek). Tah rohu od středu = větší, ke středu = menší; tvar i poměr zůstanou.
   cs.forEach(function(c, i){
     var m = L.marker(c, { draggable:true, icon:droneCornerIcon(), zIndexOffset:1000 }).addTo(map);
+    var baseCorners = null, baseCenter = null, baseDist = 1;
+    m.on('dragstart', function(){
+      baseCorners = droneEditOverlay.getCorners();
+      baseCenter = droneCentroid(baseCorners);
+      baseDist = droneLocalDist(baseCenter, baseCorners[i]) || 1;
+    });
     m.on('drag', function(e){
-      droneEditOverlay._corners[i] = e.target.getLatLng();
+      if(!baseCorners) return;
+      var f = (droneLocalDist(baseCenter, e.target.getLatLng()) || baseDist) / baseDist;
+      f = Math.max(0.15, Math.min(8, f));   // pojistka proti extrémům
+      for(var k=0;k<4;k++){
+        droneEditOverlay._corners[k] = L.latLng(
+          baseCenter.lat + (baseCorners[k].lat - baseCenter.lat) * f,
+          baseCenter.lng + (baseCorners[k].lng - baseCenter.lng) * f);
+      }
       droneRerender(droneEditOverlay);
+      // synchronizuj OSTATNÍ úchyty (tažený nech sedět pod prstem)
       var csN = droneEditOverlay.getCorners();
+      droneCornerMarkers.forEach(function(mm, idx){ if(idx !== i) mm.setLatLng(csN[idx]); });
       if(droneCenterMarker) droneCenterMarker.setLatLng(droneCentroid(csN));
       if(droneRotateMarker) droneRotateMarker.setLatLng(droneTopHandlePos(csN));
     });
+    m.on('dragend', function(){ baseCorners = null; droneSyncHandles(); });  // doraz na skutečný roh
     droneCornerMarkers.push(m);
   });
   // prostřední bod = posun celého snímku
@@ -3938,12 +3974,12 @@ function saveDroneOverlay(){
   var srcDataUrl = imgEl ? imgEl.src : (droneEditOverlay._image ? droneEditOverlay._image.src : null);
   if(!srcDataUrl){ status.textContent = '⚠️ Chybí obrázek'; return; }
 
-  status.textContent = '⏳ Zmenšuji a nahrávám…';
-  // Zmenšit na max 3000 px / Q0.85 (NE 1600 – kvůli čitelnosti při měření)
-  resizeImageMax(srcDataUrl, 3000, 0.85, function(resized){
-    if(!resized){ status.textContent = '❌ Chyba zpracování obrázku'; return; }
-    var base64 = resized.replace(/^data:image\/\w+;base64,/, '');
-    var filename = 'drone_' + Date.now() + '.jpg';
+  // PNG (např. dron ortofoto s průhledným okrajem) MUSÍ zůstat PNG – JPEG neumí průhlednost
+  // a průhledné pixely by zčernaly. JPEG fotky nech jako JPEG (menší soubor).
+  var isPng = /^data:image\/png/i.test(srcDataUrl);
+  status.textContent = isPng ? '⏳ Nahrávám (PNG s průhledností)…' : '⏳ Zmenšuji a nahrávám…';
+
+  function doUpload(base64, filename){
     var user = (typeof fbAuth !== 'undefined' && fbAuth) ? fbAuth.currentUser : null;
     if(!user){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
     user.getIdToken().then(function(idToken){
@@ -3957,7 +3993,7 @@ function saveDroneOverlay(){
     .then(function(res){
       if(res.ok && res.data && res.data.path){
         var rec = {
-          url: res.data.path,            // relativní 'drone/drone_xxx.jpg' (Pages)
+          url: res.data.path,            // relativní 'drone/drone_xxx.(jpg|png)' (Pages)
           corners: corners,
           opacity: opacity,
           datum: datum,                  // YYYY-MM-DD → vrstva
@@ -3975,7 +4011,21 @@ function saveDroneOverlay(){
       }
     })
     .catch(function(e){ console.error('drone upload exc:', e); status.textContent = '❌ Síťová chyba uploadu'; });
-  });
+  }
+
+  if(isPng){
+    // PNG bez ztrátové komprese – zkoušej klesající rozměry, ať se vejde pod 14 MB limit funkce
+    resizePngUnder(srcDataUrl, [2600, 2200, 1800, 1400], 13500000, function(r){
+      if(!r){ status.textContent = '❌ PNG je i po zmenšení moc velké'; return; }
+      doUpload(r.base64, 'drone_' + Date.now() + '.png');
+    });
+  } else {
+    // JPEG: max 3000 px / Q0.85 (NE 1600 – kvůli čitelnosti při měření)
+    resizeImageMax(srcDataUrl, 3000, 0.85, function(resized){
+      if(!resized){ status.textContent = '❌ Chyba zpracování obrázku'; return; }
+      doUpload(resized.replace(/^data:image\/\w+;base64,/, ''), 'drone_' + Date.now() + '.jpg');
+    });
+  }
 }
 
 // ── Datové vrstvy: seznam dat + přepínání + vykreslení ──
