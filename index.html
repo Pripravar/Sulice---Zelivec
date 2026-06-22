@@ -4542,27 +4542,99 @@ function closeNoteDetail() {
 
 var _photoFsKey = null;
 var _photoFsItem = null;  // celá meta fotky (kvůli datu pořízení při stahování)
+var _fsIndex = -1;        // pozice v galleryCurrentItems (procházení tažením), -1 = mimo galerii
 
 function openPhotoFs(src, firebaseKey, item) {
   var url = (typeof src === 'string') ? src : src.src;
+  var it = item || (typeof src === 'object' ? src : null);
+  // Index v aktuálně vykreslené galerii (kvůli procházení tažením). -1 = mimo galerii (výkres/poznámka).
+  _fsIndex = -1;
+  if(it && galleryCurrentItems && galleryCurrentItems.length){
+    _fsIndex = galleryCurrentItems.indexOf(it);
+    if(_fsIndex < 0 && firebaseKey){
+      for(var i=0;i<galleryCurrentItems.length;i++){ if(galleryCurrentItems[i].fbKey===firebaseKey){ _fsIndex=i; break; } }
+    }
+  }
+  _renderFsItem(url, firebaseKey, it || { url: url });
+  document.getElementById('photo-fs').classList.add('open');
+  _updateFsNav();
+  unlockViewport();
+}
+
+// Vykreslí jednu fotku do fullscreenu (sdílí openPhotoFs i navigace tažením). Vždy plná verze (url).
+function _renderFsItem(url, firebaseKey, item) {
   document.getElementById('photo-fs-img').src = url;
   var ob = document.getElementById('photo-fs-open');
   if(ob) ob.href = url;
   _photoFsKey = firebaseKey || null;
-  _photoFsItem = item || (typeof src === 'object' ? src : { url: url });
+  _photoFsItem = item || { url: url };
   if(!_photoFsItem.url) _photoFsItem.url = url;
   var delBtn = document.getElementById('photo-fs-delete');
   if(delBtn) delBtn.style.display = (_photoFsKey && canDelete((_photoFsItem||{}).uid)) ? 'inline-block' : 'none';
-  document.getElementById('photo-fs').classList.add('open');
-  unlockViewport();
+}
+
+// Posun na předchozí/další fotku v galerii (dir = -1 / +1). Plná verze, ne náhled.
+function navigateFs(dir) {
+  if(_fsIndex < 0 || !galleryCurrentItems.length) return;
+  var n = _fsIndex + dir;
+  if(n < 0 || n >= galleryCurrentItems.length) return;
+  _fsIndex = n;
+  var it = galleryCurrentItems[n];
+  _renderFsItem(it.url, it.fbKey || null, it);
+  _updateFsNav();
+}
+
+// Zobrazí/skryje šipky a počítadlo podle pozice v galerii.
+function _updateFsNav() {
+  var prev = document.getElementById('photo-fs-prev'), next = document.getElementById('photo-fs-next'),
+      cnt = document.getElementById('photo-fs-count');
+  var inGallery = _fsIndex >= 0 && galleryCurrentItems.length > 1;
+  if(prev) prev.style.display = (inGallery && _fsIndex > 0) ? 'flex' : 'none';
+  if(next) next.style.display = (inGallery && _fsIndex < galleryCurrentItems.length-1) ? 'flex' : 'none';
+  if(cnt){
+    if(inGallery){ cnt.style.display = 'block'; cnt.textContent = (_fsIndex+1) + ' / ' + galleryCurrentItems.length; }
+    else cnt.style.display = 'none';
+  }
+}
+
+// Dotykové tažení doleva/doprava pro procházení fotek.
+var _fsTouchX = null, _fsTouchY = null, _fsSwiped = false;
+function _fsTouchStart(e){
+  if(e.touches && e.touches.length === 1){ _fsTouchX = e.touches[0].clientX; _fsTouchY = e.touches[0].clientY; }
+  else { _fsTouchX = null; }
+}
+function _fsTouchEnd(e){
+  if(_fsTouchX === null || !e.changedTouches || !e.changedTouches.length) return;
+  var dx = e.changedTouches[0].clientX - _fsTouchX, dy = e.changedTouches[0].clientY - _fsTouchY;
+  _fsTouchX = null;
+  if(Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5){
+    _fsSwiped = true;   // ať následný „click" z tahu nezavře prohlížeč
+    navigateFs(dx < 0 ? 1 : -1);   // tah doleva = další, doprava = předchozí
+    setTimeout(function(){ _fsSwiped = false; }, 350);
+  }
+}
+// Klik na pozadí/obrázek zavře – ale ne, když to byl jen dojezd tažení.
+function _fsBackdropClick(event){
+  if(_fsSwiped){ _fsSwiped = false; return; }
+  if(event.target === event.currentTarget || event.target.id === 'photo-fs-img') closePhotoFs();
 }
 
 function closePhotoFs() {
   document.getElementById('photo-fs').classList.remove('open');
   _photoFsKey = null;
   _photoFsItem = null;
+  _fsIndex = -1;
   lockViewport();
 }
+
+// Klávesy ve fullscreenu: ← → procházení, Esc zavřít.
+document.addEventListener('keydown', function(e){
+  var fs = document.getElementById('photo-fs');
+  if(!fs || !fs.classList.contains('open')) return;
+  if(e.key === 'ArrowLeft'){ navigateFs(-1); }
+  else if(e.key === 'ArrowRight'){ navigateFs(1); }
+  else if(e.key === 'Escape'){ closePhotoFs(); }
+});
 
 // ── Stahování fotek s datem pořízení ──────────────────────────────
 // Vrátí Date z meta fotky. Preferuje item.ts (Date.now()), pak parsuje 'time'/'date' string.
@@ -10299,8 +10371,11 @@ function copyDiaryExport(){
 </div>
 
 <!-- Fullscreen foto -->
-<div id="photo-fs" onclick="if(event.target===this||event.target.id==='photo-fs-img')closePhotoFs()">
+<div id="photo-fs" ontouchstart="_fsTouchStart(event)" ontouchend="_fsTouchEnd(event)" onclick="_fsBackdropClick(event)">
   <img id="photo-fs-img" src="" style="max-width:100%;max-height:calc(100% - 60px);object-fit:contain;">
+  <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;"></div>
+  <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
+  <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
   <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="background:var(--accent2);color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout s datem</button>
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">&#128247; Otevřít</a>
