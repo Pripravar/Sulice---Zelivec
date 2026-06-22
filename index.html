@@ -4334,7 +4334,38 @@ window.addEventListener('load', function() {
 // fotku + svůj Firebase ID token; Cloud Function ověří přihlášení a commitne.
 
 // -- Burn-in metadata do fotky --------
-function burnInMetadata(dataUrl, km, author, callback) {
+// "SO XXX" pro razítko: prázdné pro prázdný/nečíselný vstup, jinak doplň prefix „SO ".
+// (ZS apod. = volný text staničení, ne stavební objekt → do razítka nedáváme.)
+function _soStampLabel(so){
+  so = (so == null) ? '' : String(so).trim();
+  if(!so) return '';
+  return /^so\b/i.test(so) ? so : ('SO ' + so);
+}
+// Vykreslí razítkový rámeček vpravo dole. lines = [{t, bold}] shora dolů (prázdné se přeskočí).
+function _drawStampBox(ctx, img, lines){
+  lines = lines.filter(function(l){ return l && l.t; });
+  if(!lines.length) return;
+  var fontSize = Math.max(20, Math.round(img.width / 40));
+  var pad = Math.round(fontSize * 0.6);
+  var lineH = Math.round(fontSize * 1.45);
+  function setFont(bold){ ctx.font = (bold ? 'bold ' : '') + fontSize + 'px Arial, sans-serif'; }
+  var textW = 0;
+  lines.forEach(function(l){ setFont(l.bold); textW = Math.max(textW, ctx.measureText(l.t).width); });
+  var boxW = textW + pad * 2;
+  var boxH = lineH * lines.length + pad;
+  var boxX = img.width - boxW - pad;
+  var boxY = img.height - boxH - pad;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  if(ctx.roundRect) { ctx.beginPath(); ctx.roundRect(boxX, boxY, boxW, boxH, 6); ctx.fill(); }
+  else { ctx.fillRect(boxX, boxY, boxW, boxH); }
+  lines.forEach(function(l, i){
+    setFont(l.bold);
+    ctx.fillStyle = l.bold ? '#ffffff' : 'rgba(255,255,255,0.88)';
+    ctx.fillText(l.t, boxX + pad, boxY + lineH * (i + 0.85));
+  });
+}
+
+function burnInMetadata(dataUrl, km, author, callback, so) {
   var img = new Image();
   img.onload = function() {
     var canvas = document.createElement('canvas');
@@ -4342,28 +4373,15 @@ function burnInMetadata(dataUrl, km, author, callback) {
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     var dnes = new Date().toLocaleDateString('cs-CZ');
-    var line1 = 'km ' + (km || '-') + '   •   ' + dnes;
-    var line2 = author || '';
-    var fontSize = Math.max(20, Math.round(img.width / 40));
-    ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
-    var pad = Math.round(fontSize * 0.6);
-    var lineH = Math.round(fontSize * 1.45);
-    var textW = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width);
-    var boxW = textW + pad * 2;
-    var boxH = lineH * 2 + pad;
-    var boxX = img.width - boxW - pad;
-    var boxY = img.height - boxH - pad;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    if(ctx.roundRect) { ctx.beginPath(); ctx.roundRect(boxX, boxY, boxW, boxH, 6); ctx.fill(); }
-    else { ctx.fillRect(boxX, boxY, boxW, boxH); }
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
-    ctx.fillText(line1, boxX + pad, boxY + lineH * 0.85);
-    ctx.font = fontSize + 'px Arial, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.fillText(line2, boxX + pad, boxY + lineH * 1.88);
+    var soLbl = _soStampLabel(so);
+    var lines = [];
+    if(soLbl) lines.push({ t: soLbl, bold: true });
+    lines.push({ t: 'km ' + (km || '-') + '   •   ' + dnes, bold: true });
+    if(author) lines.push({ t: author, bold: false });
+    _drawStampBox(ctx, img, lines);
     callback(canvas.toDataURL('image/jpeg', 0.88));
   };
+  img.onerror = function(){ callback(dataUrl); };  // při selhání vrať beze změny (ať se fronta nezasekne)
   img.src = dataUrl;
 }
 
@@ -4407,7 +4425,7 @@ function uploadPhotosToGitHub(items, onProgress, onDone, meta) {
       });
     }
     if(meta && (meta.km || meta.author)) {
-      burnInMetadata(src, meta.km, meta.author, doUpload);
+      burnInMetadata(src, meta.km, meta.author, doUpload, meta && meta.so);
     } else { doUpload(src); }
   }
   next();
@@ -4807,7 +4825,7 @@ function preparePhotoBlobForDownload(item, opts) {
         return new Promise(function(resolve){
           burnInMetadataWithDate(dataUrl, item.km || '-', item.author || '', d, function(stampedDataUrl){
             resolve(continueWithExif(stampedDataUrl));
-          });
+          }, item.so);
         });
       }
       return continueWithExif(dataUrl);
@@ -4819,7 +4837,7 @@ function preparePhotoBlobForDownload(item, opts) {
 function srcOrDataUrl(x) { return x; }
 
 // Varianta burnInMetadata s explicitním datem (ne new Date()). Razítko ukáže datum pořízení.
-function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback) {
+function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so) {
   var img = new Image();
   img.onload = function() {
     var canvas = document.createElement('canvas');
@@ -4828,26 +4846,12 @@ function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback) {
     ctx.drawImage(img, 0, 0);
     var dStr = dateObj.toLocaleDateString('cs-CZ');
     var _kmlbl = (km && /\d/.test(km)) ? ('km ' + km) : (km || '-');   // text (ZS…) bez „km"
-    var line1 = _kmlbl + '   •   ' + dStr;
-    var line2 = author || '';
-    var fontSize = Math.max(20, Math.round(img.width / 40));
-    ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
-    var pad = Math.round(fontSize * 0.6);
-    var lineH = Math.round(fontSize * 1.45);
-    var textW = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width);
-    var boxW = textW + pad * 2;
-    var boxH = lineH * 2 + pad;
-    var boxX = img.width - boxW - pad;
-    var boxY = img.height - boxH - pad;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    if(ctx.roundRect) { ctx.beginPath(); ctx.roundRect(boxX, boxY, boxW, boxH, 6); ctx.fill(); }
-    else { ctx.fillRect(boxX, boxY, boxW, boxH); }
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
-    ctx.fillText(line1, boxX + pad, boxY + lineH * 0.85);
-    ctx.font = fontSize + 'px Arial, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.fillText(line2, boxX + pad, boxY + lineH * 1.88);
+    var soLbl = _soStampLabel(so);
+    var lines = [];
+    if(soLbl) lines.push({ t: soLbl, bold: true });
+    lines.push({ t: _kmlbl + '   •   ' + dStr, bold: true });
+    if(author) lines.push({ t: author, bold: false });
+    _drawStampBox(ctx, img, lines);
     callback(canvas.toDataURL('image/jpeg', 0.9));
   };
   img.onerror = function(){ callback(dataUrl); }; // při selhání vrátí beze změny
@@ -6384,7 +6388,7 @@ function _processPhotoQueue(){
         });
       }, 500);
     });
-  });
+  }, meta.so);
 }
 
 function ppAnswer(yes) {
@@ -6578,6 +6582,7 @@ function submitLibImport(){
     var dObj = new Date(it.date+'T12:00:00'); if(isNaN(dObj.getTime())) dObj = new Date();
     var kmDisp = it.km||'';
     var realKm = libParseKm(it.km);
+    var soVal = (realKm!=null ? libSoForKm(realKm) : '');   // do razítka jen skutečné SO (ne volný text)
     compressImage(it.dataUrl, function(compressed){
       burnInMetadataWithDate(compressed, kmDisp||'-', author, dObj, function(stamped){
         var fnOrig='standalone/foto_'+t+'_o.jpg', fnStamp='standalone/foto_'+t+'_s.jpg';
@@ -6606,7 +6611,7 @@ function submitLibImport(){
             });
           }, 500);
         });
-      });
+      }, soVal);
     });
   }
   processOne(0);
