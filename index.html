@@ -1289,6 +1289,9 @@ document.addEventListener('touchend', function(e){
     <button onclick="scaleDroneEdit(1.064)" title="Zvětšit" style="background:var(--panel2);color:var(--text);border:none;border-radius:9px;padding:9px 16px;font-size:18px;font-weight:700;cursor:pointer;min-height:44px;">➕</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
+    <button id="btn-drone-blackkey" onclick="toggleDroneBlackKey()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px;">⬛→▢ Odstranit černé pozadí</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
     <span style="font-size:12px;color:var(--text2);">Datum snímků</span>
     <input id="drone-date" type="date" style="padding:8px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
   </div>
@@ -3676,6 +3679,8 @@ function editExistingDrone(key){
   if(!canDelete(r.ownerUid)){ showToast('Upravovat může jen autor nebo koordinátor', 2500); return; }
   if(droneEditOverlay) cancelDroneOverlay();
   _droneEditKey = key;
+  _droneSrcOriginal = null; _droneBlackKeyed = false;
+  var _bk = document.getElementById('btn-drone-blackkey'); if(_bk) _bk.style.display = 'none';  // re-edit jen posun, obrázek se nepřeukládá
   var corners = r.corners.map(function(c){ return L.latLng(c[0], c[1]); });
   try {
     droneEditOverlay = L.distortableImageOverlay(r.url, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
@@ -3933,6 +3938,8 @@ function _placeDroneWith(dataUrl, center, gps, aspect){
   }
   document.getElementById('drone-opacity').value = 70;
   document.getElementById('drone-edit-status').textContent = '';
+  _droneSrcOriginal = null; _droneBlackKeyed = false; _updateBlackKeyBtn();  // nový snímek → reset keyování
+  var _bk = document.getElementById('btn-drone-blackkey'); if(_bk) _bk.style.display = '';  // u nového snímku keying nabídni
   var dt = document.getElementById('drone-date'); if(dt && !dt.value) dt.value = new Date().toISOString().slice(0,10);
   // počkat na vykreslení snímku, pak přidat rohové body (potřebují _reset s _image)
   setTimeout(function(){ addDroneEditHandles(); }, 300);
@@ -3941,10 +3948,80 @@ function _placeDroneWith(dataUrl, center, gps, aspect){
 function setDroneEditOpacity(val){
   if(droneEditOverlay){ try { droneEditOverlay.setOpacity(val/100); } catch(e){} }
 }
+
+// ── Odstranění černého pozadí (JPEG ortofoto s černým okrajem) ──
+// Flood-fill od okrajů: průhledné udělá jen SOUVISLE černé pixely od kraje (nodata rámeček).
+// Tmavý asfalt uvnitř zůstane (je světlejší než práh A není u kraje obklopen jen černou).
+var _droneSrcOriginal = null;   // dataURL před keyováním (pro přepnutí zpět)
+var _droneBlackKeyed = false;
+function keyOutBlackBorder(dataUrl, thr, cb){
+  var img = new Image();
+  img.onload = function(){
+    var w = img.naturalWidth, h = img.naturalHeight;
+    var maxPx = 2400;   // omez práci/velikost (ukládáme stejně do ~2600 px PNG)
+    if(w > maxPx || h > maxPx){ if(w >= h){ h = Math.round(h*maxPx/w); w = maxPx; } else { w = Math.round(w*maxPx/h); h = maxPx; } }
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+    var id, data;
+    try { id = ctx.getImageData(0,0,w,h); data = id.data; } catch(e){ cb(null); return; }
+    var N = w*h, visited = new Uint8Array(N), stack = [];
+    function isDark(i){ var o=i*4; return Math.max(data[o],data[o+1],data[o+2]) <= thr; }
+    function pushIf(i){ if(!visited[i]){ visited[i]=1; if(isDark(i)) stack.push(i); } }
+    for(var x=0;x<w;x++){ pushIf(x); pushIf((h-1)*w + x); }
+    for(var y=0;y<h;y++){ pushIf(y*w); pushIf(y*w + (w-1)); }
+    while(stack.length){
+      var i = stack.pop();
+      data[i*4+3] = 0;                       // průhledné
+      var px = i % w, py = (i - px)/w;
+      if(px>0)   pushIf(i-1);
+      if(px<w-1) pushIf(i+1);
+      if(py>0)   pushIf(i-w);
+      if(py<h-1) pushIf(i+w);
+    }
+    ctx.putImageData(id, 0, 0);
+    try { cb(c.toDataURL('image/png')); } catch(e){ cb(null); }
+  };
+  img.onerror = function(){ cb(null); };
+  img.src = dataUrl;
+}
+function _updateBlackKeyBtn(){
+  var b = document.getElementById('btn-drone-blackkey'); if(!b) return;
+  if(_droneBlackKeyed){ b.textContent = '↩︎ Vrátit černé pozadí'; b.style.borderColor = '#27ae60'; b.style.color = '#27ae60'; }
+  else { b.textContent = '⬛→▢ Odstranit černé pozadí'; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text)'; }
+}
+// Znovu vykreslí editační overlay s jiným zdrojem (zachová rohy + průhlednost + úchyty)
+function _reloadDroneOverlaySrc(dataUrl){
+  if(!droneEditOverlay) return;
+  var corners = droneEditOverlay.getCorners();
+  var op = (parseInt((document.getElementById('drone-opacity')||{}).value,10) || 70) / 100;
+  clearDroneEditHandles();
+  try { map.removeLayer(droneEditOverlay); } catch(e){}
+  droneEditOverlay = L.distortableImageOverlay(dataUrl, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
+  try { droneEditOverlay.setOpacity(op); } catch(e){}
+  setTimeout(function(){ addDroneEditHandles(); }, 250);
+}
+function toggleDroneBlackKey(){
+  if(!droneEditOverlay){ return; }
+  if(_droneBlackKeyed){
+    if(_droneSrcOriginal) _reloadDroneOverlaySrc(_droneSrcOriginal);
+    _droneBlackKeyed = false; _updateBlackKeyBtn(); return;
+  }
+  var cur = droneEditOverlay.getElement ? droneEditOverlay.getElement().src : null;
+  if(!cur){ showToast('Chybí obrázek', 2000); return; }
+  if(!_droneSrcOriginal) _droneSrcOriginal = cur;
+  showToast('⏳ Odstraňuji černé pozadí…', 1500);
+  keyOutBlackBorder(_droneSrcOriginal, 30, function(out){
+    if(!out){ showToast('Nepodařilo se zpracovat obrázek', 2500); return; }
+    _reloadDroneOverlaySrc(out);
+    _droneBlackKeyed = true; _updateBlackKeyBtn();
+    showToast('✅ Černé pozadí průhledné – ulož pro tým', 2500);
+  });
+}
 function cancelDroneOverlay(){
   clearDroneEditHandles();
   if(droneEditOverlay){ try { map.removeLayer(droneEditOverlay); } catch(e){} droneEditOverlay = null; }
   _droneEditKey = null;
+  _droneSrcOriginal = null; _droneBlackKeyed = false; _updateBlackKeyBtn();
   var bar = document.getElementById('drone-edit-bar'); if(bar) bar.style.display = 'none';
   renderActiveDroneDate();   // vrať statické snímky aktivní vrstvy (po úpravě/zrušení)
 }
