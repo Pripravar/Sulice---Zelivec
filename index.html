@@ -723,7 +723,7 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .gallery-tab { flex:1; padding:10px; text-align:center; font-size:13px; font-weight:700; color:var(--text2); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; }
 .gallery-tab.active { color:var(--accent2); border-bottom-color:var(--accent2); }
 #gallery-body { flex:1; overflow-y:auto; padding:10px; -webkit-overflow-scrolling:touch; }
-.gallery-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+.gallery-grid { display:grid; grid-template-columns:repeat(var(--gcols,3),1fr); gap:4px; }
 .gallery-item { position:relative; aspect-ratio:1; cursor:pointer; }
 .gallery-item img { width:100%; height:100%; object-fit:cover; border-radius:6px; display:block; }
 .gallery-item-meta { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.6); color:#fff; font-size:9px; border-radius:0 0 6px 6px; padding:2px 4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -6697,6 +6697,7 @@ function submitLibImport(){
 function openGallery() {
   document.getElementById('gallery-modal').classList.add('open');
   unlockViewport();
+  applyGalleryCols();
   renderGallery();
 }
 
@@ -6993,6 +6994,21 @@ function sortGalleryItems(items) {
 function setGallerySort(mode) {
   gallerySort = (mode === 'km') ? 'km' : 'date';
   renderGallery();
+}
+
+// ── Velikost náhledů v galerii (počet sloupců) – ukládá se do localStorage ──
+var galleryCols = parseInt(localStorage.getItem('galleryCols'), 10);
+if(isNaN(galleryCols) || galleryCols < 2 || galleryCols > 10) galleryCols = 3;
+function applyGalleryCols(){
+  var body = document.getElementById('gallery-body');
+  if(body) body.style.setProperty('--gcols', galleryCols);   // dědí se do všech .gallery-grid uvnitř
+  var ro = document.getElementById('gallery-cols-readout');
+  if(ro) ro.textContent = galleryCols + ' ve řadě';
+}
+function stepGalleryCols(d){
+  galleryCols = Math.max(2, Math.min(10, galleryCols + d));   // − = větší náhledy, + = menší/víc
+  localStorage.setItem('galleryCols', galleryCols);
+  applyGalleryCols();
 }
 
 // Přepínač klasická mřížka ↔ složky po stavebních objektech.
@@ -10542,6 +10558,16 @@ function copyDiaryExport(){
           <option value="date">📅 Datum pořízení (nejnovější první)</option>
           <option value="km">📏 Staničení (od začátku stavby)</option>
         </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🔍 Velikost náhledů</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button onclick="stepGalleryCols(-1)" title="Větší náhledy (méně ve řadě)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:40px;height:34px;font-size:18px;font-weight:700;cursor:pointer;">−</button>
+          <span id="gallery-cols-readout" style="flex:1;text-align:center;font-size:12px;color:var(--text2);">3 ve řadě</span>
+          <button onclick="stepGalleryCols(1)" title="Menší náhledy (víc ve řadě)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:40px;height:34px;font-size:18px;font-weight:700;cursor:pointer;">+</button>
+        </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
