@@ -1100,6 +1100,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-drone" onclick="startDroneOverlay()" title="Vložit foto z dronu na mapu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🛰️</button>
   <button id="btn-notes-evidence" onclick="openNotesEvidence()" title="Evidence poznámek" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📝</button>
+  <button id="btn-is" onclick="openInzenyrskeSite()" title="Inženýrské sítě (vyjádření správců)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔌</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
   <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span></div>
   <button id="btn-layers" onclick="toggleLayers()">☰ Vrstvy</button>
@@ -2550,6 +2551,16 @@ function openDocPanel(pages, realKm, startIdx) {
 }
 
 var currentPdfSrc = '';
+
+// Inženýrské sítě – vyjádření / situace správců sítí (statická PDF v repu pdf/IS/).
+// Přibyde-li další, jen přidej řádek do pole níž a nahraj PDF do pdf/IS/.
+function openInzenyrskeSite(){
+  var pages = [
+    {soubor:'pdf/IS/Situace_CEZd_0102462206.pdf', nazev:'Situační výkres ČEZ Distribuce (0102462206)', typ:'⚡ ČEZ Distribuce'},
+    {soubor:'pdf/IS/Situace_15346-26.pdf',        nazev:'Situační výkres (15346-26)',                 typ:'📄 Situace 15346-26'}
+  ];
+  openDocPanel(pages, null, 0);
+}
 
 function isMobile() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
