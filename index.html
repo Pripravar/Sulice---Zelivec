@@ -1224,6 +1224,9 @@ document.addEventListener('touchend', function(e){
     <label>📏 Měření (uložená)</label>
     <label class="toggle"><input type="checkbox" id="lyr-mereni" checked onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div class="layer-row" style="padding-top:0;">
+    <button onclick="openMereniEvidence()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer;width:100%;text-align:left;">📋 Evidence měření (seznam, úprava, mazání)</button>
+  </div>
   <h3>📷 Fotky</h3>
   <div class="layer-row">
     <label>🏷️ Razítko (km, datum, jméno)</label>
@@ -1260,7 +1263,7 @@ document.addEventListener('touchend', function(e){
 <div id="measure-save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;max-width:420px;width:100%;border:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
-      <div style="flex:1;font-size:15px;font-weight:700;color:#22d3ee;">💾 Uložit měření pro tým</div>
+      <div id="measure-save-title" style="flex:1;font-size:15px;font-weight:700;color:#22d3ee;">💾 Uložit měření pro tým</div>
       <button onclick="closeMeasureSave()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
     <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
@@ -1274,8 +1277,19 @@ document.addEventListener('touchend', function(e){
         <textarea id="measure-save-desc" rows="2" placeholder="poznámka k měření…" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);resize:vertical;"></textarea>
       </label>
       <div id="measure-save-status" style="font-size:12px;color:var(--text2);min-height:16px;"></div>
-      <button onclick="confirmMeasureSave()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;">Uložit</button>
+      <button id="measure-save-btn" onclick="confirmMeasureSave()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;">Uložit</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL: evidence uložených měření -->
+<div id="mereni-evidence-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:520px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:#22d3ee;">📏 Evidence měření</div>
+      <button onclick="closeMereniEvidence()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="mereni-evidence-list" style="padding:10px 12px;overflow-y:auto;"></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -3569,19 +3583,40 @@ function measureSave(){
   if(typ === 'plocha') info = 'Plocha: '+fmtArea(polygonAreaM2(measurePts))+' · obvod '+fmtLen(pathLenM(measurePts,true));
   else if(typ === 'obvod') info = 'Obvod: '+fmtLen(pathLenM(measurePts, measurePts.length>=3));
   else info = 'Vzdálenost: '+fmtLen(pathLenM(measurePts,false));
+  _mereniEditKey = null;
+  document.getElementById('measure-save-title').textContent = '💾 Uložit měření pro tým';
+  document.getElementById('measure-save-btn').textContent = 'Uložit';
   document.getElementById('measure-save-info').textContent = info + ' · bodů '+measurePts.length;
   document.getElementById('measure-save-name').value = '';
   document.getElementById('measure-save-desc').value = '';
   document.getElementById('measure-save-status').textContent = '';
   document.getElementById('measure-save-modal').style.display = 'flex';
 }
-function closeMeasureSave(){ document.getElementById('measure-save-modal').style.display = 'none'; }
+var _mereniEditKey = null;   // když je nastaveno, ukládací modal funguje jako editace názvu/popisu
+function closeMeasureSave(){
+  document.getElementById('measure-save-modal').style.display = 'none';
+  _mereniEditKey = null;
+  document.getElementById('measure-save-title').textContent = '💾 Uložit měření pro tým';
+  document.getElementById('measure-save-btn').textContent = 'Uložit';
+}
 function confirmMeasureSave(){
   var name = document.getElementById('measure-save-name').value.trim();
   var desc = document.getElementById('measure-save-desc').value.trim();
   var status = document.getElementById('measure-save-status');
   if(!name){ status.textContent = '⚠️ Vyplň název'; return; }
   if(!window.currentUser){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
+  // EDITACE existujícího měření: měníme jen název + popis (geometrie zůstává)
+  if(_mereniEditKey){
+    var er = mereniData[_mereniEditKey];
+    if(er && !canEditMereni(er)){ status.textContent = '⚠️ Upravit může jen autor nebo admin'; return; }
+    status.textContent = '⏳ Ukládám…';
+    db.ref('mereni/'+_mereniEditKey).update({ nazev: name, popis: desc }).then(function(){
+      closeMeasureSave();
+      showToast('✅ Měření upraveno', 1800);
+      if(document.getElementById('mereni-evidence-modal').style.display === 'flex') _renderMereniEvidence();
+    }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba úpravy'); });
+    return;
+  }
   if(measurePts.length < 2){ status.textContent = '⚠️ Málo bodů'; return; }
   if(measureType === 'plocha' && measurePts.length < 3){ status.textContent = '⚠️ Plocha potřebuje ≥3 body'; return; }
   var typ = measureType;
@@ -3618,6 +3653,9 @@ function loadMereni(){
         if(!r || !r.body || r.body.length < 2) return;
         renderSavedMereni(k, r);
       });
+      // Pokud je otevřená evidence, obnov seznam (po smazání/úpravě i z jiného telefonu)
+      var em = document.getElementById('mereni-evidence-modal');
+      if(em && em.style.display === 'flex') _renderMereniEvidence();
     }, function(err){ console.warn('loadMereni:', err && err.message); });
   } catch(e){ console.warn('loadMereni výjimka:', e); }
 }
@@ -3631,8 +3669,9 @@ function mereniPopupHtml(key, r){
     (r.popis ? ('<span style="color:#888;">'+escapeHtml(r.popis)+'</span><br>') : '')+
     meta+'<br>'+
     '<span style="font-size:11px;color:#888;">'+escapeHtml(r.author||'')+'</span>';
-  if(canDelete(r.ownerUid)){
-    html += '<br><button onclick="deleteMereni(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Smazat</button>';
+  if(canEditMereni(r)){
+    html += '<br><button onclick="editMereni(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Upravit</button>'+
+            '<button onclick="deleteMereni(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Smazat</button>';
   }
   return html + '</div>';
 }
@@ -3659,11 +3698,75 @@ function renderSavedMereni(key, r){
 function deleteMereni(key){
   var r = mereniData[key];
   if(!r) return;
-  if(!canDelete(r.ownerUid)){ showToast('Smazat může jen autor nebo koordinátor', 2500); return; }
+  if(!canEditMereni(r)){ showToast('Smazat může jen autor nebo admin', 2500); return; }
   if(!confirm('Smazat měření "'+(r.nazev||'')+'"?')) return;
   db.ref('mereni/'+key).remove().then(function(){
     showToast('Měření smazáno', 1500);
+    // evidence se obnoví sama přes on('value') v loadMereni
   }).catch(function(e){ showToast('Chyba mazání: '+(e && e.message||''), 3000); });
+}
+
+// ── Editace názvu/popisu uloženého měření (geometrie zůstává) ──
+function editMereni(key){
+  var r = mereniData[key]; if(!r) return;
+  if(!canEditMereni(r)){ showToast('Upravit může jen autor nebo admin', 2500); return; }
+  if(map) map.closePopup();
+  _mereniEditKey = key;
+  var info;
+  if(r.typ === 'plocha') info = 'Plocha: '+fmtArea(r.plochaM2||0)+' · obvod '+fmtLen(r.delkaM||0);
+  else if(r.typ === 'obvod') info = 'Obvod: '+fmtLen(r.delkaM||0);
+  else info = 'Vzdálenost: '+fmtLen(r.delkaM||0);
+  document.getElementById('measure-save-info').textContent = info + ' · bodů '+((r.body&&r.body.length)||0)+' (geometrie se nemění)';
+  document.getElementById('measure-save-name').value = r.nazev || '';
+  document.getElementById('measure-save-desc').value = r.popis || '';
+  document.getElementById('measure-save-status').textContent = '';
+  document.getElementById('measure-save-title').textContent = '✏️ Upravit měření';
+  document.getElementById('measure-save-btn').textContent = 'Uložit změny';
+  document.getElementById('measure-save-modal').style.display = 'flex';
+}
+
+// ── Evidence uložených měření (seznam + přiblížení + úprava + mazání) ──
+function openMereniEvidence(){ _renderMereniEvidence(); document.getElementById('mereni-evidence-modal').style.display = 'flex'; }
+function closeMereniEvidence(){ document.getElementById('mereni-evidence-modal').style.display = 'none'; }
+function _mereniTypeIcon(typ){ return typ === 'plocha' ? '🟦' : (typ === 'obvod' ? '⬡' : '📏'); }
+function _mereniValue(r){
+  if(r.typ === 'plocha') return fmtArea(r.plochaM2||0)+' (obvod '+fmtLen(r.delkaM||0)+')';
+  if(r.typ === 'obvod')  return 'obvod '+fmtLen(r.delkaM||0);
+  return fmtLen(r.delkaM||0);
+}
+function _renderMereniEvidence(){
+  var box = document.getElementById('mereni-evidence-list'); if(!box) return;
+  var keys = Object.keys(mereniData||{}).filter(function(k){ var r=mereniData[k]; return r && r.body && r.body.length>=2; });
+  keys.sort(function(a,b){ return (mereniData[b].ts||0)-(mereniData[a].ts||0); });
+  if(!keys.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px 10px;font-size:14px;">Zatím žádná uložená měření.<br>Změř něco přes 📏 a ulož pro tým.</div>'; return; }
+  var html = '';
+  keys.forEach(function(k){
+    var r = mereniData[k];
+    var d = r.ts ? new Date(r.ts).toLocaleDateString('cs-CZ') : '';
+    var can = canEditMereni(r);
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:18px;width:24px;text-align:center;flex-shrink:0;">'+_mereniTypeIcon(r.typ)+'</div>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(r.nazev||'Měření')+'</div>'+
+        '<div style="font-size:12px;color:#22d3ee;">'+_mereniValue(r)+'</div>'+
+        (r.popis?('<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(r.popis)+'</div>'):'')+
+        '<div style="font-size:11px;color:var(--text2);">'+escapeHtml(r.author||'')+(d?(' · '+d):'')+'</div>'+
+      '</div>'+
+      '<button onclick="mereniZoomTo(\''+k+'\')" title="Ukázat na mapě" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">📍</button>'+
+      (can?('<button onclick="editMereni(\''+k+'\')" title="Upravit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">✏️</button>'+
+            '<button onclick="deleteMereni(\''+k+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">🗑</button>'):'')+
+      '</div>';
+  });
+  box.innerHTML = html;
+}
+function mereniZoomTo(key){
+  var r = mereniData[key]; if(!r || !r.body || !r.body.length) return;
+  closeMereniEvidence();
+  if(typeof closeLayersPanel === 'function') closeLayersPanel();
+  try {
+    var b = L.latLngBounds(r.body.map(function(p){ return L.latLng(p[0], p[1]); }));
+    map.setView(b.getCenter(), Math.min(19, map.getBoundsZoom(b, false, L.point(60,60))), {animate:false});
+  } catch(e){}
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7059,6 +7162,14 @@ function canDelete(ownerUid) {
   if(!me) return false;                      // nepřihlášený nesmí mazat uid-ované záznamy
   if(ADMIN_UIDS.indexOf(me) !== -1) return true;
   return me === ownerUid;
+}
+// Měření: STRIKTNĚ jen autor + admin (na rozdíl od canDelete neuvolňuje záznamy bez ownerUid –
+// ty smí spravovat jen admin, ať nemůže cizí měření mazat kdokoliv).
+function canEditMereni(r) {
+  var me = window.currentUser ? window.currentUser.uid : null;
+  if(!me) return false;
+  if(ADMIN_UIDS.indexOf(me) !== -1) return true;     // admin smí cokoliv
+  return !!(r && r.ownerUid) && me === r.ownerUid;    // jinak jen vlastník
 }
 window.allUsers    = {};       // {uid: {uid,name,email,photo,fcmToken,lastSeen}}
 window.allTasks    = [];       // [taskObj, ...]
