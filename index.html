@@ -1223,7 +1223,7 @@ document.addEventListener('touchend', function(e){
   </div>
   <div class="layer-row">
     <label>📏 Měření (uložená)</label>
-    <label class="toggle"><input type="checkbox" id="lyr-mereni" checked onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
+    <label class="toggle"><input type="checkbox" id="lyr-mereni" onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
   </div>
   <h3>📷 Fotky</h3>
   <div class="layer-row">
@@ -3790,7 +3790,7 @@ function confirmMeasureSave(){
 
 // ── Načtení a vykreslení uložených měření ──
 function loadMereni(){
-  if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup().addTo(map);
+  if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup();   // default mimo mapu, zapne se přepínačem ve Vrstvách
   try {
     db.ref('mereni').on('value', function(snap){
       mereniData = snap.val() || {};
@@ -3803,7 +3803,7 @@ function loadMereni(){
 }
 // Vykreslí všechna uložená měření do vrstvy; právě upravované (geometrie) přeskočí.
 function renderAllSavedMereni(){
-  if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup().addTo(map);
+  if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup();   // default mimo mapu, zapne se přepínačem ve Vrstvách
   layerGroups.mereni.clearLayers();
   Object.keys(mereniData||{}).forEach(function(k){
     if(k === _mereniGeomEditKey) return;   // tenhle se právě upravuje v measureLayer
@@ -3823,7 +3823,8 @@ function mereniPopupHtml(key, r){
     meta+'<br>'+
     '<span style="font-size:11px;color:#888;">'+escapeHtml(r.author||'')+'</span>';
   if(canEditMereni(r)){
-    html += '<br><button onclick="editMereni(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Upravit</button>'+
+    html += '<br><button onclick="editMereni(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Název/popis</button>'+
+            '<button onclick="editMereniGeometry(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#22d3ee;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✥ Upravit body</button>'+
             '<button onclick="deleteMereni(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Smazat</button>';
   }
   return html + '</div>';
@@ -3844,7 +3845,7 @@ function renderSavedMereni(key, r){
   var labelVal = (r.typ === 'plocha') ? fmtArea(r.plochaM2||0) : fmtLen(r.delkaM||0);
   L.marker(pts[0], {interactive:false, icon: L.divIcon({
     className:'',
-    html:'<div style="background:rgba(14,116,144,.9);color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;transform:translate(8px,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5);">📏 '+escapeHtml(r.nazev||'')+'</div>',
+    html:'<div style="background:rgba(255,255,255,.92);color:#111;border:1px solid #0e7490;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;transform:translate(8px,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5);">📏 '+escapeHtml(r.nazev||'')+'</div>',
     iconSize:[0,0], iconAnchor:[0,0]
   })}).addTo(layerGroups.mereni);
 }
