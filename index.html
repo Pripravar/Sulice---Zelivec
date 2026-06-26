@@ -1253,12 +1253,12 @@ document.addEventListener('touchend', function(e){
     <button onclick="measureAddPoint()" style="background:#22d3ee;color:#0f3460;">➕ Bod</button>
     <button onclick="measureUndo()" style="background:var(--panel2);color:var(--text);">↩️ Zpět</button>
     <button onclick="measureClear()" style="background:var(--panel2);color:var(--text);">🗑️ Vyčistit</button>
-    <button onclick="measureSave()" style="background:var(--green);color:#0f3460;">💾 Uložit</button>
+    <button id="measure-hud-save" onclick="measureSave()" style="background:var(--green);color:#0f3460;">💾 Uložit</button>
     <button onclick="stopMeasureMode()" style="background:var(--accent);color:#fff;">✕ Konec</button>
   </div>
 </div>
 <!-- MODAL: uložení měření pro tým -->
-<div id="measure-save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+<div id="measure-save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3400;align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;max-width:420px;width:100%;border:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);">
       <div id="measure-save-title" style="flex:1;font-size:15px;font-weight:700;color:#22d3ee;">💾 Uložit měření pro tým</div>
@@ -1276,6 +1276,7 @@ document.addEventListener('touchend', function(e){
       </label>
       <div id="measure-save-status" style="font-size:12px;color:var(--text2);min-height:16px;"></div>
       <button id="measure-save-btn" onclick="confirmMeasureSave()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;">Uložit</button>
+      <button id="measure-edit-geom-btn" onclick="startEditMereniGeometry()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;min-height:46px;">✥ Upravit body na mapě</button>
     </div>
   </div>
 </div>
@@ -1623,6 +1624,9 @@ var DOCS_CHPR = [
   {kmOd:0.000, kmDo:2.880, soubor:PDF_BASE+'RDS/SO101/SO101_05_3_Char_rezy.pdf', nazev:'Charakteristické řezy SO 101 – list 3 (RDS)'},
   {kmOd:0.000, kmDo:2.880, soubor:PDF_BASE+'RDS/SO101/SO101_05_4_Char_rezy.pdf', nazev:'Charakteristické řezy SO 101 – list 4 (RDS)'},
   {kmOd:2.880, kmDo:4.605, soubor:PDF_BASE+'SO_101/D.101-5_Charakteristicke_pricne_rezy_PDPS_R2_06_2025.pdf', nazev:'Charakteristické příčné řezy SO 101 (PDPS, etapa 3)'},
+  {kmOd:0.700, kmDo:1.600, soubor:PDF_BASE+'RDS/SO102/SO102_05_1_Char_rezy.pdf', nazev:'Charakteristické řezy SO 102 – list 1'},
+  {kmOd:0.700, kmDo:1.600, soubor:PDF_BASE+'RDS/SO102/SO102_05_2_Char_rezy.pdf', nazev:'Charakteristické řezy SO 102 – list 2'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_05_Char_rezy.pdf',   nazev:'Charakteristické řezy SO 103'},
 ];
 
 // Kladečské plány (zatím jen SO 103 - okružní křižovatka)
@@ -1633,6 +1637,21 @@ var DOCS_KLAD = [
 // Technické zprávy (kontextové) - dají se zapnout zvlášť
 var DOCS_TZ = [
   {kmOd:0.000, kmDo:4.605, soubor:PDF_BASE+'RDS/SO101/SO101_01_TZ.pdf', nazev:'Technická zpráva SO 101'},
+  {kmOd:0.700, kmDo:1.600, soubor:PDF_BASE+'RDS/SO102/SO102_01_TZ.pdf', nazev:'Technická zpráva SO 102'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_01_TZ.pdf', nazev:'Technická zpráva SO 103'},
+];
+
+// Ostatní listy objektů (přechody, vrstevnice, vlečné křivky, spárořez, vytyčovací body) – RDS čistopis
+var DOCS_OST = [
+  {kmOd:0.000, kmDo:4.605, soubor:PDF_BASE+'RDS/SO101/SO101_07_Prechod_chodci.pdf',  nazev:'Situace přechodu pro chodce SO 101'},
+  {kmOd:0.000, kmDo:4.605, soubor:PDF_BASE+'RDS/SO101/SO101_08_Vytycovaci_body.pdf', nazev:'Vytyčovací body SO 101'},
+  {kmOd:0.700, kmDo:1.600, soubor:PDF_BASE+'RDS/SO102/SO102_07_Vytycovaci_body.pdf', nazev:'Vytyčovací body SO 102'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_07_Vrstevnicovy_plan.pdf', nazev:'Vrstevnicový plán SO 103'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_08_1_Vlecne_krivky.pdf', nazev:'Vlečné křivky SO 103 – list 1'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_08_2_Vlecne_krivky.pdf', nazev:'Vlečné křivky SO 103 – list 2'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_10_Sparorez.pdf',        nazev:'Spárořez SO 103'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_11_Vytycovaci_body.pdf', nazev:'Vytyčovací body SO 103'},
+  {kmOd:2.350, kmDo:2.460, soubor:PDF_BASE+'RDS/SO104/SO104_07_Vytycovaci_body.pdf', nazev:'Vytyčovací body SO 104'},
 ];
 
 // PROPUSTKY - GPS markery na mapě, kliknutí otevře PDF panel se VŠEMI výkresy daného SO
@@ -2454,42 +2473,89 @@ function onStaniceniClick(realKm) {
   openStaniceniPanel(realKm);
 }
 // Sestaví a otevře panel výkresů pro staničení (bez toastu/prstence — pro (pře)kreslení)
+// ── SO-centrický pohled: klik na staničení → VŠECHNY výkresy objektu(ů) v daném km ──
+// Z čísla SO v cestě k souboru (RDS/SO101, SO_101, SO_106/106_1…) vytáhne "101"…"107".
+function soOfSoubor(soubor){
+  var m = String(soubor||'').match(/SO[_ ]?0?(\d{3})/i);
+  return m ? m[1] : null;
+}
+// Kategorie statických výkresů + krátký štítek pro záložku. Pořadí = pořadí záložek v rámci SO.
+function _docCats(){
+  return [
+    {arr: (typeof DOCS_SITUACE!=='undefined'?DOCS_SITUACE:[]), typ:'📐 Situace'},
+    {arr: (typeof DOCS_PP!=='undefined'?DOCS_PP:[]),           typ:'📊 Pod. profil'},
+    {arr: (typeof DOCS_VPR!=='undefined'?DOCS_VPR:[]),         typ:'✂️ Vzor. řezy'},
+    {arr: (typeof DOCS_CHPR!=='undefined'?DOCS_CHPR:[]),       typ:'✂️ Char. řezy'},
+    {arr: (typeof DOCS_KLAD!=='undefined'?DOCS_KLAD:[]),       typ:'🧱 Klad. plán'},
+    {arr: (typeof DOCS_DZ!=='undefined'?DOCS_DZ:[]),           typ:'🚦 Sit. DZ'},
+    {arr: (typeof DOCS_OST!=='undefined'?DOCS_OST:[]),         typ:'📄 Další'},
+    {arr: (typeof DOCS_TZ!=='undefined'?DOCS_TZ:[]),           typ:'📋 Tech. zpráva'}
+  ];
+}
+var _soDrawings = null, _soSegments = null;
+function _ensureSoIndex(){
+  if(_soDrawings) return;
+  _soDrawings = {}; _soSegments = {};
+  var seen = {};   // {so: {soubor:1}} – ať se výkres nezdvojí (např. situace propustku je v DOCS i v PROPUSTKY)
+  function add(so, typ, nazev, soubor){
+    if(!so || !soubor) return;
+    seen[so] = seen[so] || {};
+    if(seen[so][soubor]) return;
+    seen[so][soubor] = 1;
+    (_soDrawings[so] = _soDrawings[so] || []).push({typ:typ, nazev:nazev, soubor:soubor});
+  }
+  _docCats().forEach(function(c){
+    (c.arr||[]).forEach(function(d){ add(soOfSoubor(d.soubor), c.typ, d.nazev, d.soubor); });
+  });
+  // Propustky (SO 104/105) drží kompletní sadu jen tady → doplň, co v DOCS chybí (vzor/char/nový stav)
+  if(typeof PROPUSTKY !== 'undefined'){
+    PROPUSTKY.forEach(function(p){
+      (p.vykresy||[]).forEach(function(v){ add(soOfSoubor(v.soubor), v.typ, v.nazev, v.soubor); });
+    });
+  }
+  // „Kde je objekt aktivní" = km-okna jeho SITUACÍ → podle nich se z km určuje SO.
+  (typeof DOCS_SITUACE!=='undefined'?DOCS_SITUACE:[]).forEach(function(d){
+    var so = soOfSoubor(d.soubor); if(!so) return;
+    (_soSegments[so] = _soSegments[so] || []).push([d.kmOd, d.kmDo]);
+  });
+}
+// Vrátí pole čísel SO, kterých se dané staničení týká (může jich být víc na přechodu objektů).
+function soAtKm(realKm){
+  _ensureSoIndex();
+  var out = [];
+  Object.keys(_soSegments).forEach(function(so){
+    if(_soSegments[so].some(function(s){ return realKm >= s[0]-1e-6 && realKm <= s[1]+1e-6; })) out.push(so);
+  });
+  if(!out.length){                          // mimo všechna okna → nejbližší objekt
+    var best=null, bestD=Infinity;
+    Object.keys(_soSegments).forEach(function(so){
+      _soSegments[so].forEach(function(s){
+        var dd = (realKm<s[0]) ? (s[0]-realKm) : (realKm>s[1] ? (realKm-s[1]) : 0);
+        if(dd<bestD){ bestD=dd; best=so; }
+      });
+    });
+    if(best) out.push(best);
+  }
+  out.sort();                                // 101,102,103… stabilní pořadí
+  return out;
+}
 function openStaniceniPanel(realKm) {
+  _ensureSoIndex();
+  var sos = soAtKm(realKm);
   var pages = [];
-  // Situace – VŠECHNY pasující SO listy (101, 102, 103, 104, 105, 106, 107)
-  findDocsForKm(DOCS_SITUACE, realKm).forEach(function(d, i) {
-    pages.push({soubor:d.soubor, nazev:d.nazev, typ:'📐 Situace'+(i?' '+(i+1):'')});
-  });
-  // Podélné profily – VŠECHNY pasující
-  findDocsForKm(DOCS_PP, realKm).forEach(function(d, i) {
-    pages.push({soubor:d.soubor, nazev:d.nazev, typ:'📊 Pod. profil'+(i?' '+(i+1):'')});
-  });
-  // Vzorové řezy – VŠECHNY pasující (typicky SO 101 + SO 102 nebo SO 103)
-  findDocsForKm(DOCS_VPR, realKm).forEach(function(d, i) {
-    pages.push({soubor:d.soubor, nazev:d.nazev, typ:'✂️ Vzor. řezy'+(i?' '+(i+1):'')});
-  });
-  // Char. řezy – z DOCS_CHPR (jeden pro celé SO 101)
-  if(typeof DOCS_CHPR !== 'undefined') {
-    findDocsForKm(DOCS_CHPR, realKm).forEach(function(d) {
-      pages.push({soubor:d.soubor, nazev:d.nazev, typ:'✂️ Char. řezy'});
+  // VŠECHNY výkresy každého dotčeného objektu (ne jen list daného km)
+  sos.forEach(function(so){
+    (_soDrawings[so] || []).forEach(function(d){
+      pages.push({soubor:d.soubor, nazev:d.nazev, typ:d.typ});
     });
-  }
-  // Kladečské plány – z DOCS_KLAD (zatím jen SO 103)
-  if(typeof DOCS_KLAD !== 'undefined') {
-    findDocsForKm(DOCS_KLAD, realKm).forEach(function(d, i) {
-      pages.push({soubor:d.soubor, nazev:d.nazev, typ:'🧱 Klad. plán'+(i?' '+(i+1):'')});
-    });
-  }
-  // Dopravní značení – VŠECHNY pasující
-  findDocsForKm(DOCS_DZ, realKm).forEach(function(d, i) {
-    pages.push({soubor:d.soubor, nazev:d.nazev, typ:'🚦 Sit. DZ'+(i?' '+(i+1):'')});
   });
-  // Technická zpráva – kontextová pro SO 101
-  if(typeof DOCS_TZ !== 'undefined') {
-    findDocsForKm(DOCS_TZ, realKm).forEach(function(d) {
-      pages.push({soubor:d.soubor, nazev:d.nazev, typ:'📋 Tech. zpráva'});
-    });
-  }
+  // Očísluj opakující se štítky (víc situací / řezů), ať jdou záložky rozlišit
+  var totals = {};
+  pages.forEach(function(p){ totals[p.typ] = (totals[p.typ]||0) + 1; });
+  var seenc = {};
+  pages.forEach(function(p){
+    if(totals[p.typ] > 1){ seenc[p.typ] = (seenc[p.typ]||0) + 1; p.typ = p.typ + ' ' + seenc[p.typ]; }
+  });
   // Výkresy nahrané z aplikace (i zneplatněné) – neplatnost vyřeší finalizeDocPages
   findVykresyForKm(realKm, true).forEach(function(d) {
     pages.push({soubor:(d.soubor||''), nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres'), _invalid: !!d.neplatny});
@@ -3445,6 +3511,8 @@ var measurePts  = [];      // [[lat,lng], …] aktuálně rozměřované
 var measureLayer = null;   // živá editační vrstva (mimo layerGroups)
 var mereniData = {};       // uložená měření z /mereni, keyed by push key
 var measureType = 'vzdalenost';  // 'vzdalenost' (lomená čára) | 'obvod' (uzavřený) | 'plocha'
+var _mereniGeomEditKey = null;   // když je nastaveno, měřicí režim upravuje BODY uloženého měření
+var _measureShapes = [];         // reference na čáru/výplň (kvůli živé aktualizaci při tažení bodu)
 
 function setMeasureType(t){
   measureType = t;
@@ -3523,6 +3591,9 @@ function stopMeasureMode(){
   window.removeEventListener('resize', positionMeasureCrosshair);
   if(measureLayer) measureLayer.clearLayers();
   measurePts = [];
+  _mereniGeomEditKey = null; _measureShapes = [];
+  var sb = document.getElementById('measure-hud-save'); if(sb) sb.textContent = '💾 Uložit';
+  renderAllSavedMereni();   // vrať zpět statické vykreslení všech měření
 }
 function measureAddPoint(){
   if(!measureMode) return;
@@ -3533,24 +3604,51 @@ function measureAddPoint(){
 }
 function measureUndo(){ if(measurePts.length){ measurePts.pop(); redrawMeasure(); } }
 function measureClear(){ measurePts = []; redrawMeasure(); }
+function _measureShapeLatLngs(){
+  var pts = measurePts;
+  return ((measureType==='plocha'||measureType==='obvod') && pts.length>=3) ? pts.concat([pts[0]]) : pts;
+}
+// Aktualizuje jen geometrii čar/výplně (bez rušení tažených bodů) – volá se při tahu vrcholu.
+function _refreshMeasureShapes(){
+  var pts = measurePts, ll = _measureShapeLatLngs();
+  _measureShapes.forEach(function(sh){
+    if(sh._isFill) sh.setLatLngs(pts); else sh.setLatLngs(ll);
+  });
+}
+function measureVertexIcon(){
+  return L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
+    html:'<div style="width:26px;height:26px;border-radius:50%;background:#22d3ee;border:3px solid #0f3460;box-shadow:0 1px 4px rgba(0,0,0,.6);"></div>' });
+}
 function redrawMeasure(){
   if(!measureLayer) measureLayer = L.layerGroup().addTo(map);
   measureLayer.clearLayers();
+  _measureShapes = [];
   var pts = measurePts;
   if(measureType === 'plocha' && pts.length >= 3){
-    // výplň + uzavřený obrys
-    L.polygon(pts, {color:'#0e7490', weight:1.5, fillColor:'#22d3ee', fillOpacity:0.15, interactive:false}).addTo(measureLayer);
-    L.polyline(pts.concat([pts[0]]), {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+    var fill = L.polygon(pts, {color:'#0e7490', weight:1.5, fillColor:'#22d3ee', fillOpacity:0.15, interactive:false}).addTo(measureLayer);
+    fill._isFill = true; _measureShapes.push(fill);
+    _measureShapes.push(L.polyline(pts.concat([pts[0]]), {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer));
   } else if(measureType === 'obvod' && pts.length >= 3){
-    // uzavřená lomená čára (bez výplně)
-    L.polyline(pts.concat([pts[0]]), {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+    _measureShapes.push(L.polyline(pts.concat([pts[0]]), {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer));
   } else if(pts.length >= 2){
-    // otevřená lomená čára (vzdálenost = spojnice bodů)
-    L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer);
+    _measureShapes.push(L.polyline(pts, {color:'#22d3ee', weight:4, opacity:0.95, interactive:false}).addTo(measureLayer));
   }
-  pts.forEach(function(p){
-    L.circleMarker(p, {radius:5, color:'#0f3460', weight:2, fillColor:'#22d3ee', fillOpacity:1, interactive:false}).addTo(measureLayer);
-  });
+  if(_mereniGeomEditKey){
+    // REŽIM ÚPRAVY BODŮ: každý vrchol je velký tahací bod
+    pts.forEach(function(p, i){
+      var mk = L.marker(p, {draggable:true, icon:measureVertexIcon(), zIndexOffset:1000}).addTo(measureLayer);
+      mk.on('drag', function(e){
+        var ll = e.target.getLatLng();
+        measurePts[i] = [ll.lat, ll.lng];
+        _refreshMeasureShapes(); updateMeasureReadout();
+      });
+      mk.on('dragend', function(){ redrawMeasure(); });   // dorovnej (přečísluje markery)
+    });
+  } else {
+    pts.forEach(function(p){
+      L.circleMarker(p, {radius:5, color:'#0f3460', weight:2, fillColor:'#22d3ee', fillOpacity:1, interactive:false}).addTo(measureLayer);
+    });
+  }
   updateMeasureReadout();
 }
 function updateMeasureReadout(){
@@ -3570,11 +3668,61 @@ function updateMeasureReadout(){
   }
 }
 
+// Vstup do úpravy bodů uloženého měření na mapě (tahací vrcholy)
+function editMereniGeometry(key){
+  var r = mereniData[key]; if(!r || !r.body || r.body.length < 2) return;
+  if(!canEditMereni(r)){ showToast('Upravit může jen autor nebo admin', 2500); return; }
+  if(map) map.closePopup();
+  if(placingMode) cancelPlacing();
+  measureMode = true;
+  _mereniGeomEditKey = key;
+  measureType = (r.typ === 'plocha') ? 'plocha' : (r.typ === 'obvod' ? 'obvod' : 'vzdalenost');
+  measurePts = r.body.map(function(p){ return [p[0], p[1]]; });
+  renderAllSavedMereni();   // skryj statickou verzi upravovaného měření (řídí se _mereniGeomEditKey)
+  if(!measureLayer) measureLayer = L.layerGroup().addTo(map);
+  measureLayer.clearLayers();
+  positionMeasureCrosshair();
+  document.getElementById('measure-crosshair').classList.add('open');
+  document.getElementById('measure-hud').classList.add('open');
+  var bbt = document.getElementById('btn-measure'); if(bbt) bbt.classList.add('active');
+  var pbt = document.getElementById('btn-place'); if(pbt) pbt.style.display = 'none';
+  var sb = document.getElementById('measure-hud-save'); if(sb) sb.textContent = '💾 Uložit body';
+  window.addEventListener('resize', positionMeasureCrosshair);
+  setMeasureType(measureType);
+  redrawMeasure();
+  try {
+    var bb = L.latLngBounds(measurePts.map(function(p){ return L.latLng(p[0],p[1]); }));
+    map.setView(bb.getCenter(), Math.min(19, map.getBoundsZoom(bb, false, L.point(80,80))), {animate:false});
+  } catch(e){}
+  showToast('✥ Táhni body pro úpravu · ➕ Bod přidá další · pak 💾 Uložit body', 4000);
+}
+// Uloží upravenou geometrii do existujícího měření (název/popis zůstávají)
+function saveMereniGeometry(){
+  var key = _mereniGeomEditKey, r = mereniData[key];
+  if(!r){ stopMeasureMode(); return; }
+  if(!canEditMereni(r)){ showToast('Upravit může jen autor nebo admin', 2500); return; }
+  var typ = measureType;
+  var delkaM = (typ === 'plocha') ? pathLenM(measurePts,true)
+             : (typ === 'obvod')  ? pathLenM(measurePts, measurePts.length>=3)
+             : pathLenM(measurePts,false);
+  var upd = {
+    body: measurePts.map(function(p){ return [p[0], p[1]]; }),
+    typ: typ, delkaM: delkaM,
+    plochaM2: (typ === 'plocha') ? polygonAreaM2(measurePts) : 0
+  };
+  db.ref('mereni/'+key).update(upd).then(function(){
+    showToast('✅ Body uloženy', 1800);
+    stopMeasureMode();
+  }).catch(function(e){ showToast('❌ '+(e && e.message || 'chyba ukládání'), 3000); });
+}
+
 // ── Uložení měření pro tým (/mereni) ──
 function measureSave(){
   if(!measureMode) return;
   if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
   if(measureType === 'plocha' && measurePts.length < 3){ showToast('Plocha potřebuje aspoň 3 body', 2500); return; }
+  // Úprava bodů existujícího měření → ulož geometrii, neotevírej okno s názvem
+  if(_mereniGeomEditKey){ saveMereniGeometry(); return; }
   if(!window.currentUser){ showToast('Pro uložení se přihlas (úkolníček → přihlášení)', 3500); return; }
   var typ = measureType;
   var info;
@@ -3584,6 +3732,7 @@ function measureSave(){
   _mereniEditKey = null;
   document.getElementById('measure-save-title').textContent = '💾 Uložit měření pro tým';
   document.getElementById('measure-save-btn').textContent = 'Uložit';
+  var gb0 = document.getElementById('measure-edit-geom-btn'); if(gb0) gb0.style.display = 'none';
   document.getElementById('measure-save-info').textContent = info + ' · bodů '+measurePts.length;
   document.getElementById('measure-save-name').value = '';
   document.getElementById('measure-save-desc').value = '';
@@ -3596,6 +3745,7 @@ function closeMeasureSave(){
   _mereniEditKey = null;
   document.getElementById('measure-save-title').textContent = '💾 Uložit měření pro tým';
   document.getElementById('measure-save-btn').textContent = 'Uložit';
+  var gb = document.getElementById('measure-edit-geom-btn'); if(gb) gb.style.display = 'none';
 }
 function confirmMeasureSave(){
   var name = document.getElementById('measure-save-name').value.trim();
@@ -3643,19 +3793,24 @@ function loadMereni(){
   if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup().addTo(map);
   try {
     db.ref('mereni').on('value', function(snap){
-      var v = snap.val() || {};
-      mereniData = v;
-      layerGroups.mereni.clearLayers();
-      Object.keys(v).forEach(function(k){
-        var r = v[k];
-        if(!r || !r.body || r.body.length < 2) return;
-        renderSavedMereni(k, r);
-      });
+      mereniData = snap.val() || {};
+      renderAllSavedMereni();
       // Pokud je otevřená evidence, obnov seznam (po smazání/úpravě i z jiného telefonu)
       var em = document.getElementById('mereni-evidence-modal');
       if(em && em.style.display === 'flex') _renderMereniEvidence();
     }, function(err){ console.warn('loadMereni:', err && err.message); });
   } catch(e){ console.warn('loadMereni výjimka:', e); }
+}
+// Vykreslí všechna uložená měření do vrstvy; právě upravované (geometrie) přeskočí.
+function renderAllSavedMereni(){
+  if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup().addTo(map);
+  layerGroups.mereni.clearLayers();
+  Object.keys(mereniData||{}).forEach(function(k){
+    if(k === _mereniGeomEditKey) return;   // tenhle se právě upravuje v measureLayer
+    var r = mereniData[k];
+    if(!r || !r.body || r.body.length < 2) return;
+    renderSavedMereni(k, r);
+  });
 }
 function mereniPopupHtml(key, r){
   var meta;
@@ -3714,13 +3869,20 @@ function editMereni(key){
   if(r.typ === 'plocha') info = 'Plocha: '+fmtArea(r.plochaM2||0)+' · obvod '+fmtLen(r.delkaM||0);
   else if(r.typ === 'obvod') info = 'Obvod: '+fmtLen(r.delkaM||0);
   else info = 'Vzdálenost: '+fmtLen(r.delkaM||0);
-  document.getElementById('measure-save-info').textContent = info + ' · bodů '+((r.body&&r.body.length)||0)+' (geometrie se nemění)';
+  document.getElementById('measure-save-info').textContent = info + ' · bodů '+((r.body&&r.body.length)||0);
   document.getElementById('measure-save-name').value = r.nazev || '';
   document.getElementById('measure-save-desc').value = r.popis || '';
   document.getElementById('measure-save-status').textContent = '';
   document.getElementById('measure-save-title').textContent = '✏️ Upravit měření';
   document.getElementById('measure-save-btn').textContent = 'Uložit změny';
+  var gb = document.getElementById('measure-edit-geom-btn'); if(gb) gb.style.display = 'block';  // u editace nabídni i úpravu bodů
   document.getElementById('measure-save-modal').style.display = 'flex';
+}
+// Z editačního okna → úprava bodů přímo na mapě
+function startEditMereniGeometry(){
+  var key = _mereniEditKey;
+  closeMeasureSave();
+  if(key) editMereniGeometry(key);
 }
 
 // ── Evidence uložených měření (seznam + přiblížení + úprava + mazání) ──
