@@ -1100,6 +1100,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-drone" onclick="startDroneOverlay()" title="Vložit foto z dronu na mapu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🛰️</button>
   <button id="btn-notes-evidence" onclick="openNotesEvidence()" title="Evidence poznámek" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📝</button>
+  <button id="btn-mereni-evidence" onclick="openMereniEvidence()" title="Evidence měření" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📐</button>
   <button id="btn-is" onclick="openInzenyrskeSite()" title="Inženýrské sítě (vyjádření správců)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔌</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
   <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span></div>
@@ -1223,9 +1224,6 @@ document.addEventListener('touchend', function(e){
   <div class="layer-row">
     <label>📏 Měření (uložená)</label>
     <label class="toggle"><input type="checkbox" id="lyr-mereni" checked onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
-  </div>
-  <div class="layer-row" style="padding-top:0;">
-    <button onclick="openMereniEvidence()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer;width:100%;text-align:left;">📋 Evidence měření (seznam, úprava, mazání)</button>
   </div>
   <h3>📷 Fotky</h3>
   <div class="layer-row">
