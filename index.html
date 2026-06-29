@@ -1377,7 +1377,7 @@ document.addEventListener('touchend', function(e){
     <button id="btn-pdf-next" onclick="docNav(1)">&#8250;</button>
     <button id="btn-pdf-zoom-out" onclick="pdfZoom(-1)" title="Zmenšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">−</button>
     <button id="btn-pdf-zoom-in"  onclick="pdfZoom(+1)" title="Zvětšit" style="display:none;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 6px;font-weight:700;">+</button>
-    <button onclick="if(currentPdfSrc)window.open(currentPdfSrc,'_blank')" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
+    <button onclick="openPdfExternal()" title="Otevřít v Safari s plnou lupou" style="background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:4px 6px;">↗</button>
     <button id="btn-add-vykres" onclick="openVykresUpload(window._docPanelKm)" title="Přidat výkres na tomto staničení" style="background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;padding:0 8px;flex-shrink:0;min-width:44px;min-height:44px;">➕</button>
     <button id="btn-pdf-invalidate" onclick="toggleInvalidateCurrentDoc()" title="Zneplatnit tento výkres" style="background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer;padding:4px 6px;flex-shrink:0;min-width:44px;min-height:44px;">🗄️</button>
     <button id="btn-pdf-fs" onclick="togglePdfFs()">⛶</button>
@@ -1549,6 +1549,7 @@ function _githubUrlToStoragePath(u){
 // i plnou starou URL (dual-read). Cachuje. Při selhání spadne na veřejnou Pages URL.
 function resolveFileUrl(path){
   if(!path) return Promise.resolve('about:blank');
+  if(/^data:/.test(path) || /^blob:/.test(path)) return Promise.resolve(path);   // lokální dataURL/blob → vrať rovnou
   if(!USE_PRIVATE_FILES) return Promise.resolve((/^https?:\/\//.test(path)) ? path : new URL(path, location.href).href);
   // už hotová Storage URL → vrať rovnou
   if(/^https?:\/\//.test(path) && path.indexOf('firebasestorage') !== -1) return Promise.resolve(path);
@@ -2098,7 +2099,7 @@ function openPRPanel(realKm, pr) {
   if(openWrap) openWrap.style.display='none';
   if(frameWrap) frameWrap.style.display='flex';
   var frame = document.getElementById('pdf-frame');
-  if(frame) frame.src = pdfFrameSrcFor(pr.soubor);
+  if(frame) setPdfFrameResolved(frame, pr.soubor);
 }
 
 // Azimut úseku mezi dvěma body (stupně, 0=N, 90=E)
@@ -2459,54 +2460,41 @@ function submitVykresUpload(){
   var reader = new FileReader();
   reader.onload = function(){
     var base64 = String(reader.result).replace(/^data:application\/pdf;base64,/, '').replace(/^data:[^;]+;base64,/, '');
-    user.getIdToken().then(function(idToken){
-      return fetch(UPLOAD_VYKRES_FN_URL, {
-        method:'POST',
-        headers:{ 'Authorization':'Bearer '+idToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ path: repoPath, content: base64 })
-      });
-    })
-    .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
-    .then(function(res){
-      if(res.ok && res.data && res.data.path){
-        // Zapsat odkaz do DB (soubor = relativní cesta pdf/SO_xxx/...)
-        var rec = {
-          so: so, kat: kat, kmOd: kmOd, kmDo: kmDo, nazev: nazev,
-          soubor: res.data.path, uid: user.uid,
-          author: (window.currentUser && window.currentUser.name) || user.displayName || '',
-          ts: Date.now()
-        };
-        var newRef = db.ref('vykresy').push(rec);
-        newRef.then(function(){
-          // Aktualizace: nahrazený výkres zneplatnit a propojit
-          if(_vykReplaceKey){
-            db.ref('vykresy/'+_vykReplaceKey).update({
-              neplatny:true, zneplatnilUid:user.uid, zneplatnenoTs:Date.now(), nahrazenoKym:newRef.key
-            });
-            _vykReplaceKey = null;
-            status.textContent = '✅ Nová verze nahrána, stará zneplatněna';
-            showToast('Výkres aktualizován', 2200);
-          } else {
-            status.textContent = '✅ Hotovo';
-            showToast('Výkres nahrán', 2000);
-          }
-          btn.disabled=false; btn.style.opacity='1'; btn.textContent='Nahrát výkres';
-          document.getElementById('vyk-file').value='';
-          document.getElementById('vyk-nazev').value='';
-          renderVykresList();
-        }).catch(function(e){
-          status.textContent='⚠️ Nahráno do repa, ale zápis odkazu selhal: '+(e&&e.message||'');
-          btn.disabled=false; btn.style.opacity='1';
-        });
-      } else {
-        var msg = (res.data && res.data.error) ? res.data.error : 'neznámá chyba';
-        status.textContent = '❌ '+msg;
+    var storagePath = 'pdf/' + repoPath;   // ukládá se rovnou do EU Storage; do DB jde CESTA
+    _privStorage().ref(storagePath).putString(base64, 'base64', { contentType:'application/pdf' })
+    .then(function(){
+      delete _fileUrlCache[storagePath];
+      var rec = {
+        so: so, kat: kat, kmOd: kmOd, kmDo: kmDo, nazev: nazev,
+        soubor: storagePath, uid: user.uid,
+        author: (window.currentUser && window.currentUser.name) || user.displayName || '',
+        ts: Date.now()
+      };
+      var newRef = db.ref('vykresy').push(rec);
+      newRef.then(function(){
+        if(_vykReplaceKey){
+          db.ref('vykresy/'+_vykReplaceKey).update({
+            neplatny:true, zneplatnilUid:user.uid, zneplatnenoTs:Date.now(), nahrazenoKym:newRef.key
+          });
+          _vykReplaceKey = null;
+          status.textContent = '✅ Nová verze nahrána, stará zneplatněna';
+          showToast('Výkres aktualizován', 2200);
+        } else {
+          status.textContent = '✅ Hotovo';
+          showToast('Výkres nahrán', 2000);
+        }
+        btn.disabled=false; btn.style.opacity='1'; btn.textContent='Nahrát výkres';
+        document.getElementById('vyk-file').value='';
+        document.getElementById('vyk-nazev').value='';
+        renderVykresList();
+      }).catch(function(e){
+        status.textContent='⚠️ Nahráno do Storage, ale zápis odkazu selhal: '+(e&&e.message||'');
         btn.disabled=false; btn.style.opacity='1';
-      }
+      });
     })
     .catch(function(e){
       console.error('uploadVykres exc:', e);
-      status.textContent = '❌ Síťová chyba uploadu';
+      status.textContent = '❌ '+((e&&(e.code||e.message))||'chyba uploadu');
       btn.disabled=false; btn.style.opacity='1';
     });
   };
@@ -2733,10 +2721,11 @@ function isPWA() {
 
 function openPdfExternal() {
   if(!currentPdfSrc) return;
-  // Vždy otevřít externě v Safari - tam dostane plný PDF prohlížeč
-  // s toolbarem, pinch-zoom a navigací mezi stranami.
-  // (V PWA módu na iOS jiný způsob neexistuje, iframe je vykreslen bez toolbarů.)
-  window.open(currentPdfSrc, '_blank');
+  // Otevři okno HNED (v rámci kliknutí, jinak popup-blocker), pak do něj dej vyřešený EU odkaz.
+  var w = window.open('', '_blank');
+  resolveFileUrl(currentPdfSrc).then(function(u){
+    if(w && !w.closed) w.location.href = u; else window.open(u, '_blank');
+  });
 }
 
 function renderDocPage(realKm) {
@@ -2788,7 +2777,7 @@ function renderDocPage(realKm) {
   if(openWrap)   openWrap.style.display   = 'none';
   if(frameWrap)  frameWrap.style.display  = 'flex';
   var frame = document.getElementById('pdf-frame');
-  if(frame) frame.src = pdfFrameSrcFor(p.soubor);
+  if(frame) setPdfFrameResolved(frame, p.soubor);
   if(zoomIn)  zoomIn.style.display  = 'none';
   if(zoomOut) zoomOut.style.display = 'none';
 }
@@ -2829,7 +2818,7 @@ function renderPdfOnCanvas(pdfUrl) {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   } catch(e){}
-  pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+  resolveFileUrl(pdfUrl).then(function(_u){ return pdfjsLib.getDocument(_u).promise; }).then(function(pdf) {
     if(token !== _pdfRenderToken) return;  // mezitím se otevřel jiný PDF
     var z = window._pdfZoom || 1.0;
     if(status) status.textContent = 'Stránek: ' + pdf.numPages + ' · Zoom ' + Math.round(z*100) + '% (použij +/− v hlavičce)';
@@ -3070,7 +3059,7 @@ function init() {
   loadMereni();
   loadDroneOverlays();
   // Situační vrstvy ukázat jen když existují data (overlay/situace_lines.json) – jinak skryté
-  fetch('overlay/situace_lines.json'+SIT_V, {method:'HEAD'}).then(function(r){ if(r.ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } }).catch(function(){});
+  resolveFileUrl('overlay/situace_lines.json').then(function(u){ return fetch(u, {method:'HEAD'}).then(function(r){ return r.ok; }).catch(function(){ return true; }); }).then(function(ok){ if(ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } });
   initLongPress();
   // Zastavit touch eventy z panelů aby nešly do Leaflet mapy
   ['pdf-panel','prop-panel'].forEach(function(id) {
@@ -4067,17 +4056,19 @@ function editExistingDrone(key){
   _droneSrcOriginal = null; _droneBlackKeyed = false;
   var _bk = document.getElementById('btn-drone-blackkey'); if(_bk) _bk.style.display = 'none';  // re-edit jen posun, obrázek se nepřeukládá
   var corners = r.corners.map(function(c){ return L.latLng(c[0], c[1]); });
-  try {
-    droneEditOverlay = L.distortableImageOverlay(r.url, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
-    try { droneEditOverlay.setOpacity(r.opacity != null ? r.opacity : 0.7); } catch(e){}
-  } catch(e){ showToast('Snímek se nepodařilo otevřít', 3000); _droneEditKey=null; return; }
   clearRenderedDrone();   // skryj statickou verzi, ať se nepřekrývají dva obrázky
   document.getElementById('drone-opacity').value = Math.round((r.opacity != null ? r.opacity : 0.7)*100);
   var dt = document.getElementById('drone-date'); if(dt) dt.value = r.datum || '';
   document.getElementById('drone-edit-status').textContent = '✏️ Úprava uloženého snímku — dolaď a 💾 ulož.';
   try { var b=L.latLngBounds(corners); map.setView(b.getCenter(), Math.min(19, map.getBoundsZoom(b,false,L.point(60,60))), {animate:false}); } catch(e){}
-  setTimeout(function(){ addDroneEditHandles(); }, 300);
   document.getElementById('drone-edit-bar').style.display = 'flex';
+  resolveFileUrl(r.url).then(function(u){   // r.url 'drone/...' → EU Storage
+    try {
+      droneEditOverlay = L.distortableImageOverlay(u, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
+      try { droneEditOverlay.setOpacity(r.opacity != null ? r.opacity : 0.7); } catch(e){}
+    } catch(e){ showToast('Snímek se nepodařilo otevřít', 3000); _droneEditKey=null; return; }
+    setTimeout(function(){ addDroneEditHandles(); }, 300);
+  });
 }
 
 // Zmenší obrázek na max maxPx (delší strana) a vrátí JPEG dataURL (kvalita q)
@@ -4496,37 +4487,25 @@ function saveDroneOverlay(){
   status.textContent = isPng ? '⏳ Nahrávám (PNG s průhledností)…' : '⏳ Zmenšuji a nahrávám…';
 
   function doUpload(base64, filename){
-    var user = (typeof fbAuth !== 'undefined' && fbAuth) ? fbAuth.currentUser : null;
-    if(!user){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
-    user.getIdToken().then(function(idToken){
-      return fetch(UPLOAD_DRONE_FN_URL, {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + idToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: filename, content: base64 })
-      });
-    })
-    .then(function(rsp){ return rsp.json().then(function(d){ return { ok: rsp.ok, data: d }; }); })
-    .then(function(res){
-      if(res.ok && res.data && res.data.path){
+    if(!firebase.auth().currentUser){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
+    var path = 'drone/' + filename;     // ukládá se rovnou do EU Storage; do DB jde CESTA
+    var ct = (filename.toLowerCase().slice(-4) === '.png') ? 'image/png' : 'image/jpeg';
+    _privStorage().ref(path).putString(base64, 'base64', { contentType: ct })
+      .then(function(){
+        delete _fileUrlCache[path];
         var rec = {
-          url: res.data.path,            // relativní 'drone/drone_xxx.(jpg|png)' (Pages)
-          corners: corners,
-          opacity: opacity,
-          datum: datum,                  // YYYY-MM-DD → vrstva
-          ownerUid: window.currentUser.uid,
-          author: window.currentUser.name || '',
-          ts: Date.now()
+          url: path,                     // 'drone/drone_xxx.(jpg|png)' – resolver přeloží na EU odkaz
+          corners: corners, opacity: opacity, datum: datum,
+          ownerUid: window.currentUser.uid, author: window.currentUser.name || '', ts: Date.now()
         };
-        db.ref('drone_overlays').push(rec).then(function(){
-          droneActiveDate = datum;       // hned zobrazit vrstvu, kam jsme přidali
-          showToast('✅ Dron uložen do vrstvy ' + droneFmtDatum(datum), 2200);
-          cancelDroneOverlay();
-        }).catch(function(e){ status.textContent = '⚠️ Nahráno, ale zápis selhal: '+(e && e.message||''); });
-      } else {
-        status.textContent = '❌ '+((res.data && res.data.error) || 'upload selhal');
-      }
-    })
-    .catch(function(e){ console.error('drone upload exc:', e); status.textContent = '❌ Síťová chyba uploadu'; });
+        return db.ref('drone_overlays').push(rec);
+      })
+      .then(function(){
+        droneActiveDate = datum;
+        showToast('✅ Dron uložen do vrstvy ' + droneFmtDatum(datum), 2200);
+        cancelDroneOverlay();
+      })
+      .catch(function(e){ console.error('drone upload exc:', e); status.textContent = '❌ '+((e && (e.code||e.message)) || 'upload selhal'); });
   }
 
   if(isPng){
@@ -4619,11 +4598,14 @@ function renderActiveDroneDate(fit){
 function renderSavedDrone(key, r){
   if(typeof L.distortableImageOverlay === 'undefined') return;
   var corners = r.corners.map(function(c){ return L.latLng(c[0], c[1]); });
-  try {
-    var ov = L.distortableImageOverlay(r.url, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
-    if(typeof ov.setOpacity === 'function'){ try { ov.setOpacity(r.opacity != null ? r.opacity : 0.7); } catch(e){} }
-    droneRendered.push(ov);
-  } catch(e){ console.warn('renderSavedDrone err:', e); }
+  resolveFileUrl(r.url).then(function(u){   // r.url je 'drone/...' → přes EU Storage resolver
+    try {
+      var ov = L.distortableImageOverlay(u, { corners: corners, editable:false, suppressToolbar:true }).addTo(map);
+      if(typeof ov.setOpacity === 'function'){ try { ov.setOpacity(r.opacity != null ? r.opacity : 0.7); } catch(e){} }
+      droneRendered.push(ov);
+      var sl = document.getElementById('drone-layer-opacity'); if(sl) setDroneLayerOpacity(sl.value);  // aplikuj opacity vrstvy i na async-vytvořený overlay
+    } catch(e){ console.warn('renderSavedDrone err:', e); }
+  });
   // 🛰️ marker na těžišti rohů s popupem (info + mazání)
   var clat = r.corners.reduce(function(s,c){return s+c[0];},0)/4;
   var clng = r.corners.reduce(function(s,c){return s+c[1];},0)/4;
@@ -4696,7 +4678,7 @@ function renderDroneEvidence(){
     var row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:10px;background:var(--panel2);border-radius:8px;padding:8px 10px;';
     var img = document.createElement('img');
-    img.src = r.url; img.loading = 'lazy';
+    setImgResolved(img, r.url); img.loading = 'lazy';   // dron náhled přes EU resolver
     img.style.cssText = 'width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer;';
     img.onclick = (function(dd, corners){ return function(){
       droneActiveDate = dd; rebuildDroneDateButtons(); renderActiveDroneDate(false);  // zobraz datum, bez globálního fitu
@@ -4742,7 +4724,7 @@ function setSituaceVisible(on){
   if(!on){ if(situaceLinesLayer && map.hasLayer(situaceLinesLayer)) map.removeLayer(situaceLinesLayer); return; }
   if(situaceLinesLayer){ situaceLinesLayer.addTo(map); return; }
   showToast('⏳ Načítám situaci…', 1500);
-  fetch('overlay/situace_lines.json'+SIT_V).then(function(r){return r.json();}).then(function(lines){
+  resolveFileUrl('overlay/situace_lines.json').then(function(u){ return fetch(u + (u.indexOf('?')!==-1 ? SIT_V.replace('?','&') : SIT_V)); }).then(function(r){return r.json();}).then(function(lines){
     situaceLinesLayer=L.layerGroup();
     var lc=L.canvas({padding:0.5});
     L.polyline(lines, {renderer:lc, color:'#1a1a1a', weight:0.7, opacity:1, interactive:false}).addTo(situaceLinesLayer);
@@ -4757,7 +4739,7 @@ function setPlochyVisible(on){
   if(situacePlochyLayer){ situacePlochyLayer.addTo(map); return; }
   _ensurePlochyPane();
   showToast('⏳ Načítám podbarvení…', 1500);
-  fetch('overlay/situace_plochy.json'+SIT_V).then(function(r){return r.json();}).then(function(groups){
+  resolveFileUrl('overlay/situace_plochy.json').then(function(u){ return fetch(u + (u.indexOf('?')!==-1 ? SIT_V.replace('?','&') : SIT_V)); }).then(function(r){return r.json();}).then(function(groups){
     situacePlochyLayer=L.layerGroup(); _situacePlochyShapes=[];
     var pc=L.canvas({pane:'plochyPane', padding:0.5}); var op=_plochyOp();
     Object.keys(groups).forEach(function(hex){
@@ -4908,29 +4890,16 @@ function burnInMetadata(dataUrl, km, author, callback, so) {
   img.src = dataUrl;
 }
 
+// Nahraje fotku poznámky/úkolu PŘÍMO do EU Storage. `filename` = 'foto_<ts>_<idx>.jpg'
+// → 'photos/foto_...'. Callback dostane CESTU (ne URL); resolver ji při zobrazení přeloží.
 function uploadPhotoToGitHub(dataUrl, filename, callback) {
+  if(!firebase.auth().currentUser){ showToast('❌ Nejsi přihlášen – foto se nenahrálo', 3000); callback(null); return; }
+  var path = 'photos/' + filename;
   var base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  var user = (typeof fbAuth !== 'undefined' && fbAuth) ? fbAuth.currentUser : null;
-  if(!user) { showToast('❌ Nejsi přihlášen – foto se nenahrálo', 3000); callback(null); return; }
-  user.getIdToken().then(function(idToken){
-    return fetch(UPLOAD_FN_URL, {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + idToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: filename, content: base64 })
-    });
-  })
-  .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
-  .then(function(res){
-    if(res.ok && res.data && res.data.download_url) {
-      callback(res.data.download_url);
-    } else {
-      console.error('Upload fn err:', JSON.stringify(res.data));
-      var msg = (res.data && res.data.error) ? res.data.error : 'neznámá chyba';
-      showToast('❌ Upload: ' + msg, 4000);
-      callback(null);
-    }
-  })
-  .catch(function(e){ console.error('Upload fn exc:', e); showToast('❌ Síťová chyba uploadu', 3000); callback(null); });
+  var ct = (dataUrl.indexOf('image/png') !== -1) ? 'image/png' : 'image/jpeg';
+  _privStorage().ref(path).putString(base64, 'base64', { contentType: ct })
+    .then(function(){ delete _fileUrlCache[path]; callback(path); })
+    .catch(function(e){ console.error('Storage upload err:', e); showToast('❌ Upload: '+((e && (e.code||e.message))||''), 4000); callback(null); });
 }
 
 function uploadPhotosToGitHub(items, onProgress, onDone, meta) {
@@ -5067,9 +5036,9 @@ function openNoteDetail(id) {
     var div = document.createElement('div');
     div.className = 'detail-photo';
         var img = document.createElement('img');
-    img.src = src;
+    setImgResolved(img, src);
     img.style.cssText = 'cursor:zoom-in;width:120px;height:90px;object-fit:cover;border-radius:8px;';
-    img.onclick = function(){ openPhotoFs(this.src); };
+    img.onclick = (function(u){ return function(){ openPhotoFs(u); }; })(src);
     var dlBtn = document.createElement('a');
     dlBtn.href = src;
     if(!src.startsWith('data:')){ dlBtn.target='_blank'; dlBtn.rel='noopener'; }
@@ -5767,7 +5736,7 @@ function renderEditPhotoPreviews() {
     var div = document.createElement('div');
     div.className = 'note-thumb';
     var img = document.createElement('img');
-    img.src = src;
+    setImgResolved(img, src);
     var btn = document.createElement('button');
     btn.className = 'note-thumb-del';
     btn.textContent = '✕';
@@ -6365,7 +6334,7 @@ function renderPropPage(idx) {
   var propZoomOut = document.getElementById('btn-prop-zoom-out');
   if(canvasWrap) canvasWrap.style.display = 'none';
   if(openWrap)   openWrap.style.display   = 'none';
-  if(frameEl)    { frameEl.style.display = 'flex'; frameEl.src = pdfFrameSrcFor(p.soubor); }
+  if(frameEl)    { frameEl.style.display = 'flex'; setPdfFrameResolved(frameEl, p.soubor); }
   if(propZoomIn)  propZoomIn.style.display  = 'none';
   if(propZoomOut) propZoomOut.style.display = 'none';
 }
@@ -6387,7 +6356,7 @@ function renderPropPdfOnCanvas(pdfUrl) {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   } catch(e){}
-  pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+  resolveFileUrl(pdfUrl).then(function(_u){ return pdfjsLib.getDocument(_u).promise; }).then(function(pdf) {
     if(token !== _propPdfRenderToken) return;
     var z = window._pdfZoom || 1.0;
     if(status) status.textContent = 'Stránek: ' + pdf.numPages + ' · Zoom ' + Math.round(z*100) + '%';
@@ -6509,9 +6478,9 @@ function loadPropNotes(propId) {
         photoRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;';
         n.photos.forEach(function(src, pi) {
           var img = document.createElement('img');
-          img.src = src;
+          setImgResolved(img, src);
           img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;cursor:pointer;';
-          img.onclick = function(){ window.open(src,'_blank'); };
+          img.onclick = (function(u){ return function(){ openPhotoFs(u); }; })(src);
           photoRow.appendChild(img);
         });
         div.appendChild(photoRow);
@@ -6597,7 +6566,7 @@ function openPropEdit(propId, key, note) {
     var wrap = document.createElement('div');
     wrap.style.cssText = 'position:relative;display:inline-block;';
     var img = document.createElement('img');
-    img.src = src;
+    setImgResolved(img, src);
     img.style.cssText = 'width:54px;height:54px;object-fit:cover;border-radius:4px;';
     var del = document.createElement('button');
     del.textContent = '✕';
@@ -8246,9 +8215,14 @@ function renderTaskDetail(t) {
   if(photosBox) {
     if(t.photos && t.photos.length > 0) {
       photosBox.style.display = 'flex';
-      photosBox.innerHTML = t.photos.map(function(url){
-        return '<img src="' + url + '" loading="lazy" onclick="openPhotoFs(\'' + url + '\')">';
-      }).join('');
+      photosBox.innerHTML = '';
+      t.photos.forEach(function(url){
+        var img = document.createElement('img');
+        img.loading = 'lazy';
+        setImgResolved(img, url);                                  // náhled přes EU resolver
+        img.onclick = (function(u){ return function(){ openPhotoFs(u, null, {url:u}); }; })(url);
+        photosBox.appendChild(img);
+      });
     } else {
       photosBox.style.display = 'none';
       photosBox.innerHTML = '';
@@ -10653,11 +10627,7 @@ function openKzpPdfInline(k){
     titleEl.textContent = ico + ' ' + t;
   }
   if(pdfView) pdfView.style.display = 'flex';
-  if(frame && typeof pdfFrameSrcFor === 'function') {
-    frame.src = pdfFrameSrcFor(k.pdfUrl);
-  } else if(frame) {
-    frame.src = k.pdfUrl;
-  }
+  if(frame) setPdfFrameResolved(frame, k.pdfUrl);
   window._kzpPdfOpen = true;
 }
 
