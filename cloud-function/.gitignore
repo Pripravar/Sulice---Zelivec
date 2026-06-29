@@ -1,0 +1,8 @@
+# NIKDY necommitovat servisní klíč Firebase (repo je veřejný!)
+serviceAccount.json
+*serviceAccount*.json
+node_modules/
+firebase-debug.log
+*.local
+# lokální zálohy DB z migrace
+db-backup-*.json

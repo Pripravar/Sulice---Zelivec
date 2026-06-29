@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://pripravar.github.io"],
+    "method": ["GET", "HEAD", "PUT", "POST"],
+    "responseHeader": ["Content-Type", "Content-Range", "Accept-Ranges", "Range", "Authorization", "x-goog-resumable"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -17,6 +17,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Plugin pro otáčení mapy dvěma prsty (touch rotate jako v Google Maps) -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
@@ -1225,6 +1226,14 @@ document.addEventListener('touchend', function(e){
     <label>📏 Měření (uložená)</label>
     <label class="toggle"><input type="checkbox" id="lyr-mereni" onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div class="layer-row" style="padding-top:0;">
+    <div style="display:flex;gap:12px;align-items:center;font-size:12px;color:var(--text2);flex-wrap:wrap;">
+      <span>Štítek:</span>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="mshow-nazev" checked onchange="setMereniShow('nazev',this.checked)"> Název</label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="mshow-vymera" checked onchange="setMereniShow('vymera',this.checked)"> Výměra</label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="mshow-datum" checked onchange="setMereniShow('datum',this.checked)"> Datum</label>
+    </div>
+  </div>
   <h3>📷 Fotky</h3>
   <div class="layer-row">
     <label>🏷️ Razítko (km, datum, jméno)</label>
@@ -1513,6 +1522,55 @@ var UPLOAD_DRONE_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.ne
 // Důvod: raw.githubusercontent.com servíruje PDF jako application/octet-stream
 // → iframe je nezobrazí. Pages servírují PDF jako application/pdf → iframe OK.
 var PDF_BASE = 'pdf/';
+
+// ══════════════════════════════════════════════════════════════════
+// SOUKROMÉ SOUBORY – překladač cesta → URL (Firebase Storage, jen pro přihlášené)
+// Fáze 0: zatím DORMANTNÍ. Dokud nejsou soubory ve Storage / pravidla nastavená,
+// `getDownloadURL` selže a vrátí se PŮVODNÍ veřejná Pages URL (dual-read fallback) →
+// appka jede dál beze změny. Call-sity se přepojují až ve Fázi A/B.
+// ══════════════════════════════════════════════════════════════════
+var USE_PRIVATE_FILES = true;        // hlavní vypínač (lze rychle vrátit na false)
+var _fileUrlCache = {};              // cesta → URL (nebo rozpracovaná Promise)
+var _fileFallbackHits = 0;          // počítadlo fallbacků (musí být 0 před Fází C)
+
+// Z plné GitHub URL (raw.githubusercontent / pages) udělá holou Storage cestu, jinak null.
+function _githubUrlToStoragePath(u){
+  try {
+    var m = String(u).match(/githubusercontent\.com\/[^\/]+\/[^\/]+\/[^\/]+\/(.+)$/);
+    if(m) return decodeURIComponent(m[1].split('?')[0]);
+    m = String(u).match(/pripravar\.github\.io\/Sulice---Zelivec\/(.+)$/i);
+    if(m) return decodeURIComponent(m[1].split('?')[0]);
+  } catch(e){}
+  return null;
+}
+// Vrátí Promise<URL>. Přijímá relativní cestu ('pdf/…','standalone/…','drone/…','overlay/…')
+// i plnou starou URL (dual-read). Cachuje. Při selhání spadne na veřejnou Pages URL.
+function resolveFileUrl(path){
+  if(!path) return Promise.resolve('about:blank');
+  if(!USE_PRIVATE_FILES) return Promise.resolve((/^https?:\/\//.test(path)) ? path : new URL(path, location.href).href);
+  // už hotová Storage URL → vrať rovnou
+  if(/^https?:\/\//.test(path) && path.indexOf('firebasestorage') !== -1) return Promise.resolve(path);
+  // plná stará GitHub URL → zkus ji namapovat na Storage cestu, jinak ji nech být
+  if(/^https?:\/\//.test(path)){
+    var sp = _githubUrlToStoragePath(path);
+    if(!sp){ return Promise.resolve(path); }
+    return resolveFileUrl(sp).catch(function(){ _fileFallbackHits++; return path; });
+  }
+  if(_fileUrlCache[path]) return Promise.resolve(_fileUrlCache[path]);
+  var pr;
+  try {
+    pr = firebase.storage().ref(path).getDownloadURL()
+      .then(function(u){ _fileUrlCache[path] = u; return u; })
+      .catch(function(){ _fileFallbackHits++; return new URL(path, location.href).href; });  // dual-read
+  } catch(e){
+    _fileFallbackHits++; pr = Promise.resolve(new URL(path, location.href).href);
+  }
+  _fileUrlCache[path] = pr;   // cachuj i rozpracovanou Promise (dedup paralelních volání)
+  return Promise.resolve(pr);
+}
+// Pohodlné wrappery – drží přepis call-sitů na jeden řádek.
+function setImgResolved(imgEl, path){ if(imgEl) resolveFileUrl(path).then(function(u){ imgEl.src = u; }); }
+function setPdfFrameResolved(frameEl, path){ if(frameEl) resolveFileUrl(path).then(function(u){ frameEl.src = pdfFrameSrcFor(u); }); }
 
 // ── BODY OSY TRASY (65 GPX bodů z mapy.cz, ZÚ Hlubočinka → KÚ Kamenice, ~5,0 km) ──
 var GPX_POINTS = [
@@ -1891,7 +1949,7 @@ function initMap() {
   map=L.map('map',{
     center:[49.917,14.580],
     zoom:14,
-    maxZoom:20,
+    maxZoom:23,
     zoomControl:true,
     // Otáčení mapy dvěma prsty (leaflet-rotate plugin) - jako v Google Maps
     rotate: true,
@@ -1901,11 +1959,13 @@ function initMap() {
   });
 
   var mUrl=function(type){return 'https://api.mapy.cz/v1/maptiles/'+type+'/256/{z}/{x}/{y}?apikey='+MAPY_API_KEY;};
-  baseLayers.outdoor=L.tileLayer(mUrl('outdoor'),{maxZoom:20,maxNativeZoom:20,attribution:'© Mapy.cz'});
-  baseLayers.basic  =L.tileLayer(mUrl('basic'),  {maxZoom:20,maxNativeZoom:20,attribution:'© Mapy.cz'});
-  baseLayers.aerial =L.tileLayer(mUrl('aerial'), {maxZoom:20,maxNativeZoom:20,attribution:'© Mapy.cz'});
+  // maxZoom:23 = digitální overzoom nad nativní úroveň dlaždic (maxNativeZoom) – kvůli detailu
+  // u dron snímků a měření; dlaždice se nad nativ přiškálují (rozmazanější), dron/katastr ostré.
+  baseLayers.outdoor=L.tileLayer(mUrl('outdoor'),{maxZoom:23,maxNativeZoom:20,attribution:'© Mapy.cz'});
+  baseLayers.basic  =L.tileLayer(mUrl('basic'),  {maxZoom:23,maxNativeZoom:20,attribution:'© Mapy.cz'});
+  baseLayers.aerial =L.tileLayer(mUrl('aerial'), {maxZoom:23,maxNativeZoom:20,attribution:'© Mapy.cz'});
   baseLayers.osm    =L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    {maxZoom:19,maxNativeZoom:19,attribution:'© OpenStreetMap'});
+    {maxZoom:23,maxNativeZoom:19,attribution:'© OpenStreetMap'});
   // OSM jako výchozí – Mapy.cz vyžaduje registraci domény na api.mapy.cz
   baseLayers.osm.addTo(map);
   currentBasemap='osm';
@@ -1917,7 +1977,7 @@ function initMap() {
     transparent: true,
     opacity: 0.6,
     attribution: '© ČÚzK',
-    maxZoom: 20,
+    maxZoom: 23,
     version: '1.3.0'
   });
 
@@ -2946,7 +3006,16 @@ function resetMapView() {
   if(!map) return;
   map.setView([49.917, 14.580], 14);
 }
-function toggleLayers(){document.getElementById('layers-panel').classList.toggle('open');}
+function toggleLayers(){
+  var open = document.getElementById('layers-panel').classList.toggle('open');
+  if(open) _syncMereniShowCheckboxes();   // ať zaškrtnutí štítků sedí na uloženou volbu
+}
+function _syncMereniShowCheckboxes(){
+  var n=document.getElementById('mshow-nazev'), v=document.getElementById('mshow-vymera'), d=document.getElementById('mshow-datum');
+  if(n) n.checked = !!mereniShow.nazev;
+  if(v) v.checked = !!mereniShow.vymera;
+  if(d) d.checked = !!mereniShow.datum;
+}
 function closeLayersPanel(){document.getElementById('layers-panel').classList.remove('open');}
 
 function toggleLayer(name,en){
@@ -3802,11 +3871,41 @@ function loadMereni(){
   } catch(e){ console.warn('loadMereni výjimka:', e); }
 }
 // Vykreslí všechna uložená měření do vrstvy; právě upravované (geometrie) přeskočí.
+// Co se ukazuje ve štítku měření (volitelně skrýt pro screenshoty). Default vše ZAP, pamatuje se.
+var mereniShow = (function(){
+  try { var s = JSON.parse(localStorage.getItem('mereniShow')||'{}');
+        return { nazev: s.nazev!==false, vymera: s.vymera!==false, datum: s.datum!==false }; }
+  catch(e){ return { nazev:true, vymera:true, datum:true }; }
+})();
+// Jednotlivá skrytá měření (klíče), pamatuje se napříč relacemi.
+var mereniHidden = (function(){ try { return JSON.parse(localStorage.getItem('mereniHidden')||'{}')||{}; } catch(e){ return {}; } })();
+
+function mereniVymera(r){ return (r.typ === 'plocha') ? fmtArea(r.plochaM2||0) : fmtLen(r.delkaM||0); }
+function mereniLabelText(r){
+  var parts = [];
+  if(mereniShow.nazev && r.nazev) parts.push(r.nazev);
+  if(mereniShow.vymera) parts.push(mereniVymera(r));
+  if(mereniShow.datum && r.ts) parts.push(new Date(r.ts).toLocaleDateString('cs-CZ'));
+  return parts.join(' · ');
+}
+function setMereniShow(field, on){
+  mereniShow[field] = !!on;
+  try { localStorage.setItem('mereniShow', JSON.stringify(mereniShow)); } catch(e){}
+  renderAllSavedMereni();
+}
+function toggleMereniHidden(key){
+  if(mereniHidden[key]) delete mereniHidden[key]; else mereniHidden[key] = 1;
+  try { localStorage.setItem('mereniHidden', JSON.stringify(mereniHidden)); } catch(e){}
+  renderAllSavedMereni();
+  if(document.getElementById('mereni-evidence-modal').style.display === 'flex') _renderMereniEvidence();
+}
+
 function renderAllSavedMereni(){
   if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup();   // default mimo mapu, zapne se přepínačem ve Vrstvách
   layerGroups.mereni.clearLayers();
   Object.keys(mereniData||{}).forEach(function(k){
     if(k === _mereniGeomEditKey) return;   // tenhle se právě upravuje v measureLayer
+    if(mereniHidden[k]) return;            // jednotlivě skryté měření
     var r = mereniData[k];
     if(!r || !r.body || r.body.length < 2) return;
     renderSavedMereni(k, r);
@@ -3841,13 +3940,15 @@ function renderSavedMereni(key, r){
   }
   shape.bindPopup(mereniPopupHtml(key, r));
   shape.addTo(layerGroups.mereni);
-  // Štítek s názvem na prvním bodě
-  var labelVal = (r.typ === 'plocha') ? fmtArea(r.plochaM2||0) : fmtLen(r.delkaM||0);
-  L.marker(pts[0], {interactive:false, icon: L.divIcon({
-    className:'',
-    html:'<div style="background:rgba(255,255,255,.92);color:#111;border:1px solid #0e7490;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;transform:translate(8px,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5);">📏 '+escapeHtml(r.nazev||'')+'</div>',
-    iconSize:[0,0], iconAnchor:[0,0]
-  })}).addTo(layerGroups.mereni);
+  // Štítek na prvním bodě – volitelně název / výměra / datum (viz mereniShow). Když nic → bez štítku.
+  var lbl = mereniLabelText(r);
+  if(lbl){
+    L.marker(pts[0], {interactive:false, icon: L.divIcon({
+      className:'',
+      html:'<div style="background:rgba(255,255,255,.92);color:#111;border:1px solid #0e7490;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;transform:translate(8px,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5);">📏 '+escapeHtml(lbl)+'</div>',
+      iconSize:[0,0], iconAnchor:[0,0]
+    })}).addTo(layerGroups.mereni);
+  }
 }
 function deleteMereni(key){
   var r = mereniData[key];
@@ -3905,7 +4006,8 @@ function _renderMereniEvidence(){
     var r = mereniData[k];
     var d = r.ts ? new Date(r.ts).toLocaleDateString('cs-CZ') : '';
     var can = canEditMereni(r);
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border);">'+
+    var hidden = !!mereniHidden[k];
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border);'+(hidden?'opacity:.5;':'')+'">'+
       '<div style="font-size:18px;width:24px;text-align:center;flex-shrink:0;">'+_mereniTypeIcon(r.typ)+'</div>'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(r.nazev||'Měření')+'</div>'+
@@ -3913,6 +4015,7 @@ function _renderMereniEvidence(){
         (r.popis?('<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(r.popis)+'</div>'):'')+
         '<div style="font-size:11px;color:var(--text2);">'+escapeHtml(r.author||'')+(d?(' · '+d):'')+'</div>'+
       '</div>'+
+      '<button onclick="toggleMereniHidden(\''+k+'\')" title="'+(hidden?'Zobrazit na mapě':'Skrýt na mapě')+'" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">'+(hidden?'🙈':'👁️')+'</button>'+
       '<button onclick="mereniZoomTo(\''+k+'\')" title="Ukázat na mapě" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">📍</button>'+
       (can?('<button onclick="editMereni(\''+k+'\')" title="Upravit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">✏️</button>'+
             '<button onclick="deleteMereni(\''+k+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">🗑</button>'):'')+
@@ -4119,6 +4222,8 @@ function clearDroneEditHandles(){
   droneCornerMarkers = [];
   if(droneCenterMarker){ try{ map.removeLayer(droneCenterMarker); }catch(e){} droneCenterMarker = null; }
   if(droneRotateMarker){ try{ map.removeLayer(droneRotateMarker); }catch(e){} droneRotateMarker = null; }
+  _detachDroneImageDrag();
+  try { map.dragging.enable(); } catch(e){}   // pojistka, kdyby tah skončil mimo up
 }
 function addDroneEditHandles(){
   clearDroneEditHandles();
@@ -4182,6 +4287,58 @@ function addDroneEditHandles(){
     if(droneCenterMarker) droneCenterMarker.setLatLng(center);
     // rotační bod zůstává, kde ho uživatel táhne
   });
+  _attachDroneImageDrag();   // tah ZA JAKOUKOLI ČÁST obrázku = posun celku (klíčové u velkých snímků)
+}
+
+// Posun celého dron snímku tahem za libovolné místo obrázku (mimo úchyty). Po dobu tahu vypne posun mapy.
+var _droneImgDragBound = null;
+function _attachDroneImageDrag(){
+  _detachDroneImageDrag();
+  if(!droneEditOverlay || !droneEditOverlay.getElement) return;
+  var img = droneEditOverlay.getElement(); if(!img) return;
+  img.style.cursor = 'move';
+  img.style.pointerEvents = 'auto';   // ať obrázek chytá tah (úchyty mají vyšší z-index, ty přebijou)
+  var dragging = false, last = null;
+  function ptLL(e){
+    var t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    return map.containerPointToLatLng(map.mouseEventToContainerPoint(t));
+  }
+  function down(e){
+    if(!droneEditOverlay) return;
+    if(e.touches && e.touches.length > 1){ if(dragging){ dragging=false; try{map.dragging.enable();}catch(_){} } return; }  // 2 prsty = pinch → nech mapě
+    dragging = true; last = ptLL(e);
+    map.dragging.disable();
+    L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e);
+  }
+  function move(e){
+    if(!dragging || !droneEditOverlay) return;
+    if(e.touches && e.touches.length > 1){ dragging=false; try{map.dragging.enable();}catch(_){} return; }  // přišel druhý prst → pinch-zoom
+    var ll = ptLL(e);
+    var dLat = ll.lat - last.lat, dLng = ll.lng - last.lng; last = ll;
+    for(var i=0;i<4;i++){ droneEditOverlay._corners[i] = L.latLng(droneEditOverlay._corners[i].lat + dLat, droneEditOverlay._corners[i].lng + dLng); }
+    droneRerender(droneEditOverlay); droneSyncHandles();
+    L.DomEvent.preventDefault(e);
+  }
+  function up(){ if(dragging){ dragging = false; map.dragging.enable(); } }
+  L.DomEvent.on(img, 'mousedown', down);
+  L.DomEvent.on(img, 'touchstart', down);
+  L.DomEvent.on(document, 'mousemove', move);
+  L.DomEvent.on(document, 'touchmove', move, { passive:false });
+  L.DomEvent.on(document, 'mouseup', up);
+  L.DomEvent.on(document, 'touchend', up);
+  _droneImgDragBound = { img:img, down:down, move:move, up:up };
+}
+function _detachDroneImageDrag(){
+  var b = _droneImgDragBound; if(!b) return;
+  try {
+    L.DomEvent.off(b.img, 'mousedown', b.down);
+    L.DomEvent.off(b.img, 'touchstart', b.down);
+    L.DomEvent.off(document, 'mousemove', b.move);
+    L.DomEvent.off(document, 'touchmove', b.move);
+    L.DomEvent.off(document, 'mouseup', b.up);
+    L.DomEvent.off(document, 'touchend', b.up);
+  } catch(e){}
+  _droneImgDragBound = null;
 }
 
 function placeDroneEditOverlay(dataUrl, gps){
@@ -4417,7 +4574,7 @@ function selectDroneDate(d){
     var sl = document.getElementById('drone-layer-opacity'); if(sl) sl.value = op;
   }
   rebuildDroneDateButtons();
-  renderActiveDroneDate(true);   // při ručním výběru přiblížit na snímky
+  renderActiveDroneDate(false);   // zůstaň na aktuálním staničení/zoomu (NEpřibližovat na celou vrstvu)
 }
 function clearRenderedDrone(){
   droneRendered.forEach(function(l){ try { map.removeLayer(l); } catch(e){} });
@@ -4539,7 +4696,14 @@ function renderDroneEvidence(){
     var img = document.createElement('img');
     img.src = r.url; img.loading = 'lazy';
     img.style.cssText = 'width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer;';
-    img.onclick = (function(d){ return function(){ if(d) selectDroneDate(d); closeDroneEvidence(); toggleLayers(); }; })(r.datum);
+    img.onclick = (function(dd, corners){ return function(){
+      droneActiveDate = dd; rebuildDroneDateButtons(); renderActiveDroneDate(false);  // zobraz datum, bez globálního fitu
+      closeDroneEvidence();
+      if(corners && corners.length === 4){ try {  // přibliž na TENTO snímek
+        var b = L.latLngBounds(corners);
+        map.setView(b.getCenter(), Math.min(22, map.getBoundsZoom(b, false, L.point(40,40))), {animate:false});
+      } catch(e){} }
+    }; })(r.datum, r.corners);
     row.appendChild(img);
     var info = document.createElement('div');
     info.style.cssText = 'flex:1;font-size:12px;color:var(--text);overflow:hidden;';
