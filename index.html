@@ -754,6 +754,7 @@ textarea.note-field { min-height:80px; resize:vertical; }
 #so-pick-list { overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:8px; }
 .so-pick-btn { background:var(--panel2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:13px 14px; font-size:15px; font-weight:600; text-align:left; cursor:pointer; min-height:48px; }
 .so-pick-btn:active { background:var(--accent2); color:#0f3460; }
+.so-pick-on { background:rgba(72,187,120,0.18) !important; border-color:#48bb78 !important; }
 .so-pick-none { margin-top:4px; color:var(--text2); font-weight:700; text-align:center; }
 
 /* ═══════════════════════════════════════════════════════
@@ -4843,9 +4844,11 @@ window.addEventListener('load', function() {
 // "SO XXX" pro razítko: prázdné pro prázdný/nečíselný vstup, jinak doplň prefix „SO ".
 // (ZS apod. = volný text staničení, ne stavební objekt → do razítka nedáváme.)
 function _soStampLabel(so){
+  if(Array.isArray(so)) return so.map(_soStampLabel).filter(Boolean).join(' · ');
   so = (so == null) ? '' : String(so).trim();
   if(!so) return '';
-  return /^so\b/i.test(so) ? so : ('SO ' + so);
+  if(/^so\b/i.test(so)) return so;          // už „SO 103"
+  return /^\d/.test(so) ? ('SO ' + so) : so; // holé číslo → „SO 101"; vlastní název nech být
 }
 // Vykreslí razítkový rámeček vpravo dole. lines = [{t, bold}] shora dolů (prázdné se přeskočí).
 function _drawStampBox(ctx, img, lines){
@@ -4918,7 +4921,7 @@ function uploadPhotosToGitHub(items, onProgress, onDone, meta) {
       });
     }
     if(meta && (meta.km || meta.author)) {
-      burnInMetadata(src, meta.km, meta.author, doUpload, meta && meta.so);
+      burnInMetadata(src, meta.km, meta.author, doUpload, meta && (meta.soList && meta.soList.length ? meta.soList : meta.so));
     } else { doUpload(src); }
   }
   next();
@@ -6803,76 +6806,103 @@ function soLabel(id){
 
 // Vybere SO pro novou fotku. 1 kandidát → rovnou; víc → modál; bez km / 0 kandidátů → ruční výběr.
 // cb dostane id objektu (string) nebo '' když „Nepřiřazovat".
+// Multi-výběr SO pro fotku. cb dostane POLE id (může být prázdné = nepřiřazovat).
+// Tři sekce: blízké objekty (jako dřív) → „Všechny SO" (proklik) → „Ostatní/deponie" (proklik).
+var _soPick = null;
 function chooseSOForPhoto(kmStr, cb){
   var kmNum = parseKmStr(kmStr);
-  var kand = soKandidati(kmNum);            // blízké objekty (±50 m) nahoře
-  openSOPicker(kand, cb, kand.length === 0);
-}
-
-// expanded=true → ukázat CELÝ katalog SO místo jen blízkých kandidátů.
-function openSOPicker(list, cb, manual, expanded){
+  var kand  = soKandidati(kmNum);           // blízké objekty (±50 m)
+  _soPick = { cb: cb, sel: [], kand: kand, manual: kand.length === 0, view: 'main' };
   var modal = document.getElementById('so-pick-modal');
-  var body  = document.getElementById('so-pick-list');
-  var sub   = document.getElementById('so-pick-sub');
-  if(!modal || !body){ cb(''); return; }
-  if(sub) sub.textContent = expanded ? 'Vyber z celého seznamu SO'
-        : (manual ? '⚠ Staničení/GPS chybí – vyber objekt ručně nebo z celého seznamu'
-                  : 'Objekty u tohoto staničení – nebo vyber z celého seznamu');
+  if(!modal){ cb([]); _soPick = null; return; }
+  _renderSOPicker();
+  modal.classList.add('open');
+}
+function _soPickToggle(id){
+  if(!_soPick) return;
+  var i = _soPick.sel.indexOf(id);
+  if(i === -1) _soPick.sel.push(id); else _soPick.sel.splice(i, 1);
+  _renderSOPicker();
+}
+function _renderSOPicker(){
+  var body = document.getElementById('so-pick-list');
+  var sub  = document.getElementById('so-pick-sub');
+  if(!body || !_soPick) return;
+  var P = _soPick;
   body.innerHTML = '';
-  function addBtn(o, cls){
+  if(sub) sub.textContent =
+        P.view === 'all'    ? 'Celý seznam SO – ťukni, kolik chceš'
+      : P.view === 'custom' ? 'Objekty mimo PD (deponie, zařízení staveniště, místa)'
+      : (P.manual ? '⚠ Staničení/GPS chybí – vyber ručně (můžeš víc objektů)'
+                  : 'Objekty u tohoto staničení – můžeš vybrat i víc');
+  function row(o){
+    var on = P.sel.indexOf(o.id) !== -1;
     var b = document.createElement('button');
-    b.className = 'so-pick-btn' + (cls ? ' ' + cls : '');
-    b.textContent = o.id + (o.short ? '  —  ' + o.short : '');
-    b.onclick = function(){ _closeSOPicker(); cb(o.id); };
+    b.className = 'so-pick-btn' + (on ? ' so-pick-on' : '');
+    b.innerHTML = '<span style="display:inline-block;width:24px;">' + (on ? '✅' : '⬜') + '</span>'
+                + escapeHtml(o.id) + (o.short ? '  —  ' + escapeHtml(o.short) : '');
+    b.onclick = function(){ _soPickToggle(o.id); };
     body.appendChild(b);
   }
-  if(expanded){
-    SO_CATALOG.forEach(function(o){ addBtn(o); });
-  } else {
-    list.forEach(function(o){ addBtn(o); });
-    var more = document.createElement('button');
-    more.className = 'so-pick-btn';
-    more.style.cssText = 'background:var(--panel2);font-weight:700;';
-    more.textContent = '➕ Další SO ze seznamu…';
-    more.onclick = function(){ openSOPicker(list, cb, manual, true); };
-    body.appendChild(more);
+  function navBtn(txt, fn, accent){
+    var b = document.createElement('button');
+    b.className = 'so-pick-btn';
+    b.style.cssText = 'background:var(--panel2);font-weight:700;' + (accent ? 'text-align:center;justify-content:center;' : '');
+    b.textContent = txt; b.onclick = fn; body.appendChild(b);
   }
-  // Vlastní (mimo PD) objekty
-  if(customSO.length){
-    var h = document.createElement('div');
-    h.style.cssText = 'font-size:11px;color:var(--text2);text-transform:uppercase;margin:10px 2px 2px;';
-    h.textContent = 'Ostatní (vlastní)';
-    body.appendChild(h);
-    customSO.forEach(function(o){ addBtn(o); });
+  if(P.view === 'main'){
+    if(P.kand.length){ P.kand.forEach(row); }
+    else { var n = document.createElement('div'); n.style.cssText = 'font-size:12px;color:var(--text2);padding:4px 2px 8px;'; n.textContent = 'U tohoto staničení žádný objekt – vyber ze seznamu níže.'; body.appendChild(n); }
+    navBtn('📋 Všechny SO ze seznamu…', function(){ P.view = 'all'; _renderSOPicker(); });
+    navBtn('📦 Ostatní / deponie / místa…', function(){ P.view = 'custom'; _renderSOPicker(); });
+  } else if(P.view === 'all'){
+    navBtn('‹ Zpět', function(){ P.view = 'main'; _renderSOPicker(); });
+    SO_CATALOG.forEach(row);
+  } else if(P.view === 'custom'){
+    navBtn('‹ Zpět', function(){ P.view = 'main'; _renderSOPicker(); });
+    if(customSO.length) customSO.forEach(row);
+    else { var c = document.createElement('div'); c.style.cssText = 'font-size:12px;color:var(--text2);padding:4px 2px 8px;'; c.textContent = 'Zatím žádné vlastní objekty.'; body.appendChild(c); }
+    navBtn('✏️ Přidat nový objekt…', function(){ _soPickAddCustom(); });
   }
-  var addc = document.createElement('button');
-  addc.className = 'so-pick-btn';
-  addc.style.cssText = 'background:var(--panel2);';
-  addc.textContent = '✏️ Vlastní objekt (deponie, zařízení staveniště…)';
-  addc.onclick = function(){ _soPickCustomInput(cb); };
-  body.appendChild(addc);
-
+  // Patička: shrnutí výběru + Hotovo + Nepřiřazovat (vždy dole, ve všech sekcích)
+  var foot = document.createElement('div');
+  foot.style.cssText = 'margin-top:10px;border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:6px;';
+  if(P.sel.length){
+    var chips = document.createElement('div');
+    chips.style.cssText = 'font-size:12.5px;color:var(--accent2);line-height:1.5;';
+    chips.textContent = 'Vybráno: ' + P.sel.join(', ');
+    foot.appendChild(chips);
+  }
+  var done = document.createElement('button');
+  done.className = 'so-pick-btn';
+  done.style.cssText = 'background:var(--accent);color:#fff;font-weight:800;text-align:center;justify-content:center;';
+  done.textContent = P.sel.length ? ('✓ Hotovo (' + P.sel.length + ')') : '✓ Hotovo';
+  done.onclick = function(){ var s = P.sel.slice(); _closeSOPicker(); P.cb(s); };
+  foot.appendChild(done);
   var none = document.createElement('button');
   none.className = 'so-pick-btn so-pick-none';
   none.textContent = '⊘ Nepřiřazovat';
-  none.onclick = function(){ _closeSOPicker(); cb(''); };
-  body.appendChild(none);
-  modal.classList.add('open');
+  none.onclick = function(){ _closeSOPicker(); P.cb([]); };
+  foot.appendChild(none);
+  body.appendChild(foot);
 }
-// Vytvoří vlastní objekt mimo PD, uloží ho sdíleně do /so_custom a rovnou ho použije pro fotku.
-function _soPickCustomInput(cb){
-  var name = prompt('Název vlastního objektu (např. Zařízení staveniště, Deponie):');
-  if(name === null) return;          // zrušeno → picker zůstává otevřený
+// Přidá vlastní objekt mimo PD, uloží sdíleně do /so_custom a rovnou ho zaškrtne.
+function _soPickAddCustom(){
+  var name = prompt('Název objektu (např. Zařízení staveniště, Deponie, Mezideponie u lesa):');
+  if(name === null) return;
   name = name.trim(); if(!name) return;
-  var exists = customSO.some(function(o){ return (o.id||'').toLowerCase() === name.toLowerCase(); });
+  var exists = customSO.some(function(o){ return (o.id || '').toLowerCase() === name.toLowerCase(); });
   if(!exists){
     try { db.ref('so_custom').push({ id:name, short:'', ts:Date.now(), author:(window.currentUser&&window.currentUser.name)||'' }); } catch(e){}
+    customSO.push({ id:name, short:'' });      // hned dostupné v UI, než dorazí z DB
   }
-  _closeSOPicker(); cb(name);          // razítko + seskupení „Po objektech" pojede pod tímhle názvem
+  if(_soPick && _soPick.sel.indexOf(name) === -1) _soPick.sel.push(name);
+  _renderSOPicker();
 }
 function _closeSOPicker(){
   var modal = document.getElementById('so-pick-modal');
   if(modal) modal.classList.remove('open');
+  _soPick = null;
 }
 
 // ── Foto-flow: vyfotit → razítkovat? → vyfotit další? → smyčka ─────
@@ -6972,6 +7002,7 @@ function _processPhotoQueue(){
           var urlOrig = yes ? url2 : url1, urlStamp = yes ? url1 : url2, visibleUrl = yes ? urlStamp : urlOrig;
           var entry = {
             url: visibleUrl, stamped: !!yes, so: (meta.so || ''),
+            soList: (meta.soList && meta.soList.length ? meta.soList : (meta.so ? [meta.so] : [])),
             km: meta.km, author: meta.author, uid: (window.currentUser ? window.currentUser.uid : ''),
             lat: meta.lat, lng: meta.lng,
             time: new Date(t).toLocaleString('cs-CZ'), date: new Date(t).toLocaleDateString('cs-CZ'), ts: t
@@ -6997,7 +7028,7 @@ function _processPhotoQueue(){
         });
       }, 500);
     });
-  }, meta.so);
+  }, (meta.soList && meta.soList.length ? meta.soList : meta.so));
 }
 
 function ppAnswer(yes) {
@@ -7050,8 +7081,10 @@ window.addEventListener('load', function() {
         window.photoSession.pendingMeta  = {km: km, author: author, lat: latlng.lat, lng: latlng.lng};
         window.photoSession.phase = 'stamp';
         // Výběr stavebního objektu (složky) podle staničení, pak teprve razítko + upload.
-        chooseSOForPhoto(km, function(so){
-          window.photoSession.pendingMeta.so = so || '';
+        chooseSOForPhoto(km, function(soArr){
+          soArr = soArr || [];
+          window.photoSession.pendingMeta.soList = soArr;
+          window.photoSession.pendingMeta.so     = soArr[0] || '';   // primární (zpětná kompatibilita)
           ppAnswer(true);  // true = v galerii bude razítkovaná verze
         });
       });
@@ -7431,9 +7464,13 @@ function _paintGallery(filtered) {
     groupsEl.style.display = 'block';
     var groups = {}, order = [];
     filtered.forEach(function(it){
-      var so = it.so ? it.so : '__none__';
-      if(!groups[so]) { groups[so] = []; order.push(so); }
-      groups[so].push(it);
+      // fotka může patřit do víc SO (soList) → objeví se v každé složce
+      var sos = (it.soList && it.soList.length) ? it.soList : [ it.so ? it.so : '__none__' ];
+      sos.forEach(function(so){
+        if(!so) so = '__none__';
+        if(!groups[so]) { groups[so] = []; order.push(so); }
+        groups[so].push(it);
+      });
     });
     order.sort(function(a,b){
       if(a === '__none__') return 1;
