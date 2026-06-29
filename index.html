@@ -3058,6 +3058,7 @@ function init() {
   loadVykresRevize();
   loadMereni();
   loadDroneOverlays();
+  loadCustomSO();
   // Situační vrstvy ukázat jen když existují data (overlay/situace_lines.json) – jinak skryté
   resolveFileUrl('overlay/situace_lines.json').then(function(u){ return fetch(u, {method:'HEAD'}).then(function(r){ return r.ok; }).catch(function(){ return true; }); }).then(function(ok){ if(ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } });
   initLongPress();
@@ -6713,6 +6714,67 @@ var SO_OBJEKTY = (function(){
   return list;
 })();
 
+// KOMPLETNÍ katalog SO objektů z PD (legenda situace) – pro tlačítko „Další SO ze seznamu".
+// Nemají km → nenabízí se automaticky podle polohy, ale jdou vybrat ručně z celého seznamu.
+var SO_CATALOG = [
+  {id:'SO 101', short:'silnice – intravilán'},
+  {id:'SO 101.1', short:'chodník 2,721–2,797'},
+  {id:'SO 101.2', short:'ozelenění'},
+  {id:'SO 101.3', short:'oprava povrchu'},
+  {id:'SO 101.4', short:'komplexní oprava'},
+  {id:'SO 102', short:'silnice – extravilán'},
+  {id:'SO 103', short:'okružní křižovatka'},
+  {id:'SO 104', short:'propustek 1'},
+  {id:'SO 105', short:'propustek 2'},
+  {id:'SO 106', short:'Nová Hospoda'},
+  {id:'SO 107', short:'zpomalovací ostrůvek'},
+  {id:'SO 161', short:'DIO – dopravní značení'},
+  {id:'SO 331', short:'kanalizace ú.1'},
+  {id:'SO 334', short:'kanalizace ú.4'},
+  {id:'SO 335', short:'kanalizace ú.5'},
+  {id:'SO 335.1', short:'dešťová kanalizace ú.5'},
+  {id:'SO 336', short:'kanalizace ú.6'},
+  {id:'SO 337', short:'kanalizace ú.7'},
+  {id:'SO 341', short:'vodovod ú.1'},
+  {id:'SO 343', short:'vodovod ú.3'},
+  {id:'SO 344', short:'vodovod ú.4'},
+  {id:'SO 345', short:'vodovod ú.5'},
+  {id:'SO 346', short:'vodovod ú.6'},
+  {id:'SO 413', short:'přeložka VN ú.3'},
+  {id:'SO 414', short:'vedení VN ú.4'},
+  {id:'SO 432', short:'kabely NN+VN ú.1+2'},
+  {id:'SO 434', short:'vedení NN ú.4'},
+  {id:'SO 435', short:'vedení NN ú.5'},
+  {id:'SO 437', short:'vedení NN ú.7'},
+  {id:'SO 441', short:'veřejné osvětlení ú.1'},
+  {id:'SO 443', short:'veřejné osvětlení ú.3'},
+  {id:'SO 444', short:'veřejné osvětlení ú.4'},
+  {id:'SO 445', short:'veřejné osvětlení ú.5'},
+  {id:'SO 446', short:'veřejné osvětlení ú.6'},
+  {id:'SO 447', short:'veřejné osvětlení ú.7'},
+  {id:'SO 452', short:'sdělovací kabely ú.1+2'},
+  {id:'SO 453', short:'sdělovací kabely ú.3'},
+  {id:'SO 454', short:'sdělovací kabely ú.4'},
+  {id:'SO 455', short:'sdělovací kabely ú.5'},
+  {id:'SO 457', short:'sdělovací kabely ú.7'},
+  {id:'SO 515', short:'plyn VTL ú.5'},
+  {id:'SO 521', short:'plyn STL ú.1'},
+  {id:'SO 524', short:'plyn STL ú.4'},
+  {id:'SO 525', short:'plyn STL ú.5'},
+  {id:'SO 526', short:'plyn STL ú.6'},
+  {id:'SO 527', short:'plyn STL ú.7'}
+];
+// Vlastní (mimo PD) objekty – sdílené v týmu přes /so_custom (deponie, zařízení staveniště…)
+var customSO = [];
+function loadCustomSO(){
+  try {
+    db.ref('so_custom').on('value', function(s){
+      var v = s.val() || {};
+      customSO = Object.keys(v).map(function(k){ return { id: v[k].id, short: v[k].short || '', key: k }; });
+    }, function(){});
+  } catch(e){}
+}
+
 var SO_TOLERANCE = 0.050;   // ±50 m okolo objektu
 
 // Objekty, do jejichž okolí (±50 m) spadá dané staničení (km jako číslo).
@@ -6730,8 +6792,11 @@ function soKandidati(kmNum){
 
 // Hezký popisek objektu pro hlavičku složky / tlačítko.
 function soLabel(id){
-  for(var i=0;i<SO_OBJEKTY.length;i++){
-    if(SO_OBJEKTY[i].id === id) return SO_OBJEKTY[i].short ? (id + ' — ' + SO_OBJEKTY[i].short) : id;
+  var pools = [SO_OBJEKTY, (typeof SO_CATALOG!=='undefined'?SO_CATALOG:[]), (typeof customSO!=='undefined'?customSO:[])];
+  for(var p=0;p<pools.length;p++){
+    for(var i=0;i<pools[p].length;i++){
+      if(pools[p][i].id === id) return pools[p][i].short ? (id + ' — ' + pools[p][i].short) : id;
+    }
   }
   return id;
 }
@@ -6740,32 +6805,70 @@ function soLabel(id){
 // cb dostane id objektu (string) nebo '' když „Nepřiřazovat".
 function chooseSOForPhoto(kmStr, cb){
   var kmNum = parseKmStr(kmStr);
-  var kand = soKandidati(kmNum);
-  if(kand.length === 1){ cb(kand[0].id); return; }
-  if(kand.length === 0){ openSOPicker(SO_OBJEKTY.slice(), cb, true); return; }
-  openSOPicker(kand, cb, false);
+  var kand = soKandidati(kmNum);            // blízké objekty (±50 m) nahoře
+  openSOPicker(kand, cb, kand.length === 0);
 }
 
-function openSOPicker(list, cb, manual){
+// expanded=true → ukázat CELÝ katalog SO místo jen blízkých kandidátů.
+function openSOPicker(list, cb, manual, expanded){
   var modal = document.getElementById('so-pick-modal');
   var body  = document.getElementById('so-pick-list');
   var sub   = document.getElementById('so-pick-sub');
   if(!modal || !body){ cb(''); return; }
-  if(sub) sub.textContent = manual ? '⚠ Staničení/GPS chybí – vyber objekt ručně' : 'Vyber stavební objekt pro tuto fotku';
+  if(sub) sub.textContent = expanded ? 'Vyber z celého seznamu SO'
+        : (manual ? '⚠ Staničení/GPS chybí – vyber objekt ručně nebo z celého seznamu'
+                  : 'Objekty u tohoto staničení – nebo vyber z celého seznamu');
   body.innerHTML = '';
-  list.forEach(function(o){
+  function addBtn(o, cls){
     var b = document.createElement('button');
-    b.className = 'so-pick-btn';
+    b.className = 'so-pick-btn' + (cls ? ' ' + cls : '');
     b.textContent = o.id + (o.short ? '  —  ' + o.short : '');
     b.onclick = function(){ _closeSOPicker(); cb(o.id); };
     body.appendChild(b);
-  });
+  }
+  if(expanded){
+    SO_CATALOG.forEach(function(o){ addBtn(o); });
+  } else {
+    list.forEach(function(o){ addBtn(o); });
+    var more = document.createElement('button');
+    more.className = 'so-pick-btn';
+    more.style.cssText = 'background:var(--panel2);font-weight:700;';
+    more.textContent = '➕ Další SO ze seznamu…';
+    more.onclick = function(){ openSOPicker(list, cb, manual, true); };
+    body.appendChild(more);
+  }
+  // Vlastní (mimo PD) objekty
+  if(customSO.length){
+    var h = document.createElement('div');
+    h.style.cssText = 'font-size:11px;color:var(--text2);text-transform:uppercase;margin:10px 2px 2px;';
+    h.textContent = 'Ostatní (vlastní)';
+    body.appendChild(h);
+    customSO.forEach(function(o){ addBtn(o); });
+  }
+  var addc = document.createElement('button');
+  addc.className = 'so-pick-btn';
+  addc.style.cssText = 'background:var(--panel2);';
+  addc.textContent = '✏️ Vlastní objekt (deponie, zařízení staveniště…)';
+  addc.onclick = function(){ _soPickCustomInput(cb); };
+  body.appendChild(addc);
+
   var none = document.createElement('button');
   none.className = 'so-pick-btn so-pick-none';
   none.textContent = '⊘ Nepřiřazovat';
   none.onclick = function(){ _closeSOPicker(); cb(''); };
   body.appendChild(none);
   modal.classList.add('open');
+}
+// Vytvoří vlastní objekt mimo PD, uloží ho sdíleně do /so_custom a rovnou ho použije pro fotku.
+function _soPickCustomInput(cb){
+  var name = prompt('Název vlastního objektu (např. Zařízení staveniště, Deponie):');
+  if(name === null) return;          // zrušeno → picker zůstává otevřený
+  name = name.trim(); if(!name) return;
+  var exists = customSO.some(function(o){ return (o.id||'').toLowerCase() === name.toLowerCase(); });
+  if(!exists){
+    try { db.ref('so_custom').push({ id:name, short:'', ts:Date.now(), author:(window.currentUser&&window.currentUser.name)||'' }); } catch(e){}
+  }
+  _closeSOPicker(); cb(name);          // razítko + seskupení „Po objektech" pojede pod tímhle názvem
 }
 function _closeSOPicker(){
   var modal = document.getElementById('so-pick-modal');
