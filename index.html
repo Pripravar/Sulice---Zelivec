@@ -5154,9 +5154,10 @@ function openPhotoFs(src, firebaseKey, item) {
 
 // Vykreslí jednu fotku do fullscreenu (sdílí openPhotoFs i navigace tažením). Vždy plná verze (url).
 function _renderFsItem(url, firebaseKey, item) {
-  document.getElementById('photo-fs-img').src = url;
-  var ob = document.getElementById('photo-fs-open');
-  if(ob) ob.href = url;
+  resolveFileUrl(url).then(function(u){
+    document.getElementById('photo-fs-img').src = u;
+    var ob = document.getElementById('photo-fs-open'); if(ob) ob.href = u;
+  });
   _photoFsKey = firebaseKey || null;
   _photoFsItem = item || { url: url };
   if(!_photoFsItem.url) _photoFsItem.url = url;
@@ -5266,11 +5267,13 @@ function exifDateString(d) {
        + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
 }
 
-// Stáhne blob a vrátí Promise<{blob, dataUrl}>
+// Stáhne blob a vrátí Promise<blob>. URL projde resolverem (Storage EU s tokenem; CORS je OK).
 function fetchPhotoAsBlob(url) {
-  return fetch(url, { mode:'cors' }).then(function(r){
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    return r.blob();
+  return resolveFileUrl(url).then(function(u){
+    return fetch(u, { mode:'cors' }).then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.blob();
+    });
   });
 }
 
@@ -6834,9 +6837,20 @@ function _showContinuePrompt() {
 }
 
 // Promise-wrapper pro callback-style uploadPhotoToGitHub
+// Nahraje fotku PŘÍMO do EU Firebase Storage (ne na GitHub). `filename` = 'standalone/foto_..._o.jpg'
+// → uloží do 'photos/standalone/...'. Vrací CESTU (ne URL) – resolver ji při zobrazení/stažení přeloží
+// na autorizovaný EU odkaz. Tím nové fotky vůbec nejdou do veřejného repa.
 function uploadPhotoToGitHubP(dataUrl, filename) {
   return new Promise(function(resolve){
-    uploadPhotoToGitHub(dataUrl, filename, function(url){ resolve(url || null); });
+    try {
+      if(!firebase.auth().currentUser){ resolve(null); return; }
+      var path = 'photos/' + filename;
+      var base64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, '');
+      var ct = (String(dataUrl).indexOf('image/png') !== -1) ? 'image/png' : 'image/jpeg';
+      _privStorage().ref(path).putString(base64, 'base64', { contentType: ct })
+        .then(function(){ delete _fileUrlCache[path]; resolve(path); })
+        .catch(function(e){ console.warn('Storage upload err:', e && (e.code||e.message)); resolve(null); });
+    } catch(e){ resolve(null); }
   });
 }
 
@@ -7302,7 +7316,7 @@ function _galleryItemEl(item) {
   div.setAttribute('data-gk', k);
   if(gallerySelectedKeys[k]) div.classList.add('selected');
   var img = document.createElement('img');
-  img.src = item.thumb || item.url;   // v mřížce malý náhled; plná kvalita až ve fullscreenu/stahování
+  setImgResolved(img, item.thumb || item.url);   // v mřížce malý náhled (přes Storage resolver); plná kvalita až ve fullscreenu/stahování
   img.loading = 'lazy';
   (function(it, divRef) {
     img.onclick = function() {
