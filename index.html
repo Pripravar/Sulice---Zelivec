@@ -5646,14 +5646,61 @@ function _doZipSelectedGalleryPhotos(applyStamp) {
 // Zpětná kompatibilita - kdyby ještě někde zůstalo volání staré funkce
 function downloadSelectedGalleryPhotos() { return downloadSelectedGalleryPhotosShare(); }
 
+// Best-effort smazání souborů fotky z EU Storage (orig + razítko + náhled). Staré GitHub URL ignoruje
+// (ty nejsou ve Storage). Tím „smazat" fakt odstraní soubor, ne jen odkaz v DB (lepší i pro GDPR).
+function _purgePhotoStorage(item){
+  if(!item) return;
+  [item.url, item.urlOriginal, item.urlStamped, item.thumb].forEach(function(p){
+    if(!p || /^https?:\/\//.test(p) || /^data:/.test(p) || /^blob:/.test(p)) return;  // jen holé Storage cesty
+    try { _privStorage().ref(p).delete().then(function(){}, function(){}); delete _fileUrlCache[p]; } catch(e){}
+  });
+}
+
+// 🗑️ Hromadné smazání vybraných fotek z galerie (jen vlastní/koordinátor, jen fotky z galerie).
+function deleteSelectedGalleryPhotos() {
+  var items = Object.values(gallerySelectedKeys);
+  if(!items.length) { showToast('Vyber nejdřív fotky', 1800); return; }
+  var deletable = [], noPerm = 0, notStandalone = 0;
+  items.forEach(function(it){
+    if(!it.fbKey){ notStandalone++; return; }          // poznámkové/úkolové fotky → mazat v detailu
+    if(!canDelete(it.uid)){ noPerm++; return; }         // cizí → jen autor/koordinátor
+    deletable.push(it);
+  });
+  if(!deletable.length){
+    showToast(noPerm ? 'Tyhle fotky smí smazat jen autor nebo koordinátor'
+                     : 'Hromadně jdou mazat jen fotky z galerie (ne z poznámek/úkolů)', 3200);
+    return;
+  }
+  var skip = [];
+  if(noPerm)        skip.push(noPerm + '× cizí');
+  if(notStandalone) skip.push(notStandalone + '× z poznámek/úkolů');
+  if(!confirm('Smazat ' + deletable.length + ' fotek?' +
+              (skip.length ? '\n(přeskočí se: ' + skip.join(', ') + ')' : '') +
+              '\n\n⚠️ Nevratné.')) return;
+  showSync('🗑️ Mažu 0/' + deletable.length + '…');
+  var done = 0, fail = 0;
+  var proms = deletable.map(function(it){
+    return db.ref('standalone_photos/' + it.fbKey).remove()
+      .then(function(){ _purgePhotoStorage(it); done++; showSync('🗑️ Mažu ' + done + '/' + deletable.length + '…'); })
+      .catch(function(){ fail++; done++; });
+  });
+  Promise.all(proms).then(function(){
+    hideSync();
+    showToast('🗑️ Smazáno ' + (deletable.length - fail) + ' fotek' + (fail ? ' (' + fail + '× chyba)' : ''), 2800);
+    gallerySelectedKeys = {};
+    renderGallery();
+  });
+}
+
 function deleteStandalonePhoto() {
   if(!_photoFsKey) return;
   if(!canDelete((_photoFsItem||{}).uid)) { showToast('Smazat může jen autor nebo koordinátor', 2500); return; }
   if(!confirm('Smazat tuto fotku?')) return;
-  var key = _photoFsKey;
+  var key = _photoFsKey, item = _photoFsItem;
   closePhotoFs();
   db.ref('standalone_photos/' + key).remove()
     .then(function() {
+      _purgePhotoStorage(item);
       showToast('🗑️ Fotka smazána', 1500);
       if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
     })
@@ -11193,6 +11240,7 @@ function copyDiaryExport(){
     <button class="secondary" onclick="clearGallerySelection()">−</button>
     <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
+    <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
   </div>
 </div>
 
