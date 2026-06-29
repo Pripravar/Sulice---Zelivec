@@ -22,7 +22,7 @@ const fs    = require('fs');
 const path  = require('path');
 const crypto = require('crypto');
 
-const BUCKET = 'sulice-zelivec.firebasestorage.app';
+const BUCKET = 'sulice-zelivec-eu';   // EU multi-region bucket (data zůstávají v EU – GDPR)
 const KEY    = path.join(__dirname, 'serviceAccount.json');
 
 if (!fs.existsSync(KEY)) {

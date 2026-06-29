@@ -1530,6 +1530,8 @@ var PDF_BASE = 'pdf/';
 // appka jede dál beze změny. Call-sity se přepojují až ve Fázi A/B.
 // ══════════════════════════════════════════════════════════════════
 var USE_PRIVATE_FILES = true;        // hlavní vypínač (lze rychle vrátit na false)
+var STORAGE_BUCKET_URL = 'gs://sulice-zelivec-eu';   // EU multi-region bucket (data v EU – GDPR)
+function _privStorage(){ return firebase.app().storage(STORAGE_BUCKET_URL); }
 var _fileUrlCache = {};              // cesta → URL (nebo rozpracovaná Promise)
 var _fileFallbackHits = 0;          // počítadlo fallbacků (musí být 0 před Fází C)
 
@@ -1559,7 +1561,7 @@ function resolveFileUrl(path){
   if(_fileUrlCache[path]) return Promise.resolve(_fileUrlCache[path]);
   var pr;
   try {
-    pr = firebase.storage().ref(path).getDownloadURL()
+    pr = _privStorage().ref(path).getDownloadURL()
       .then(function(u){ _fileUrlCache[path] = u; return u; })
       .catch(function(){ _fileFallbackHits++; return new URL(path, location.href).href; });  // dual-read
   } catch(e){
