@@ -732,9 +732,9 @@ textarea.note-field { min-height:80px; resize:vertical; }
 #gallery-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:14px; }
 /* Režim hromadného výběru fotek */
 .gallery-item .gsel-check { position:absolute; top:4px; left:4px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.55); border:2px solid #fff; display:none; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700; z-index:2; }
-#gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
-#gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
-#gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
+.gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
+.gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
+.gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
 #gallery-actionbar { background:var(--panel); border-top:1px solid var(--border); padding:8px 10px; padding-bottom:calc(8px + env(safe-area-inset-bottom)); display:none; gap:6px; align-items:center; flex-wrap:wrap; flex-shrink:0; }
 #gallery-actionbar.show { display:flex; }
 #gallery-actionbar .gab-count { flex:1; min-width:80px; color:var(--text); font-size:13px; font-weight:600; }
@@ -5238,7 +5238,7 @@ function _renderFsItem(url, firebaseKey, item) {
   var delBtn = document.getElementById('photo-fs-delete');
   if(delBtn) delBtn.style.display = canEd ? 'inline-block' : 'none';
   var soBtn = document.getElementById('photo-fs-soedit');
-  if(soBtn) soBtn.style.display = canEd ? 'inline-block' : 'none';   // přeřadit jen u vlastní galerie fotky
+  if(soBtn) soBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';   // přeřadit smí kdokoliv přihlášený
 }
 
 // Posun na předchozí/další fotku v galerii (dir = -1 / +1). Plná verze, ne náhled.
@@ -5580,10 +5580,10 @@ function _galleryItemKey(item) {
 function toggleGallerySelectMode() {
   gallerySelectMode = !gallerySelectMode;
   gallerySelectedKeys = {};
-  var grid = document.getElementById('gallery-grid');
   var btn  = document.getElementById('gallery-select-btn');
   var bar  = document.getElementById('gallery-actionbar');
-  if(grid) grid.classList.toggle('selectmode', gallerySelectMode);
+  // selectmode na VŠECHNY mřížky (plochou i pod-mřížky „Po objektech")
+  document.querySelectorAll('#gallery-body .gallery-grid').forEach(function(g){ g.classList.toggle('selectmode', gallerySelectMode); });
   if(btn)  btn.classList.toggle('on', gallerySelectMode);
   if(btn)  btn.textContent = gallerySelectMode ? '✕ Konec' : '☑️ Vybrat';
   if(bar)  bar.classList.toggle('show', gallerySelectMode);
@@ -5594,8 +5594,8 @@ function _updateGallerySelectionUI() {
   var n = Object.keys(gallerySelectedKeys).length;
   var c = document.getElementById('gab-count');
   if(c) c.textContent = 'Vybráno: ' + n;
-  // Promítnout třídu .selected na DOM (kdyby se mezitím překreslila mřížka)
-  document.querySelectorAll('#gallery-grid .gallery-item').forEach(function(div){
+  // Promítnout třídu .selected na DOM (plochá mřížka i „Po objektech")
+  document.querySelectorAll('#gallery-body .gallery-item').forEach(function(div){
     var k = div.getAttribute('data-gk');
     if(k && gallerySelectedKeys[k]) div.classList.add('selected');
     else div.classList.remove('selected');
@@ -5813,15 +5813,14 @@ function deleteSelectedGalleryPhotos() {
 function reassignSelectedGalleryPhotos() {
   var items = Object.values(gallerySelectedKeys);
   if(!items.length) { showToast('Vyber nejdřív fotky', 1800); return; }
-  var editable = [], noPerm = 0, notStandalone = 0;
+  if(!window.currentUser){ showToast('Pro přeřazení se přihlas', 2800); return; }
+  var editable = [], notStandalone = 0;
   items.forEach(function(it){
     if(!it.fbKey){ notStandalone++; return; }           // poznámkové/úkolové → přeřadit nejdou
-    if(!canDelete(it.uid)){ noPerm++; return; }          // cizí → jen autor/koordinátor
-    editable.push(it);
+    editable.push(it);                                   // přeřadit smí kdokoliv přihlášený (jen zatřídění)
   });
   if(!editable.length){
-    showToast(noPerm ? 'Přeřadit smí jen autor nebo koordinátor'
-                     : 'Hromadně jdou přeřadit jen fotky z galerie', 3200);
+    showToast('Hromadně jdou přeřadit jen fotky z galerie', 3200);
     return;
   }
   var kmHint = editable[0].km || null;   // staničení 1. vybrané → nabídne blízké objekty (jdou rozbalit Všechny SO)
@@ -5850,7 +5849,8 @@ function reassignSelectedGalleryPhotos() {
 function editPhotoSO() {
   var item = _photoFsItem, key = _photoFsKey;
   if(!item || !key){ showToast('Tuhle fotku nelze přeřadit (jen fotky z galerie)', 2800); return; }
-  if(!canDelete(item.uid)){ showToast('Přeřadit může jen autor nebo koordinátor', 2800); return; }
+  // Přeřazení = neškodná úprava zatřídění → smí kdokoliv přihlášený (na rozdíl od mazání). Pravidla to taky pouští.
+  if(!window.currentUser){ showToast('Pro přeřazení se přihlas', 2800); return; }
   var preset = (item.soList && item.soList.length) ? item.soList.slice() : (item.so ? [item.so] : []);
   chooseSOForPhoto(item.km, function(soArr){
     soArr = soArr || [];
@@ -7735,7 +7735,7 @@ function _paintGallery(filtered) {
       var sec = document.createElement('div'); sec.className = 'gallery-folder';
       var hdr = document.createElement('div'); hdr.className = 'gallery-folder-hdr';
       hdr.textContent = (so === '__none__' ? '⊘ Nezařazené' : '📁 ' + soLabel(so)) + '  (' + groups[so].length + ')';
-      var sg = document.createElement('div'); sg.className = 'gallery-grid';
+      var sg = document.createElement('div'); sg.className = 'gallery-grid' + (gallerySelectMode ? ' selectmode' : '');
       groups[so].forEach(function(it){ sg.appendChild(_galleryItemEl(it)); });
       sec.appendChild(hdr); sec.appendChild(sg);
       groupsEl.appendChild(sec);
