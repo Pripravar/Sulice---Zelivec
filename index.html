@@ -1254,6 +1254,7 @@ document.addEventListener('touchend', function(e){
 <div id="measure-crosshair">✛</div>
 <div id="measure-hud">
   <div class="mh-row" style="margin-bottom:2px;">
+    <button id="mt-bod" onclick="setMeasureType('bod')" style="background:var(--panel2);color:var(--text);padding:9px 12px;font-size:13px;">📍 Bod</button>
     <button id="mt-vzdalenost" onclick="setMeasureType('vzdalenost')" style="background:#22d3ee;color:#0f3460;padding:9px 12px;font-size:13px;">📏 Vzdálenost</button>
     <button id="mt-obvod" onclick="setMeasureType('obvod')" style="background:var(--panel2);color:var(--text);padding:9px 12px;font-size:13px;">⭕ Obvod</button>
     <button id="mt-plocha" onclick="setMeasureType('plocha')" style="background:var(--panel2);color:var(--text);padding:9px 12px;font-size:13px;">⬛ Plocha</button>
@@ -1284,6 +1285,17 @@ document.addEventListener('touchend', function(e){
         Popis (volitelný)
         <textarea id="measure-save-desc" rows="2" placeholder="poznámka k měření…" style="padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);resize:vertical;"></textarea>
       </label>
+      <div style="display:flex;gap:10px;">
+        <label style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+          📅 Datum realizace
+          <input id="measure-save-datum-real" type="date" style="padding:11px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+        </label>
+        <label style="flex:1;display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2);">
+          📐 Datum měření
+          <input id="measure-save-datum-mer" type="date" style="padding:11px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);">
+        </label>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-top:-6px;">Oba předvyplněné na dnešek – datum realizace klidně přepiš na den, kdy se to na stavbě dělalo.</div>
       <div id="measure-save-status" style="font-size:12px;color:var(--text2);min-height:16px;"></div>
       <button id="measure-save-btn" onclick="confirmMeasureSave()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;">Uložit</button>
       <button id="measure-edit-geom-btn" onclick="startEditMereniGeometry()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;min-height:46px;">✥ Upravit body na mapě</button>
@@ -3578,12 +3590,14 @@ var _measureShapes = [];         // reference na čáru/výplň (kvůli živé a
 
 function setMeasureType(t){
   measureType = t;
-  ['vzdalenost','obvod','plocha'].forEach(function(k){
+  ['bod','vzdalenost','obvod','plocha'].forEach(function(k){
     var b = document.getElementById('mt-'+k); if(!b) return;
     var on = (k===t);
     b.style.background = on ? '#22d3ee' : 'var(--panel2)';
     b.style.color = on ? '#0f3460' : 'var(--text)';
   });
+  // U bodu drž jen jeden bod (samostatný bod = stručná náhrada poznámky)
+  if(t === 'bod' && measurePts.length > 1) measurePts = measurePts.slice(0,1);
   if(measureMode) redrawMeasure();
 }
 
@@ -3660,7 +3674,8 @@ function stopMeasureMode(){
 function measureAddPoint(){
   if(!measureMode) return;
   var c = map.getCenter();
-  measurePts.push([c.lat, c.lng]);
+  if(measureType === 'bod') measurePts = [[c.lat, c.lng]];   // bod = vždy jen jeden
+  else measurePts.push([c.lat, c.lng]);
   if(navigator.vibrate) navigator.vibrate(30);
   redrawMeasure();
 }
@@ -3717,6 +3732,10 @@ function updateMeasureReadout(){
   var el = document.getElementById('measure-readout');
   if(!el) return;
   var n = measurePts.length;
+  if(measureType === 'bod'){
+    el.textContent = n ? '📍 Bod umístěn — ulož 💾' : 'Najeď křížkem a ťukni ➕ Bod';
+    return;
+  }
   if(n === 0){ el.textContent = 'Najeď křížkem a přidej první bod'; return; }
   if(n === 1){ el.textContent = 'Bod 1 — přidej další (➕ Bod)'; return; }
   if(measureType === 'plocha'){
@@ -3781,17 +3800,20 @@ function saveMereniGeometry(){
 // ── Uložení měření pro tým (/mereni) ──
 function measureSave(){
   if(!measureMode) return;
-  if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
+  if(measureType === 'bod'){ if(measurePts.length < 1){ showToast('Umísti bod (➕ Bod)', 2000); return; } }
+  else if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
   if(measureType === 'plocha' && measurePts.length < 3){ showToast('Plocha potřebuje aspoň 3 body', 2500); return; }
   // Úprava bodů existujícího měření → ulož geometrii, neotevírej okno s názvem
   if(_mereniGeomEditKey){ saveMereniGeometry(); return; }
   if(!window.currentUser){ showToast('Pro uložení se přihlas (úkolníček → přihlášení)', 3500); return; }
   var typ = measureType;
   var info;
-  if(typ === 'plocha') info = 'Plocha: '+fmtArea(polygonAreaM2(measurePts))+' · obvod '+fmtLen(pathLenM(measurePts,true));
+  if(typ === 'bod') info = '📍 Samostatný bod';
+  else if(typ === 'plocha') info = 'Plocha: '+fmtArea(polygonAreaM2(measurePts))+' · obvod '+fmtLen(pathLenM(measurePts,true));
   else if(typ === 'obvod') info = 'Obvod: '+fmtLen(pathLenM(measurePts, measurePts.length>=3));
   else info = 'Vzdálenost: '+fmtLen(pathLenM(measurePts,false));
   _mereniEditKey = null;
+  _setMereniDateInputs(null);   // nové měření → oba datumy dnešní
   document.getElementById('measure-save-title').textContent = '💾 Uložit měření pro tým';
   document.getElementById('measure-save-btn').textContent = 'Uložit';
   var gb0 = document.getElementById('measure-edit-geom-btn'); if(gb0) gb0.style.display = 'none';
@@ -3812,25 +3834,29 @@ function closeMeasureSave(){
 function confirmMeasureSave(){
   var name = document.getElementById('measure-save-name').value.trim();
   var desc = document.getElementById('measure-save-desc').value.trim();
+  var datumReal = (document.getElementById('measure-save-datum-real')||{}).value || _ymdToday();
+  var datumMer  = (document.getElementById('measure-save-datum-mer') ||{}).value || _ymdToday();
   var status = document.getElementById('measure-save-status');
   if(!name){ status.textContent = '⚠️ Vyplň název'; return; }
   if(!window.currentUser){ status.textContent = '⚠️ Nejsi přihlášen'; return; }
-  // EDITACE existujícího měření: měníme jen název + popis (geometrie zůstává)
+  // EDITACE existujícího měření: měníme název + popis + datumy (geometrie zůstává)
   if(_mereniEditKey){
     var er = mereniData[_mereniEditKey];
     if(er && !canEditMereni(er)){ status.textContent = '⚠️ Upravit může jen autor nebo admin'; return; }
     status.textContent = '⏳ Ukládám…';
-    db.ref('mereni/'+_mereniEditKey).update({ nazev: name, popis: desc }).then(function(){
+    db.ref('mereni/'+_mereniEditKey).update({ nazev: name, popis: desc, datumRealizace: datumReal, datumMereni: datumMer }).then(function(){
       closeMeasureSave();
       showToast('✅ Měření upraveno', 1800);
       if(document.getElementById('mereni-evidence-modal').style.display === 'flex') _renderMereniEvidence();
     }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba úpravy'); });
     return;
   }
-  if(measurePts.length < 2){ status.textContent = '⚠️ Málo bodů'; return; }
+  if(measureType === 'bod'){ if(measurePts.length < 1){ status.textContent = '⚠️ Umísti bod'; return; } }
+  else if(measurePts.length < 2){ status.textContent = '⚠️ Málo bodů'; return; }
   if(measureType === 'plocha' && measurePts.length < 3){ status.textContent = '⚠️ Plocha potřebuje ≥3 body'; return; }
   var typ = measureType;
-  var delkaM = (typ === 'plocha') ? pathLenM(measurePts,true)
+  var delkaM = (typ === 'bod')    ? 0
+             : (typ === 'plocha') ? pathLenM(measurePts,true)
              : (typ === 'obvod')  ? pathLenM(measurePts, measurePts.length>=3)
              : pathLenM(measurePts,false);
   var rec = {
@@ -3838,6 +3864,7 @@ function confirmMeasureSave(){
     body: measurePts.map(function(p){ return [p[0], p[1]]; }),
     delkaM:  delkaM,
     plochaM2:(typ === 'plocha') ? polygonAreaM2(measurePts) : 0,
+    datumRealizace: datumReal, datumMereni: datumMer,
     ownerUid: window.currentUser.uid,
     author: window.currentUser.name || '',
     ts: Date.now()
@@ -3873,12 +3900,35 @@ var mereniShow = (function(){
 // Jednotlivá skrytá měření (klíče), pamatuje se napříč relacemi.
 var mereniHidden = (function(){ try { return JSON.parse(localStorage.getItem('mereniHidden')||'{}')||{}; } catch(e){ return {}; } })();
 
+// ── Datumy měření: realizace (na stavbě) + měření. Oba 'YYYY-MM-DD', default dnešek. ──
+function _ymdToday(){ return ymd(new Date()); }
+function _fmtYmdCz(s){
+  if(!s) return '';
+  var p = String(s).split('-'); if(p.length !== 3) return s;
+  return (+p[2]) + '. ' + (+p[1]) + '. ' + p[0];
+}
+// Datum pro zobrazení (štítek/popup) – primárně realizace, jinak měření, jinak starý ts.
+function _mereniDatum(r){
+  if(r.datumRealizace) return _fmtYmdCz(r.datumRealizace);
+  if(r.datumMereni)    return _fmtYmdCz(r.datumMereni);
+  return r.ts ? new Date(r.ts).toLocaleDateString('cs-CZ') : '';
+}
+// Předvyplní datumová pole v ukládacím okně. r=null → oba dnešek; jinak z měření (fallback z ts).
+function _setMereniDateInputs(r){
+  var real = document.getElementById('measure-save-datum-real');
+  var mer  = document.getElementById('measure-save-datum-mer');
+  var today = _ymdToday();
+  var rReal = r ? (r.datumRealizace || (r.ts ? ymd(new Date(r.ts)) : today)) : today;
+  var rMer  = r ? (r.datumMereni    || (r.ts ? ymd(new Date(r.ts)) : today)) : today;
+  if(real) real.value = rReal;
+  if(mer)  mer.value  = rMer;
+}
 function mereniVymera(r){ return (r.typ === 'plocha') ? fmtArea(r.plochaM2||0) : fmtLen(r.delkaM||0); }
 function mereniLabelText(r){
   var parts = [];
   if(mereniShow.nazev && r.nazev) parts.push(r.nazev);
-  if(mereniShow.vymera) parts.push(mereniVymera(r));
-  if(mereniShow.datum && r.ts) parts.push(new Date(r.ts).toLocaleDateString('cs-CZ'));
+  if(mereniShow.vymera && r.typ !== 'bod') parts.push(mereniVymera(r));   // bod nemá výměru
+  if(mereniShow.datum){ var d = _mereniDatum(r); if(d) parts.push(d); }
   return parts.join(' · ');
 }
 function setMereniShow(field, on){
@@ -3892,6 +3942,12 @@ function toggleMereniHidden(key){
   renderAllSavedMereni();
   if(document.getElementById('mereni-evidence-modal').style.display === 'flex') _renderMereniEvidence();
 }
+// Skrytí konkrétního měření přímo z popupu na mapě (zavře popup). Zpět ho zapneš v evidenci 📐.
+function hideMereniFromMap(key){
+  if(map) map.closePopup();
+  if(!mereniHidden[key]) toggleMereniHidden(key);
+  showToast('🙈 Skryto · zpět zapneš v 📐 evidenci', 2600);
+}
 
 function renderAllSavedMereni(){
   if(!layerGroups.mereni) layerGroups.mereni = L.layerGroup();   // default mimo mapu, zapne se přepínačem ve Vrstvách
@@ -3900,29 +3956,52 @@ function renderAllSavedMereni(){
     if(k === _mereniGeomEditKey) return;   // tenhle se právě upravuje v measureLayer
     if(mereniHidden[k]) return;            // jednotlivě skryté měření
     var r = mereniData[k];
-    if(!r || !r.body || r.body.length < 2) return;
+    if(!r || !r.body || r.body.length < (r.typ==='bod' ? 1 : 2)) return;
     renderSavedMereni(k, r);
   });
 }
 function mereniPopupHtml(key, r){
   var meta;
-  if(r.typ === 'plocha') meta = 'Plocha: '+fmtArea(r.plochaM2||0)+'<br>Obvod: '+fmtLen(r.delkaM||0);
+  if(r.typ === 'bod') meta = '📍 Samostatný bod';
+  else if(r.typ === 'plocha') meta = 'Plocha: '+fmtArea(r.plochaM2||0)+'<br>Obvod: '+fmtLen(r.delkaM||0);
   else if(r.typ === 'obvod') meta = 'Obvod: '+fmtLen(r.delkaM||0);
   else meta = 'Vzdálenost: '+fmtLen(r.delkaM||0);   // 'vzdalenost' i legacy 'delka'
+  var dRows = '';
+  if(r.datumRealizace) dRows += '<br><span style="font-size:11px;color:#0e7490;">📅 realizace: '+escapeHtml(_fmtYmdCz(r.datumRealizace))+'</span>';
+  if(r.datumMereni)    dRows += '<br><span style="font-size:11px;color:#888;">📐 měřeno: '+escapeHtml(_fmtYmdCz(r.datumMereni))+'</span>';
+  if(!dRows && r.ts)   dRows += '<br><span style="font-size:11px;color:#888;">'+escapeHtml(new Date(r.ts).toLocaleDateString('cs-CZ'))+'</span>';
   var html = '<div style="min-width:170px;">'+
     '<b>'+escapeHtml(r.nazev||'Měření')+'</b><br>'+
     (r.popis ? ('<span style="color:#888;">'+escapeHtml(r.popis)+'</span><br>') : '')+
-    meta+'<br>'+
+    meta+
+    dRows+'<br>'+
     '<span style="font-size:11px;color:#888;">'+escapeHtml(r.author||'')+'</span>';
+  // Skrýt na mapě – smí každý (jen lokální pohled, ukládá se do localStorage). Zpět zapnout v evidenci 📐.
+  html += '<br><button onclick="hideMereniFromMap(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:var(--panel2,#eee);color:var(--text,#222);border:1px solid #ccc;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">🙈 Skrýt</button>';
   if(canEditMereni(r)){
-    html += '<br><button onclick="editMereni(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Název/popis</button>'+
-            '<button onclick="editMereniGeometry(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#22d3ee;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✥ Upravit body</button>'+
+    html += '<button onclick="editMereni(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Upravit</button>'+
+            (r.typ!=='bod' ? '<button onclick="editMereniGeometry(\''+key+'\')" style="margin-top:6px;margin-right:6px;background:#22d3ee;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✥ Upravit body</button>' : '')+
             '<button onclick="deleteMereni(\''+key+'\')" style="margin-top:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Smazat</button>';
   }
   return html + '</div>';
 }
 function renderSavedMereni(key, r){
   var pts = r.body;
+  // Samostatný bod = pin marker (žádná čára/plocha)
+  if(r.typ === 'bod'){
+    var bm = L.marker(pts[0], {icon: L.divIcon({ className:'',
+      html:'<div style="font-size:26px;line-height:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));transform:translate(-50%,-100%);">📍</div>',
+      iconSize:[0,0], iconAnchor:[0,0] })});
+    bm.bindPopup(mereniPopupHtml(key, r));
+    bm.addTo(layerGroups.mereni);
+    var lblB = mereniLabelText(r);
+    if(lblB){
+      L.marker(pts[0], {interactive:false, icon: L.divIcon({ className:'',
+        html:'<div style="background:rgba(255,255,255,.92);color:#111;border:1px solid #0e7490;font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;white-space:nowrap;transform:translate(10px,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5);">'+escapeHtml(lblB)+'</div>',
+        iconSize:[0,0], iconAnchor:[0,0] })}).addTo(layerGroups.mereni);
+    }
+    return;
+  }
   var shape;
   if(r.typ === 'plocha'){
     shape = L.polygon(pts, {color:'#0e7490', weight:2, fillColor:'#22d3ee', fillOpacity:0.18});
@@ -3961,16 +4040,18 @@ function editMereni(key){
   if(map) map.closePopup();
   _mereniEditKey = key;
   var info;
-  if(r.typ === 'plocha') info = 'Plocha: '+fmtArea(r.plochaM2||0)+' · obvod '+fmtLen(r.delkaM||0);
+  if(r.typ === 'bod') info = '📍 Samostatný bod';
+  else if(r.typ === 'plocha') info = 'Plocha: '+fmtArea(r.plochaM2||0)+' · obvod '+fmtLen(r.delkaM||0);
   else if(r.typ === 'obvod') info = 'Obvod: '+fmtLen(r.delkaM||0);
   else info = 'Vzdálenost: '+fmtLen(r.delkaM||0);
-  document.getElementById('measure-save-info').textContent = info + ' · bodů '+((r.body&&r.body.length)||0);
+  document.getElementById('measure-save-info').textContent = info + (r.typ==='bod' ? '' : (' · bodů '+((r.body&&r.body.length)||0)));
   document.getElementById('measure-save-name').value = r.nazev || '';
   document.getElementById('measure-save-desc').value = r.popis || '';
+  _setMereniDateInputs(r);
   document.getElementById('measure-save-status').textContent = '';
   document.getElementById('measure-save-title').textContent = '✏️ Upravit měření';
   document.getElementById('measure-save-btn').textContent = 'Uložit změny';
-  var gb = document.getElementById('measure-edit-geom-btn'); if(gb) gb.style.display = 'block';  // u editace nabídni i úpravu bodů
+  var gb = document.getElementById('measure-edit-geom-btn'); if(gb) gb.style.display = (r.typ==='bod' ? 'none' : 'block');  // bod nemá body k tažení
   document.getElementById('measure-save-modal').style.display = 'flex';
 }
 // Z editačního okna → úprava bodů přímo na mapě
@@ -3983,21 +4064,22 @@ function startEditMereniGeometry(){
 // ── Evidence uložených měření (seznam + přiblížení + úprava + mazání) ──
 function openMereniEvidence(){ _renderMereniEvidence(); document.getElementById('mereni-evidence-modal').style.display = 'flex'; }
 function closeMereniEvidence(){ document.getElementById('mereni-evidence-modal').style.display = 'none'; }
-function _mereniTypeIcon(typ){ return typ === 'plocha' ? '🟦' : (typ === 'obvod' ? '⬡' : '📏'); }
+function _mereniTypeIcon(typ){ return typ === 'bod' ? '📍' : (typ === 'plocha' ? '🟦' : (typ === 'obvod' ? '⬡' : '📏')); }
 function _mereniValue(r){
+  if(r.typ === 'bod')    return 'samostatný bod';
   if(r.typ === 'plocha') return fmtArea(r.plochaM2||0)+' (obvod '+fmtLen(r.delkaM||0)+')';
   if(r.typ === 'obvod')  return 'obvod '+fmtLen(r.delkaM||0);
   return fmtLen(r.delkaM||0);
 }
 function _renderMereniEvidence(){
   var box = document.getElementById('mereni-evidence-list'); if(!box) return;
-  var keys = Object.keys(mereniData||{}).filter(function(k){ var r=mereniData[k]; return r && r.body && r.body.length>=2; });
+  var keys = Object.keys(mereniData||{}).filter(function(k){ var r=mereniData[k]; return r && r.body && r.body.length >= (r.typ==='bod'?1:2); });
   keys.sort(function(a,b){ return (mereniData[b].ts||0)-(mereniData[a].ts||0); });
   if(!keys.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px 10px;font-size:14px;">Zatím žádná uložená měření.<br>Změř něco přes 📏 a ulož pro tým.</div>'; return; }
   var html = '';
   keys.forEach(function(k){
     var r = mereniData[k];
-    var d = r.ts ? new Date(r.ts).toLocaleDateString('cs-CZ') : '';
+    var d = _mereniDatum(r);
     var can = canEditMereni(r);
     var hidden = !!mereniHidden[k];
     html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border);'+(hidden?'opacity:.5;':'')+'">'+
@@ -5134,8 +5216,11 @@ function _renderFsItem(url, firebaseKey, item) {
   _photoFsKey = firebaseKey || null;
   _photoFsItem = item || { url: url };
   if(!_photoFsItem.url) _photoFsItem.url = url;
+  var canEd = (_photoFsKey && canDelete((_photoFsItem||{}).uid));
   var delBtn = document.getElementById('photo-fs-delete');
-  if(delBtn) delBtn.style.display = (_photoFsKey && canDelete((_photoFsItem||{}).uid)) ? 'inline-block' : 'none';
+  if(delBtn) delBtn.style.display = canEd ? 'inline-block' : 'none';
+  var soBtn = document.getElementById('photo-fs-soedit');
+  if(soBtn) soBtn.style.display = canEd ? 'inline-block' : 'none';   // přeřadit jen u vlastní galerie fotky
 }
 
 // Posun na předchozí/další fotku v galerii (dir = -1 / +1). Plná verze, ne náhled.
@@ -5284,18 +5369,17 @@ function setExifCreationDate(jpegDataUrl, date) {
 //   stampChoice = false → chce verzi BEZ razítka
 // Když je k dispozici přímo požadovaná verze (nové fotky), použijeme ji a needsBurn=false.
 // Když není (staré fotky bez dvojí verze) → fallback na item.url + burn jen u stampChoice=true.
-function _chooseDownloadUrl(item, stampChoice) {
-  if(stampChoice === true) {
-    if(item.urlStamped) return { url: item.urlStamped, needsBurn: false };
-    // Staré fotky: vypaluje se za běhu (může mít dvojí razítko, pokud bylo už při focení)
-    return { url: item.url, needsBurn: true };
+function _chooseDownloadUrl(item, wantStamp, fields) {
+  fields = fields || { so:true, km:true, datum:true, jmeno:true };
+  if(wantStamp) {
+    var allFields = fields.so && fields.km && fields.datum && fields.jmeno;
+    // Všechna pole + hotová orazítkovaná verze + zařazení se neměnilo → použij ji (rychlé).
+    if(allFields && item.urlStamped && !item.restampOnDownload) return { url: item.urlStamped, needsBurn: false };
+    // Jinak vypálíme JEN vybraná pole z čistého originálu (urlOriginal); u starých fotek fallback na url.
+    return { url: item.urlOriginal || item.url, needsBurn: true };
   }
-  if(stampChoice === false) {
-    if(item.urlOriginal) return { url: item.urlOriginal, needsBurn: false };
-    // Staré fotky: nemáme originál, stáhneme item.url tak jak je (může mít razítko z focení)
-    return { url: item.url, needsBurn: false };
-  }
-  // Bez volby - stáhneme tak jak je
+  if(item.urlOriginal) return { url: item.urlOriginal, needsBurn: false };
+  // Staré fotky: nemáme originál, stáhneme item.url tak jak je (může mít razítko z focení)
   return { url: item.url, needsBurn: false };
 }
 
@@ -5303,8 +5387,11 @@ function _chooseDownloadUrl(item, stampChoice) {
 // opts = { stamp: bool|undefined }  - true = chce verzi s razítkem, false = bez, undefined = jak je
 function preparePhotoBlobForDownload(item, opts) {
   opts = opts || {};
+  var sc = opts.stamp;
+  var wantStamp = (sc === true) || !!(sc && sc.stamp === true);
+  var fields = (sc && sc.fields) ? sc.fields : { so:true, km:true, datum:true, jmeno:true };
   var d = photoCreationDate(item);
-  var choice = _chooseDownloadUrl(item, opts.stamp);
+  var choice = _chooseDownloadUrl(item, wantStamp, fields);
   return fetchPhotoAsBlob(choice.url).then(function(blob){
     // Jen JPEG dokážeme upravit EXIF, jinak stáhneme tak jak je
     if(blob.type && blob.type.indexOf('jpeg') === -1 && blob.type.indexOf('jpg') === -1) {
@@ -5320,11 +5407,11 @@ function preparePhotoBlobForDownload(item, opts) {
         return new Blob([ab], { type:'image/jpeg' });
       }
       if(choice.needsBurn) {
-        // Fallback pro staré fotky - dovypálíme razítko za běhu (datem pořízení)
+        // Vypálíme razítko za běhu z čistého originálu – jen vybraná pole (fields), datem pořízení.
         return new Promise(function(resolve){
           burnInMetadataWithDate(dataUrl, item.km || '-', item.author || '', d, function(stampedDataUrl){
             resolve(continueWithExif(stampedDataUrl));
-          }, item.so);
+          }, (item.soList && item.soList.length ? item.soList : item.so), fields);
         });
       }
       return continueWithExif(dataUrl);
@@ -5336,7 +5423,8 @@ function preparePhotoBlobForDownload(item, opts) {
 function srcOrDataUrl(x) { return x; }
 
 // Varianta burnInMetadata s explicitním datem (ne new Date()). Razítko ukáže datum pořízení.
-function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so) {
+function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so, fields) {
+  fields = fields || { so:true, km:true, datum:true, jmeno:true };
   var img = new Image();
   img.onload = function() {
     var canvas = document.createElement('canvas');
@@ -5344,13 +5432,15 @@ function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so) {
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     var dStr = dateObj.toLocaleDateString('cs-CZ');
-    var _kmlbl = (km && /\d/.test(km)) ? ('km ' + km) : (km || '-');   // text (ZS…) bez „km"
-    var soLbl = _soStampLabel(so);
+    var _kmlbl = (km && /\d/.test(km)) ? ('km ' + km) : (km || '');   // text (ZS…) bez „km"
     var lines = [];
-    if(soLbl) lines.push({ t: soLbl, bold: true });
-    lines.push({ t: _kmlbl + '   •   ' + dStr, bold: true });
-    if(author) lines.push({ t: author, bold: false });
-    _drawStampBox(ctx, img, lines);
+    if(fields.so){ var soLbl = _soStampLabel(so); if(soLbl) lines.push({ t: soLbl, bold: true }); }
+    var mid = [];
+    if(fields.km && _kmlbl) mid.push(_kmlbl);
+    if(fields.datum)        mid.push(dStr);
+    if(mid.length) lines.push({ t: mid.join('   •   '), bold: true });
+    if(fields.jmeno && author) lines.push({ t: author, bold: false });
+    if(lines.length) _drawStampBox(ctx, img, lines);   // nic vybráno → bez razítka
     callback(canvas.toDataURL('image/jpeg', 0.9));
   };
   img.onerror = function(){ callback(dataUrl); }; // při selhání vrátí beze změny
@@ -5375,9 +5465,18 @@ function askDownloadStampChoice(photoCount, opts) {
     modal.style.display = 'flex';
   });
 }
-function _resolveStampChoice(choice) {
+function _dlsmChk(id){ var e = document.getElementById(id); return !!(e && e.checked); }
+// mode: 'stamp' (s razítkem, podle checkboxů) | 'plain'/false (bez) | null (zrušit).
+// Vrací volbu: null | {stamp:false} | {stamp:true, fields:{so,km,datum,jmeno}}
+function _resolveStampChoice(mode) {
   var modal = document.getElementById('dl-stamp-modal');
   if(modal) modal.style.display = 'none';
+  var choice;
+  if(mode === null || mode === 'cancel') choice = null;
+  else if(mode === 'plain' || mode === false) choice = { stamp: false };
+  else choice = { stamp: true, fields: {
+        so: _dlsmChk('dlsm-f-so'), km: _dlsmChk('dlsm-f-km'),
+        datum: _dlsmChk('dlsm-f-datum'), jmeno: _dlsmChk('dlsm-f-jmeno') } };
   if(typeof _stampChoiceResolver === 'function') {
     var r = _stampChoiceResolver; _stampChoiceResolver = null; r(choice);
   }
@@ -5526,7 +5625,7 @@ function _prepareSelectedPhotosAsFiles(applyStamp) {
 
   showSync('⏳ Připravuji 0/' + total + '...');
   var filePromises = items.map(function(it, idx) {
-    return preparePhotoBlobForDownload(it, { stamp: !!applyStamp }).then(function(blob){
+    return preparePhotoBlobForDownload(it, { stamp: applyStamp }).then(function(blob){
       done++;
       showSync('⏳ Připravuji ' + done + '/' + total + '...');
       var d = photoCreationDate(it);
@@ -5690,6 +5789,24 @@ function deleteSelectedGalleryPhotos() {
     gallerySelectedKeys = {};
     renderGallery();
   });
+}
+
+// ✏️ Přeřazení už nahrané fotky k jinému objektu (SO) – multi-výběr, zpětně.
+// Mění zatřídění (galerie „Po objektech" + filtr) i razítko PŘI STAŽENÍ (re-vypálí se z originálu).
+function editPhotoSO() {
+  var item = _photoFsItem, key = _photoFsKey;
+  if(!item || !key){ showToast('Tuhle fotku nelze přeřadit (jen fotky z galerie)', 2800); return; }
+  if(!canDelete(item.uid)){ showToast('Přeřadit může jen autor nebo koordinátor', 2800); return; }
+  var preset = (item.soList && item.soList.length) ? item.soList.slice() : (item.so ? [item.so] : []);
+  chooseSOForPhoto(item.km, function(soArr){
+    soArr = soArr || [];
+    var upd = { so: soArr[0] || '', soList: soArr, restampOnDownload: true };
+    db.ref('standalone_photos/' + key).update(upd).then(function(){
+      item.so = upd.so; item.soList = soArr; item.restampOnDownload = true;
+      showToast('✅ Zařazení změněno: ' + (soArr.length ? soArr.join(', ') : 'nezařazeno'), 2600);
+      if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+    }).catch(function(){ showToast('❌ Chyba uložení', 2500); });
+  }, preset);
 }
 
 function deleteStandalonePhoto() {
@@ -6856,10 +6973,10 @@ function soLabel(id){
 // Multi-výběr SO pro fotku. cb dostane POLE id (může být prázdné = nepřiřazovat).
 // Tři sekce: blízké objekty (jako dřív) → „Všechny SO" (proklik) → „Ostatní/deponie" (proklik).
 var _soPick = null;
-function chooseSOForPhoto(kmStr, cb){
+function chooseSOForPhoto(kmStr, cb, preset){
   var kmNum = parseKmStr(kmStr);
   var kand  = soKandidati(kmNum);           // blízké objekty (±50 m)
-  _soPick = { cb: cb, sel: [], kand: kand, manual: kand.length === 0, view: 'main' };
+  _soPick = { cb: cb, sel: (preset||[]).slice(), kand: kand, manual: kand.length === 0, view: 'main' };
   var modal = document.getElementById('so-pick-modal');
   if(!modal){ cb([]); _soPick = null; return; }
   _renderSOPicker();
@@ -7363,6 +7480,8 @@ function applyGalleryFilters(items){
   var dtOd = (document.getElementById('gfilt-date-od').value || '').trim();
   var dtDo = (document.getElementById('gfilt-date-do').value || '').trim();
   var aut  = (document.getElementById('gfilt-author').value || '').trim();
+  var soEl = document.getElementById('gfilt-so');
+  var soF  = soEl ? (soEl.value || '').trim() : '';
   return items.filter(function(it){
     if(!isNaN(kmOd) || !isNaN(kmDo)) {
       var km = parseKmStr(it.km);
@@ -7377,6 +7496,11 @@ function applyGalleryFilters(items){
       if(dtDo && d > dtDo) return false;
     }
     if(aut && (it.author || '').trim() !== aut) return false;
+    if(soF){
+      var sos = (it.soList && it.soList.length) ? it.soList : (it.so ? [it.so] : []);
+      if(soF === '__none__'){ if(sos.length) return false; }      // jen nezařazené
+      else if(sos.indexOf(soF) === -1) return false;
+    }
     return true;
   });
 }
@@ -7395,6 +7519,32 @@ function fillGalleryAuthorOptions(items){
     if(a === current) opt.selected = true;
     sel.appendChild(opt);
   });
+}
+// Naplní filtr objektů (SO) hodnotami, které se ve fotkách reálně vyskytují. Řazeno SO čísla → text → vlastní.
+function fillGallerySoOptions(items){
+  var sel = document.getElementById('gfilt-so');
+  if(!sel) return;
+  var current = sel.value;
+  var set = new Set(); var hasNone = false;
+  items.forEach(function(it){
+    var sos = (it.soList && it.soList.length) ? it.soList : (it.so ? [it.so] : []);
+    if(!sos.length){ hasNone = true; return; }
+    sos.forEach(function(s){ if(s) set.add(s); });
+  });
+  var arr = Array.from(set).sort(function(a,b){ return a.localeCompare(b, 'cs', {numeric:true}); });
+  sel.innerHTML = '<option value="">— libovolný —</option>';
+  arr.forEach(function(s){
+    var opt = document.createElement('option');
+    opt.value = s; opt.textContent = soLabel(s);
+    if(s === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  if(hasNone){
+    var o = document.createElement('option');
+    o.value = '__none__'; o.textContent = '⊘ Nezařazené';
+    if(current === '__none__') o.selected = true;
+    sel.appendChild(o);
+  }
 }
 
 function toggleGalleryFilter(){
@@ -7457,6 +7607,7 @@ function clearGalleryFilters(){
   document.getElementById('gfilt-date-od').value = '';
   document.getElementById('gfilt-date-do').value = '';
   document.getElementById('gfilt-author').value = '';
+  var soEl = document.getElementById('gfilt-so'); if(soEl) soEl.value = '';
   renderGallery();
 }
 
@@ -7553,6 +7704,7 @@ function renderGallery() {
       snap.forEach(function(ch) { var v = ch.val(); v.fbKey = ch.key; items.push(v); });
       items.reverse();
       fillGalleryAuthorOptions(items);
+      fillGallerySoOptions(items);
       var filtered = sortGalleryItems(applyGalleryFilters(items));
       galleryCurrentItems = filtered;
       if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
@@ -7573,6 +7725,7 @@ function renderGallery() {
     });
     items.reverse();
     fillGalleryAuthorOptions(items);
+    fillGallerySoOptions(items);
     var filtered = sortGalleryItems(applyGalleryFilters(items));
     galleryCurrentItems = filtered;
     if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
@@ -11152,6 +11305,7 @@ function copyDiaryExport(){
   <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="background:var(--accent2);color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout s datem</button>
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">&#128247; Otevřít</a>
+    <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;background:#f5a623;color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🏗️ Přeřadit (SO)</button>
     <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;background:#e94560;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">&#128465; Smazat</button>
     <button onclick="closePhotoFs()" style="background:#333;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;">Zavřít</button>
   </div>
@@ -11216,6 +11370,12 @@ function copyDiaryExport(){
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🏗️ Objekt (SO)</div>
+        <select id="gfilt-so" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+          <option value="">— libovolný —</option>
+        </select>
+      </div>
       <div style="flex:1;">
         <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">👤 Autor</div>
         <select id="gfilt-author" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
@@ -11486,13 +11646,19 @@ function copyDiaryExport(){
 <!-- Modal: volba razítka při stažení - z-index vyšší než galerie (4800) i fullscreen foto (5000) -->
 <div id="dl-stamp-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--panel);border-radius:14px;padding:22px 18px;width:min(92vw,380px);display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 28px rgba(0,0,0,0.5);">
-    <div id="dlsm-title" style="font-size:16px;font-weight:700;color:var(--text);text-align:center;line-height:1.4;">🏷️ Vypálit razítko při stažení?</div>
-    <div style="font-size:11px;color:var(--text2);text-align:center;">km + datum + jméno do pravého spodního rohu</div>
+    <div id="dlsm-title" style="font-size:16px;font-weight:700;color:var(--text);text-align:center;line-height:1.4;">🏷️ Razítko při stažení?</div>
+    <div style="font-size:11px;color:var(--text2);text-align:center;">Co vypálit do pravého spodního rohu (odškrtni, co nechceš):</div>
+    <div style="display:flex;flex-direction:column;gap:2px;margin:2px 4px;">
+      <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-so" checked style="width:20px;height:20px;"> SO / objekt</label>
+      <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-km" checked style="width:20px;height:20px;"> Staničení (km)</label>
+      <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-datum" checked style="width:20px;height:20px;"> Datum</label>
+      <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-jmeno" checked style="width:20px;height:20px;"> Jméno</label>
+    </div>
     <div id="dlsm-warning" style="display:none;font-size:11px;color:var(--accent2);text-align:center;background:rgba(245,166,35,0.1);padding:6px 8px;border-radius:6px;line-height:1.35;">
       ⚠ Pokud fotka už při focení byla orazítkovaná, dostane další razítko navíc.
     </div>
-    <button id="dlsm-yes" class="pp-btn pp-yes" onclick="_resolveStampChoice(true)" style="margin-top:6px;">🏷️ Ano, s razítkem</button>
-    <button id="dlsm-no"  class="pp-btn pp-no"  onclick="_resolveStampChoice(false)">📷 Ne, jak je</button>
+    <button id="dlsm-yes" class="pp-btn pp-yes" onclick="_resolveStampChoice('stamp')" style="margin-top:6px;">🏷️ Stáhnout s razítkem</button>
+    <button id="dlsm-no"  class="pp-btn pp-no"  onclick="_resolveStampChoice('plain')">📷 Bez razítka</button>
     <button id="dlsm-cancel" style="background:transparent;color:var(--text2);border:none;font-size:13px;cursor:pointer;padding:6px;" onclick="_resolveStampChoice(null)">Zrušit</button>
   </div>
 </div>
