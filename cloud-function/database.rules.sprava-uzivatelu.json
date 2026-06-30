@@ -1,0 +1,23 @@
+{
+  "_comment": "FÁZE 2 správy uživatelů – vlož do Firebase konzole → Realtime Database → Pravidla → Publikovat. Vynucuje BLOKACI (zablokovaný nic nezapíše) + ochranu admin polí (role/blocked/perms mění jen admin). Pokud máš v produkci jiná pravidla, slož je s tímto (hlavně přidej blocked-check do write podmínek a uzel uzivatele).",
+  "rules": {
+    ".read": true,
+
+    "uzivatele": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin') && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true",
+        "role":    { ".write": "auth != null && (auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin')" },
+        "blocked": { ".write": "auth != null && (auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin')" },
+        "perms":   { ".write": "auth != null && (auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin')" }
+      }
+    },
+
+    "poznamky":          { "$id": { ".write": "auth != null && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true && (newData.exists() || !data.child('ownerUid').exists() || data.child('ownerUid').val() === auth.uid)" } },
+    "ukoly":             { "$id": { ".write": "auth != null && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true && (newData.exists() || !data.child('zadalUid').exists() || data.child('zadalUid').val() === auth.uid)" } },
+    "standalone_photos": { "$id": { ".write": "auth != null && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true && (newData.exists() || !data.child('ownerUid').exists() || data.child('ownerUid').val() === auth.uid)" } },
+    "vykresy_uzivatelske": { "$so": { "$id": { ".write": "auth != null && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true && (newData.exists() || !data.child('ownerUid').exists() || data.child('ownerUid').val() === auth.uid)" } } },
+
+    "$other": { ".write": "auth != null && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true" }
+  }
+}

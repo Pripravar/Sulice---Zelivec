@@ -1313,6 +1313,17 @@ document.addEventListener('touchend', function(e){
     <div id="mereni-evidence-list" style="padding:10px 12px;overflow-y:auto;"></div>
   </div>
 </div>
+<!-- MODAL: Správa uživatelů (jen admin) -->
+<div id="user-admin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3600;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:560px;width:100%;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:#f5a623;">👥 Správa uživatelů</div>
+      <button onclick="closeUserAdmin()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;line-height:1.4;flex-shrink:0;">Zaškrtnuté = povolené funkce (nový uživatel má vše). Odškrtnutím funkci odebereš, 🚫 účet zablokuješ.</div>
+    <div id="user-admin-list" style="padding:6px 12px 12px;overflow-y:auto;"></div>
+  </div>
+</div>
 <div id="toast"></div>
 
 <!-- Drone overlay: skrytý file input + editační lišta -->
@@ -2308,6 +2319,7 @@ var _vykReplaceKey = null;   // klíč výkresu, který se aktualizací nahrazuj
 function openVykresUpload(realKm, preferSO){
   var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
   if(!user){ showToast('Pro nahrání výkresu se přihlas (úkolníček → přihlášení)', 3500); return; }
+  if(!hasPerm('vykresy')){ showToast('📄 Nahrávání výkresů ti admin nepovolil', 3000); return; }
   _vykUploadKm = (typeof realKm==='number') ? realKm : null;
   // Naplnit SO select
   var soSel = document.getElementById('vyk-so');
@@ -3558,6 +3570,7 @@ function cancelPlacing() {
 }
 function confirmPlacing() {
   if(!placingMode) return;
+  if(!hasPerm('pripominky')){ showToast('📝 Poznámky/úkoly ti admin nepovolil', 3000); cancelPlacing(); return; }
   var c = map.getCenter();
   cancelPlacing();
   _lpLat = c.lat;
@@ -3663,7 +3676,7 @@ function stopMeasureMode(){
   document.getElementById('measure-crosshair').classList.remove('open');
   document.getElementById('measure-hud').classList.remove('open');
   var b = document.getElementById('btn-measure'); if(b) b.classList.remove('active');
-  var pb = document.getElementById('btn-place'); if(pb) pb.style.display='';
+  var pb = document.getElementById('btn-place'); if(pb) pb.style.display = (typeof hasPerm==='function' && !hasPerm('pripominky')) ? 'none' : '';
   window.removeEventListener('resize', positionMeasureCrosshair);
   if(measureLayer) measureLayer.clearLayers();
   measurePts = [];
@@ -3800,6 +3813,7 @@ function saveMereniGeometry(){
 // ── Uložení měření pro tým (/mereni) ──
 function measureSave(){
   if(!measureMode) return;
+  if(!hasPerm('mereni')){ showToast('📏 Měření ti admin nepovolil', 3000); return; }
   if(measureType === 'bod'){ if(measurePts.length < 1){ showToast('Umísti bod (➕ Bod)', 2000); return; } }
   else if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
   if(measureType === 'plocha' && measurePts.length < 3){ showToast('Plocha potřebuje aspoň 3 body', 2500); return; }
@@ -4214,6 +4228,7 @@ function droneInitialCorners(lat, lng, halfW, halfH){
 
 function startDroneOverlay(){
   if(!window.currentUser){ showToast('Pro vložení dronu se přihlas (úkolníček → přihlášení)', 3500); return; }
+  if(!hasPerm('dron')){ showToast('🛰️ Dron snímky ti admin nepovolil', 3000); return; }
   if(typeof L.distortableImageOverlay === 'undefined'){ showToast('Plugin pro dron se nenačetl (zkus obnovit)', 3000); return; }
   if(measureMode) stopMeasureMode();
   if(droneEditOverlay){ cancelDroneOverlay(); }
@@ -7073,6 +7088,7 @@ function _closeSOPicker(){
 window.photoSession = {count: 0, pendingPhoto: null, pendingMeta: null, phase: null};
 
 function takeStandalonePhoto() {
+  if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
   if(!gpsActive || !gpsMarker) {
     showToast('⚠️ Zapni si GPS!', 3000);
     return;
@@ -7810,7 +7826,7 @@ function canDelete(ownerUid) {
   if(!ownerUid) return true;                 // legacy záznam bez uid
   var me = window.currentUser ? window.currentUser.uid : null;
   if(!me) return false;                      // nepřihlášený nesmí mazat uid-ované záznamy
-  if(ADMIN_UIDS.indexOf(me) !== -1) return true;
+  if(isAdmin(me)) return true;
   return me === ownerUid;
 }
 // Měření: STRIKTNĚ jen autor + admin (na rozdíl od canDelete neuvolňuje záznamy bez ownerUid –
@@ -7818,8 +7834,61 @@ function canDelete(ownerUid) {
 function canEditMereni(r) {
   var me = window.currentUser ? window.currentUser.uid : null;
   if(!me) return false;
-  if(ADMIN_UIDS.indexOf(me) !== -1) return true;     // admin smí cokoliv
+  if(isAdmin(me)) return true;                       // admin smí cokoliv
   return !!(r && r.ownerUid) && me === r.ownerUid;    // jinak jen vlastník
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SPRÁVA UŽIVATELŮ – role, blokace, per-funkce práva
+// Admin = bootstrap ADMIN_UIDS NEBO uživatel s role:'admin' v /uzivatele.
+// ══════════════════════════════════════════════════════════════════
+function isAdmin(uid){
+  var u = uid || (window.currentUser && window.currentUser.uid);
+  if(!u) return false;
+  if(ADMIN_UIDS.indexOf(u) !== -1) return true;
+  return !!(window.allUsers[u] && window.allUsers[u].role === 'admin');
+}
+function isBlocked(uid){
+  var u = uid || (window.currentUser && window.currentUser.uid);
+  if(!u) return false;
+  return !!(window.allUsers[u] && window.allUsers[u].blocked);
+}
+// Funkce, které jdou per-uživatel povolit/zakázat. btn = id tlačítka, které se bez práva schová.
+var FEATURES = [
+  { key:'foto',       label:'Focení',            btn:'btn-standalone-foto' },
+  { key:'vykresy',    label:'Nahrávání výkresů',  btn:'btn-add-vykres' },
+  { key:'mereni',     label:'Měření',            btn:'btn-measure' },
+  { key:'dron',       label:'Dron snímky',       btn:'btn-drone' },
+  { key:'pripominky', label:'Poznámky a úkoly',   btn:'btn-place' },
+  { key:'denik',      label:'Deník / sichtovka',  btn:'btn-denik' }
+];
+// Allow-by-default: povoleno, dokud admin výslovně nenastaví perms[feature]===false. Admin má vždy vše.
+function hasPerm(feature){
+  if(isAdmin()) return true;
+  var me = window.currentUser && window.currentUser.uid;
+  if(!me) return false;
+  if(isBlocked(me)) return false;
+  var u = window.allUsers[me];
+  return !(u && u.perms && u.perms[feature] === false);
+}
+// Skryje/zobrazí tlačítka funkcí podle práv (volá se po přihlášení i živě po změně práv adminem).
+function applyPermsToUI(){
+  if(!window.currentUser) return;
+  FEATURES.forEach(function(f){
+    var el = document.getElementById(f.btn);
+    if(el) el.style.display = hasPerm(f.key) ? '' : 'none';
+  });
+}
+// Relativní čas pro „naposledy aktivní" v panelu správy uživatelů.
+function _relTime(ts){
+  if(!ts) return '—';
+  var s = Math.floor((Date.now() - ts) / 1000);
+  if(s < 60)    return 'právě teď';
+  if(s < 3600)  return 'před ' + Math.floor(s/60) + ' min';
+  if(s < 86400) return 'před ' + Math.floor(s/3600) + ' h';
+  var d = Math.floor(s/86400);
+  if(d < 30)    return 'před ' + d + (d===1?' dnem':' dny');
+  return new Date(ts).toLocaleDateString('cs-CZ');
 }
 window.allUsers    = {};       // {uid: {uid,name,email,photo,fcmToken,lastSeen}}
 window.allTasks    = [];       // [taskObj, ...]
@@ -7875,8 +7944,101 @@ function signOutUser() {
 
 function showUserMenu() {
   if(!window.currentUser) return;
+  if(isAdmin()){
+    // Admin: nejdřív nabídni Správu uživatelů, jinak odhlášení.
+    if(confirm('👤 ' + window.currentUser.name + '\n\n👥 Otevřít Správu uživatelů?\n(Zrušit = jen odhlášení)')){
+      openUserAdmin();
+    } else if(confirm('Odhlásit se?')){
+      signOutUser();
+    }
+    return;
+  }
   var msg = '👤 ' + window.currentUser.name + '\n' + window.currentUser.email;
   if(confirm(msg + '\n\nOdhlásit se?')) signOutUser();
+}
+
+// ── Admin panel: Správa uživatelů (jen admin) ───────────────────────
+function openUserAdmin(){
+  if(!isAdmin()){ showToast('Jen pro administrátora', 2500); return; }
+  _renderUserAdmin();
+  document.getElementById('user-admin-modal').style.display = 'flex';
+}
+function closeUserAdmin(){ document.getElementById('user-admin-modal').style.display = 'none'; }
+
+function _renderUserAdmin(){
+  var box = document.getElementById('user-admin-list');
+  if(!box) return;
+  var users = window.allUsers || {};
+  var keys = Object.keys(users).sort(function(a,b){ return (users[b].lastSeen||0) - (users[a].lastSeen||0); });
+  if(!keys.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px 10px;font-size:14px;">Zatím se nikdo nepřihlásil.</div>'; return; }
+  var me = window.currentUser ? window.currentUser.uid : '';
+  var html = '';
+  keys.forEach(function(uid){
+    var u = users[uid] || {};
+    var self = (uid === me);
+    var adm = isAdmin(uid);
+    var blk = !!u.blocked;
+    var online = (Date.now() - (u.lastSeen||0)) < 5*60*1000;
+    var av = (u.photo && /^https?:\/\//.test(u.photo))
+      ? '<img src="'+escapeHtml(u.photo)+'" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
+      : '<div style="width:38px;height:38px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">👤</div>';
+    html += '<div style="border-bottom:1px solid var(--border);padding:10px 4px;'+(blk?'opacity:.55;':'')+'">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        av+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+
+            escapeHtml(u.name||'(bez jména)')+
+            (adm?' <span style="background:#f5a623;color:#0f3460;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;">ADMIN</span>':'')+
+            (blk?' <span style="background:#e57373;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;">BLOKOVÁN</span>':'')+
+          '</div>'+
+          '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(u.email||u.phone||'')+'</div>'+
+          '<div style="font-size:11px;color:'+(online?'#48bb78':'var(--text2)')+';">'+(online?'● online':('naposledy '+_relTime(u.lastSeen)))+(self?' · to jsi ty':'')+'</div>'+
+        '</div>'+
+        // Blokace + admin (sebe nelze)
+        (self?'' :
+          '<button onclick="toggleUserBlocked(\''+uid+'\')" title="'+(blk?'Odblokovat':'Zablokovat')+'" style="background:'+(blk?'#48bb78':'#e57373')+';border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">'+(blk?'✅':'🚫')+'</button>')+
+      '</div>'+
+      // Per-funkce práva (admin má vždy vše → u admina skryj)
+      (adm ? '' : '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 2px 48px;">'+
+        FEATURES.map(function(f){
+          var allowed = !(u.perms && u.perms[f.key] === false);
+          return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text);cursor:pointer;">'+
+            '<input type="checkbox" '+(allowed?'checked':'')+' onchange="toggleUserPerm(\''+uid+'\',\''+f.key+'\',this.checked)" style="width:16px;height:16px;"> '+escapeHtml(f.label)+
+          '</label>';
+        }).join('')+
+      '</div>')+
+      // Admin přepínač (sebe nelze odadminovat)
+      (self?'' :
+        '<div style="margin:6px 0 0 48px;"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;">'+
+          '<input type="checkbox" '+(u.role==='admin'?'checked':'')+' onchange="toggleUserAdmin(\''+uid+'\',this.checked)" style="width:16px;height:16px;"> ⭐ Administrátor (smí spravovat uživatele)'+
+        '</label></div>')+
+    '</div>';
+  });
+  box.innerHTML = html;
+}
+function toggleUserBlocked(uid){
+  if(!isAdmin()){ return; }
+  if(uid === (window.currentUser&&window.currentUser.uid)){ showToast('Sebe zablokovat nemůžeš', 2500); return; }
+  var u = (window.allUsers||{})[uid] || {};
+  var willBlock = !u.blocked;
+  if(willBlock && !confirm('Zablokovat uživatele '+(u.name||'')+'?\nBude odhlášen a nedostane se do aplikace.')) return;
+  db.ref('uzivatele/'+uid+'/blocked').set(willBlock ? true : null)
+    .then(function(){ showToast(willBlock?'🚫 Zablokován':'✅ Odblokován', 1800); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
+}
+function toggleUserPerm(uid, key, allowed){
+  if(!isAdmin()) return;
+  // allow-by-default → povoleno mažeme (null), zakázáno ukládáme jako false
+  db.ref('uzivatele/'+uid+'/perms/'+key).set(allowed ? null : false)
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
+}
+function toggleUserAdmin(uid, makeAdmin){
+  if(!isAdmin()) return;
+  if(uid === (window.currentUser&&window.currentUser.uid)){ showToast('Sebe měnit nemůžeš', 2500); return; }
+  if(makeAdmin && !confirm('Povýšit '+((window.allUsers[uid]||{}).name||'')+' na administrátora?\nBude moci spravovat ostatní uživatele.')) { _renderUserAdmin(); return; }
+  db.ref('uzivatele/'+uid+'/role').set(makeAdmin ? 'admin' : null)
+    .then(function(){ showToast(makeAdmin?'⭐ Admin':'Admin odebrán', 1800); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 
 // Pokud Firebase Auth není nakonfigurován, nezablokuj appku –
@@ -7946,8 +8108,22 @@ function completeLogin(user, nameOverride) {
     photo:    window.currentUser.photo,
     lastSeen: Date.now()
   });
-  // UI: badge
-  document.getElementById('user-photo').src = window.currentUser.photo || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23a0aec0%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z%22/></svg>';
+  // BLOKACE: zablokovaného uživatele nepustíme do aplikace (tvrdě řeší i Firebase pravidla).
+  db.ref('uzivatele/' + user.uid + '/blocked').once('value').then(function(snap){
+    if(snap.val() === true){
+      window.currentUser = null;
+      _setAuthView('main');
+      showAuthError('⛔ Tvůj přístup do aplikace zablokoval administrátor.');
+      document.getElementById('auth-gate').classList.remove('hide');
+      if(fbAuth) fbAuth.signOut();
+      return;
+    }
+    _enterApp(displayName);
+  }).catch(function(){ _enterApp(displayName); });  // chybu čtení neřešíme tvrdě (UX) – blokaci zajistí pravidla
+}
+// Vpuštění do aplikace (po ověření, že uživatel není zablokovaný).
+function _enterApp(displayName){
+  document.getElementById('user-photo').src = (window.currentUser && window.currentUser.photo) || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23a0aec0%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z%22/></svg>';
   document.getElementById('user-name').textContent = displayName.split(' ')[0];
   localStorage.setItem('noteAuthor', displayName);
   document.getElementById('auth-gate').classList.add('hide');
@@ -7958,6 +8134,7 @@ function completeLogin(user, nameOverride) {
   loadStroje();
   setupFcmIfPossible();
   maybeShowIosHint();
+  applyPermsToUI();   // schovat tlačítka funkcí, které uživatel nemá povolené
 }
 
 // Hlavní auth listener - běží automaticky po načtení stránky
@@ -8110,6 +8287,16 @@ function loadAllUsers() {
   db.ref('uzivatele').on('value', function(snap) {
     window.allUsers = snap.val() || {};
     rebuildAssigneePicker();
+    // Živá blokace: když admin zablokuje právě přihlášeného, vyhoď ho hned.
+    if(window.currentUser && isBlocked(window.currentUser.uid)){
+      showToast('⛔ Tvůj přístup byl zablokován administrátorem.', 4000);
+      setTimeout(function(){ if(fbAuth) fbAuth.signOut().then(function(){ location.reload(); }); else location.reload(); }, 1500);
+      return;
+    }
+    applyPermsToUI();   // živě promítni změnu práv (admin zapnul/vypnul funkci)
+    // Pokud je otevřený admin panel, obnov ho
+    var am = document.getElementById('user-admin-modal');
+    if(am && am.style.display === 'flex') _renderUserAdmin();
   });
 }
 
@@ -9217,6 +9404,7 @@ function svatekFor(d){
 
 function openDiaryPanel(){
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  if(!hasPerm('denik')){ showToast('📒 Deník ti admin nepovolil', 3000); return; }
   document.getElementById('diary-panel').classList.add('open');
   if(!window.diaryCurrentDate) diaryDateToday();
   else loadDiaryDay(window.diaryCurrentDate);
