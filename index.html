@@ -2615,6 +2615,7 @@ function soAtKm(realKm){
   return out;
 }
 function openStaniceniPanel(realKm) {
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů ti admin nepovolil', 3000); return; }
   _ensureSoIndex();
   var sos = soAtKm(realKm);
   var pages = [];
@@ -2713,6 +2714,7 @@ var currentPdfSrc = '';
 // Inženýrské sítě – vyjádření / situace správců sítí (statická PDF v repu pdf/IS/).
 // Přibyde-li další, jen přidej řádek do pole níž a nahraj PDF do pdf/IS/.
 function openInzenyrskeSite(){
+  if(!hasPerm('inzsite')){ showToast('🔌 Inženýrské sítě ti admin nepovolil', 3000); return; }
   var pages = [
     {soubor:'pdf/IS/Situace_CEZd_0102462206.pdf', nazev:'Situační výkres ČEZ Distribuce (0102462206)', typ:'⚡ ČEZ Distribuce'},
     {soubor:'pdf/IS/Situace_15346-26.pdf',        nazev:'Situační výkres (15346-26)',                 typ:'📄 Situace 15346-26'}
@@ -3219,6 +3221,7 @@ function _noteKm(note){
   catch(e){ return ''; }
 }
 function openNotesEvidence(){
+  if(!hasPerm('pripominky')){ showToast('📝 Poznámky/úkoly ti admin nepovolil', 3000); return; }
   document.getElementById('notes-evidence-modal').style.display = 'flex';
   var sb = document.getElementById('notes-ev-search'); if(sb) sb.value = '';
   renderNotesEvidence();
@@ -4076,7 +4079,7 @@ function startEditMereniGeometry(){
 }
 
 // ── Evidence uložených měření (seznam + přiblížení + úprava + mazání) ──
-function openMereniEvidence(){ _renderMereniEvidence(); document.getElementById('mereni-evidence-modal').style.display = 'flex'; }
+function openMereniEvidence(){ if(!hasPerm('mereni')){ showToast('📐 Měření ti admin nepovolil', 3000); return; } _renderMereniEvidence(); document.getElementById('mereni-evidence-modal').style.display = 'flex'; }
 function closeMereniEvidence(){ document.getElementById('mereni-evidence-modal').style.display = 'none'; }
 function _mereniTypeIcon(typ){ return typ === 'bod' ? '📍' : (typ === 'plocha' ? '🟦' : (typ === 'obvod' ? '⬡' : '📏')); }
 function _mereniValue(r){
@@ -7440,6 +7443,7 @@ function submitLibImport(){
 }
 
 function openGallery() {
+  if(!hasPerm('galerie')){ showToast('🖼️ Galerie ti admin nepovolil', 3000); return; }
   document.getElementById('gallery-modal').classList.add('open');
   unlockViewport();
   applyGalleryCols();
@@ -7854,13 +7858,19 @@ function isBlocked(uid){
   return !!(window.allUsers[u] && window.allUsers[u].blocked);
 }
 // Funkce, které jdou per-uživatel povolit/zakázat. btn = id tlačítka, které se bez práva schová.
+// btns = tlačítka, která se bez práva schovají (může jich být víc; prázdné = funkce bez tlačítka, jen guard).
 var FEATURES = [
-  { key:'foto',       label:'Focení',            btn:'btn-standalone-foto' },
-  { key:'vykresy',    label:'Nahrávání výkresů',  btn:'btn-add-vykres' },
-  { key:'mereni',     label:'Měření',            btn:'btn-measure' },
-  { key:'dron',       label:'Dron snímky',       btn:'btn-drone' },
-  { key:'pripominky', label:'Poznámky a úkoly',   btn:'btn-place' },
-  { key:'denik',      label:'Deník / sichtovka',  btn:'btn-denik' }
+  { key:'pdf',        label:'Prohlížení výkresů (PDF)', btns:[] },                       // klik na staničení → openStaniceniPanel
+  { key:'foto',       label:'Focení',            btns:['btn-standalone-foto'] },
+  { key:'galerie',    label:'Galerie fotek',     btns:['btn-gallery'] },
+  { key:'vykresy',    label:'Nahrávání výkresů',  btns:['btn-add-vykres'] },
+  { key:'mereni',     label:'Měření',            btns:['btn-measure','btn-mereni-evidence'] },
+  { key:'dron',       label:'Dron snímky',       btns:['btn-drone'] },
+  { key:'pripominky', label:'Poznámky a úkoly',   btns:['btn-place','btn-notes-evidence'] },
+  { key:'ukoly',      label:'Úkolníček',         btns:['btn-tasks'] },
+  { key:'denik',      label:'Deník / sichtovka',  btns:['btn-denik'] },
+  { key:'kvalita',    label:'Kvalita / KZP',      btns:['btn-kzp'] },
+  { key:'inzsite',    label:'Inženýrské sítě',    btns:['btn-is'] }
 ];
 // Allow-by-default: povoleno, dokud admin výslovně nenastaví perms[feature]===false. Admin má vždy vše.
 function hasPerm(feature){
@@ -7875,8 +7885,11 @@ function hasPerm(feature){
 function applyPermsToUI(){
   if(!window.currentUser) return;
   FEATURES.forEach(function(f){
-    var el = document.getElementById(f.btn);
-    if(el) el.style.display = hasPerm(f.key) ? '' : 'none';
+    var on = hasPerm(f.key);
+    (f.btns||[]).forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.style.display = on ? '' : 'none';
+    });
   });
 }
 // Relativní čas pro „naposledy aktivní" v panelu správy uživatelů.
@@ -8509,6 +8522,7 @@ function updateTaskBadge() {
 
 function openTasksPanel() {
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  if(!hasPerm('ukoly')){ showToast('✅ Úkolníček ti admin nepovolil', 3000); return; }
   document.getElementById('tasks-panel').classList.add('open');
   renderTasksList();
 }
@@ -10177,6 +10191,7 @@ window.kzpManual = {};  // Manuálně přidané přes "+ Položka" (Firebase)
 
 function openKzpPanel(){
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
+  if(!hasPerm('kvalita')){ showToast('🧪 Kvalita/KZP ti admin nepovolil', 3000); return; }
   document.getElementById('kzp-panel').classList.add('open');
   loadKzpSeed();
   loadTeprSeed();
