@@ -5809,6 +5809,42 @@ function deleteSelectedGalleryPhotos() {
   });
 }
 
+// 🏗️ Hromadné přeřazení VYBRANÝCH fotek k objektu (SO) – jeden výběr SO se aplikuje na všechny.
+function reassignSelectedGalleryPhotos() {
+  var items = Object.values(gallerySelectedKeys);
+  if(!items.length) { showToast('Vyber nejdřív fotky', 1800); return; }
+  var editable = [], noPerm = 0, notStandalone = 0;
+  items.forEach(function(it){
+    if(!it.fbKey){ notStandalone++; return; }           // poznámkové/úkolové → přeřadit nejdou
+    if(!canDelete(it.uid)){ noPerm++; return; }          // cizí → jen autor/koordinátor
+    editable.push(it);
+  });
+  if(!editable.length){
+    showToast(noPerm ? 'Přeřadit smí jen autor nebo koordinátor'
+                     : 'Hromadně jdou přeřadit jen fotky z galerie', 3200);
+    return;
+  }
+  var kmHint = editable[0].km || null;   // staničení 1. vybrané → nabídne blízké objekty (jdou rozbalit Všechny SO)
+  chooseSOForPhoto(kmHint, function(soArr){
+    soArr = soArr || [];
+    var upd = { so: soArr[0] || '', soList: soArr, restampOnDownload: true };
+    showSync('🏗️ Přeřazuji 0/' + editable.length + '…');
+    var done = 0, fail = 0;
+    var proms = editable.map(function(it){
+      return db.ref('standalone_photos/' + it.fbKey).update(upd)
+        .then(function(){ it.so = upd.so; it.soList = soArr; it.restampOnDownload = true; done++; showSync('🏗️ Přeřazuji ' + done + '/' + editable.length + '…'); })
+        .catch(function(){ fail++; done++; });
+    });
+    Promise.all(proms).then(function(){
+      hideSync();
+      var cnt = editable.length - fail;
+      showToast('🏗️ Přeřazeno ' + cnt + ' fotek → ' + (soArr.length ? soArr.join(', ') : 'nezařazeno') + (fail ? (' (' + fail + '× chyba)') : ''), 3200);
+      gallerySelectedKeys = {};
+      renderGallery();
+    });
+  }, []);
+}
+
 // ✏️ Přeřazení už nahrané fotky k jinému objektu (SO) – multi-výběr, zpětně.
 // Mění zatřídění (galerie „Po objektech" + filtr) i razítko PŘI STAŽENÍ (re-vypálí se z originálu).
 function editPhotoSO() {
@@ -11603,6 +11639,7 @@ function copyDiaryExport(){
     <button class="secondary" onclick="clearGallerySelection()">−</button>
     <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
+    <button onclick="reassignSelectedGalleryPhotos()" title="Přeřadit vybrané k objektu (SO)" style="background:#f5a623;color:#0f3460;">🏗️ Přeřadit</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
   </div>
 </div>
