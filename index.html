@@ -1130,6 +1130,22 @@ document.addEventListener('touchend', function(e){
     <label>🗺️ Katastr (KN)</label>
     <label class="toggle"><input type="checkbox" id="lyr-katastr" onchange="toggleKatastr(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <!-- Vrstvy jen pro subku (read-only, bez výkresů). Zobrazí je applyPermsToUI při isSubOnly(). -->
+  <div id="sub-layers" style="display:none;">
+    <div style="font-size:12px;color:var(--text2);margin:2px 0 4px;">📍 Orientace (bez výkresů)</div>
+    <div class="layer-row">
+      <label>📏 Staničení 100m</label>
+      <label class="toggle"><input type="checkbox" id="lyr-st100sub" checked onchange="toggleSubLayer('st100sub',this.checked)"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="layer-row">
+      <label>📐 Staničení 20m</label>
+      <label class="toggle"><input type="checkbox" id="lyr-st20sub" onchange="toggleSubLayer('st20sub',this.checked)"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="layer-row">
+      <label>🏗️ Objekty SO (101.1, 103…)</label>
+      <label class="toggle"><input type="checkbox" id="lyr-soSub" checked onchange="toggleSubLayer('soSub',this.checked)"><span class="toggle-slider"></span></label>
+    </div>
+  </div>
   <div style="padding:4px 0 2px;" data-perm="dron">
     <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">🛰️ Dron snímky (klikni datum = zobraz)</div>
     <div id="drone-date-row" style="display:flex;flex-wrap:wrap;gap:6px;">
@@ -1912,7 +1928,7 @@ var gpsActive = false;
 var gpsCentering = false;
 var gpxCumulative = [];
 var calibSorted = null;
-var layerGroups = {trasa:null, st100:null, st100sub:null, st20:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null, drone:null};
+var layerGroups = {trasa:null, st100:null, st100sub:null, st20:null, st20sub:null, soSub:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null, drone:null};
 
 // ── MATH ──────────────────────────────
 function haversine(lat1,lon1,lat2,lon2) {
@@ -2070,11 +2086,49 @@ function buildStaniceni20() {
   layerGroups.st20=L.layerGroup();
   addStaniceniMarkers(layerGroups.st20,0.020,false);
 }
-// Read-only staničení (100m) jen pro „subky" – vidí km, ale klik NIC neotevře (žádné výkresy).
-// Buduje se detached (nepřidá se na mapu); zobrazí ho applyPermsToUI jen pro isSubOnly().
+// Read-only staničení (100m/20m) jen pro „subky" – vidí km, ale klik NIC neotevře (žádné výkresy).
+// Buduje se detached (nepřidá se na mapu); zobrazí/skryje ho applyPermsToUI + přepínače ve Vrstvách.
 function buildStaniceni100Sub() {
   layerGroups.st100sub=L.layerGroup();
   addStaniceniMarkers(layerGroups.st100sub,0.100,true,true);   // noClick=true
+}
+function buildStaniceni20Sub() {
+  layerGroups.st20sub=L.layerGroup();
+  addStaniceniMarkers(layerGroups.st20sub,0.020,false,true);   // noClick=true
+}
+// Read-only barevné označení SO objektů podél osy (101.1, 103…) pro subku – bez kliku, bez výkresů.
+function buildSOSub() {
+  layerGroups.soSub=L.layerGroup();
+  var soOffset=20;
+  STAVEBNI_OBJEKTY.forEach(function(so){
+    var pts=[], bearList=[], km=so.kmOd;
+    while(km <= so.kmDo + 0.001){
+      var pos=realKmToLatLng(km);
+      if(pos){
+        var gpxM=interp(calibSorted,'realKm','gpxM',km);
+        var bear=bearingAtGpxM(gpxM);
+        var perpRad=(bear-90)*Math.PI/180;
+        var off=soOffset/6371000;
+        pts.push([pos[0]+off*(180/Math.PI)*Math.cos(perpRad), pos[1]+off*(180/Math.PI)*Math.sin(perpRad)/Math.cos(pos[0]*Math.PI/180)]);
+        bearList.push(bear);
+      }
+      km=Math.round((km+0.020)*1000)/1000;
+    }
+    if(pts.length<2) return;
+    L.polyline(pts,{color:so.barva,weight:7,opacity:0.55,interactive:false}).addTo(layerGroups.soSub);
+    for(var pi=1; pi<pts.length-1; pi+=20){
+      var bear2=bearList[pi], rot=bear2; if(rot>90 && rot<270) rot=(rot+180)%360;
+      var perpRad2=(bear2-90)*Math.PI/180, offExtra=20/6371000;
+      var latL=pts[pi][0]+offExtra*(180/Math.PI)*Math.cos(perpRad2);
+      var lngL=pts[pi][1]+offExtra*(180/Math.PI)*Math.sin(perpRad2)/Math.cos(pts[pi][0]*Math.PI/180);
+      var lbl=L.divIcon({className:'',
+        html:'<div style="color:'+so.barva+';font-size:14px;font-weight:800;white-space:nowrap;'+
+          'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;'+
+          'transform:rotate('+(rot+90).toFixed(0)+'deg);transform-origin:0 50%;">'+so.id+'</div>',
+        iconSize:[0,0], iconAnchor:[0,0]});
+      L.marker([latL,lngL],{icon:lbl,interactive:false}).addTo(layerGroups.soSub);
+    }
+  });
 }
 
 function buildPR() {
@@ -3103,10 +3157,12 @@ function init() {
   buildStaniceni100();
   buildStaniceni100Sub();
   buildStaniceni20();
+  buildStaniceni20Sub();
   // buildPR vyžaduje DOCS_PR (pracovní řezy) - PDPS Sulice je nemá
   if(Object.keys(DOCS_PR).length) buildPR();
   if(SANACE.length) buildSanace();
   buildSO();
+  buildSOSub();
   if(ETAPY.length) buildEtapy();
   if(CISTENI_PRIKOPY.vpravo.length || CISTENI_PRIKOPY.vlevo.length) buildPrikopy();
   buildPropustky();
@@ -8181,11 +8237,26 @@ function applyPermsToUI(){
       });
     }
   });
-  // 3) Subka: místo skrytého (pdf) staničení ukázat read-only staničení (vidí km, klik nic neotevře).
-  if(layerGroups && layerGroups.st100sub && map){
-    if(isSubOnly()){ layerGroups.st100sub.addTo(map); }
-    else { try { map.removeLayer(layerGroups.st100sub); } catch(e){} }
+  // 3) Subka: místo skrytých (pdf) vrstev ukázat read-only orientaci (staničení 100/20m + barevné SO).
+  //    Přepínače v sekci #sub-layers; klik na ně NIC neotevře (žádné výkresy).
+  var subSec = document.getElementById('sub-layers');
+  var subLayerIds = ['st100sub','st20sub','soSub'];
+  if(isSubOnly()){
+    if(subSec) subSec.style.display = '';
+    subLayerIds.forEach(function(n){
+      var cb = document.getElementById('lyr-'+n);
+      var on = cb ? cb.checked : false;
+      if(layerGroups[n] && map){ on ? layerGroups[n].addTo(map) : map.removeLayer(layerGroups[n]); }
+    });
+  } else {
+    if(subSec) subSec.style.display = 'none';
+    subLayerIds.forEach(function(n){ if(layerGroups[n] && map){ try { map.removeLayer(layerGroups[n]); } catch(e){} } });
   }
+}
+// Přepínač read-only vrstev pro subku (Vrstvy → Orientace).
+function toggleSubLayer(name, en){
+  if(!layerGroups[name] || !map) return;
+  en ? layerGroups[name].addTo(map) : map.removeLayer(layerGroups[name]);
 }
 // Relativní čas pro „naposledy aktivní" v panelu správy uživatelů.
 function _relTime(ts){
