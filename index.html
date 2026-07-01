@@ -7753,6 +7753,11 @@ function applyGalleryFilters(items){
   var subEl = document.getElementById('gfilt-sub');
   var onlySub = subEl ? subEl.checked : false;
   if(isSubOnly()) onlySub = true;   // subka VŽDY jen SUB fotky (nejde vypnout)
+  // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
+  // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
+  var anyActive = !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
+  var cfBtn = document.getElementById('gallery-clearfilter-btn');
+  if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   return items.filter(function(it){
     if(onlySub && !(it.zdroj === 'SUB' || it.sub)) return false;
     if(!isNaN(kmOd) || !isNaN(kmDo)) {
@@ -12043,6 +12048,7 @@ function copyDiaryExport(){
     <button id="gallery-group-btn" onclick="toggleGalleryGrouped()" title="Zobrazit po stavebních objektech" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">📁 Po objektech</button>
     <button id="gallery-select-btn" onclick="toggleGallerySelectMode()" title="Hromadný výběr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">☑️ Vybrat</button>
     <button onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
+    <button id="gallery-clearfilter-btn" onclick="clearGalleryFilters()" title="Zrušit všechny filtry" style="display:none;background:#e57373;border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-right:6px;">✕ Zrušit filtr</button>
     <button id="gallery-close" onclick="closeGallery()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:4px 8px;">&#x2715;</button>
   </div>
   <div id="gallery-tabs">
