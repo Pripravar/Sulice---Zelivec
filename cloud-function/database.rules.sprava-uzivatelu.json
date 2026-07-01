@@ -6,8 +6,9 @@
       ".read": true,
       "$uid": {
         ".write": "auth != null && (auth.uid === $uid || auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin') && root.child('uzivatele').child(auth.uid).child('blocked').val() !== true",
-        "role":    { ".validate": "auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin' || newData.val() === data.val()" },
-        "blocked": { ".validate": "auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin' || newData.val() === data.val()" },
+        "role":     { ".validate": "auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin' || newData.val() === data.val()" },
+        "blocked":  { ".validate": "auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin' || newData.val() === data.val()" },
+        "approved": { ".validate": "auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin' || newData.val() === data.val()" },
         "perms":   { ".validate": "auth.uid === '7GapoHzBzZMP6CtQXQgoPL0aVL52' || root.child('admins').child(auth.uid).exists() || root.child('uzivatele').child(auth.uid).child('role').val() === 'admin'" }
       }
     },

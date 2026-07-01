@@ -732,6 +732,8 @@ textarea.note-field { min-height:80px; resize:vertical; }
 #gallery-empty { text-align:center; color:var(--text2); padding:40px 20px; font-size:14px; }
 /* Režim hromadného výběru fotek */
 .gallery-item .gsel-check { position:absolute; top:4px; left:4px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.55); border:2px solid #fff; display:none; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700; z-index:2; }
+.gallery-item.gallery-sub img { outline:3px solid #1565c0; outline-offset:-3px; border-radius:6px; }
+.gallery-sub-badge { position:absolute; top:4px; right:4px; background:#1565c0; color:#fff; font-size:9px; font-weight:800; letter-spacing:.5px; padding:2px 6px; border-radius:6px; z-index:3; box-shadow:0 1px 3px rgba(0,0,0,.4); }
 .gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
 .gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
 .gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
@@ -768,6 +770,8 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .auth-google { background:#fff; color:#3c4043; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; }
 .auth-google:hover { background:#f1f3f4; }
 .auth-google img { width:18px; height:18px; }
+/* SUB režim: schovat vše kromě mapy, GPS a foťáku (buttony funkcí řeší applyPermsToUI) */
+body.submode #user-badge, body.submode #btn-layers { display:none !important; }
 .auth-phone-btn { background:var(--accent2); color:#0f3460; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; }
 .auth-phone-btn:hover { background:#e89c1f; }
 .auth-back { background:transparent; color:var(--text2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; font-size:13px; cursor:pointer; width:100%; margin-top:6px; }
@@ -1056,6 +1060,10 @@ document.addEventListener('touchend', function(e){
       </button>
       <div class="auth-note auth-note-warn">
         ⚠️ <b>Jen pro nouzové případy.</b> Každou SMS platí tvůrce aplikace ze svého. Aplikace ho stojí čas i peníze, tak ho prosím šetři — Google login je doslova rychlejší a všem nám usnadní život 🙏
+      </div>
+      <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:12px;">
+        <button class="auth-phone-btn" onclick="startSubMode()" style="background:#1565c0;color:#fff;border:none;">📷 Jsem SUB / firma – jen přidat fotky</button>
+        <div style="text-align:center;color:var(--text2);font-size:11px;margin-top:6px;line-height:1.4;">Bez přihlášení – jen zadáš jméno a fotíš. Fotky se pošlou nám do aplikace.</div>
       </div>
     </div>
 
@@ -7342,14 +7350,42 @@ function _photoBadge(){
   else { el.style.display = 'none'; }
 }
 function enqueuePhoto(compressed, meta, yes){
-  photoQueue.push({ compressed: compressed, meta: meta, yes: yes, tries: 0 });
+  photoQueue.push({ compressed: compressed, meta: meta, yes: yes, tries: 0, sub: !!window.subMode });
   photoPending++; _photoBadge();
   if(!photoUploading) _processPhotoQueue();
+}
+// SUB režim: fotka jde přes Cloud Function (SUB nemá Firebase přihlášení). Značí se zdroj:'SUB'.
+var UPLOAD_SUB_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadSubFoto';
+function _stripB64(dataUrl){ return String(dataUrl||'').replace(/^data:image\/\w+;base64,/, ''); }
+function _uploadSubJob(job){
+  var meta = job.meta, compressed = job.compressed;
+  var t = meta.ts || _uniqueT();
+  function fail(msg){
+    if(job.tries < 1){ job.tries++; photoQueue.push(job); }
+    else { photoPending = Math.max(0, photoPending-1); showToast('❌ Fotka se nenahrála ('+(msg||'')+')', 3000); }
+    _photoBadge(); setTimeout(_processPhotoQueue, 500);
+  }
+  burnInMetadata(compressed, meta.km, meta.author, function(stamped){
+    resizeImageMax(stamped, 400, 0.5, function(thumbUrl){
+      var payload = {
+        name: (window.subMode && window.subMode.name) || meta.author || 'SUB',
+        so: meta.so || '', soList: (meta.soList || []), km: meta.km || '',
+        lat: meta.lat, lng: meta.lng,
+        date: new Date(t).toLocaleDateString('cs-CZ'), time: new Date(t).toLocaleString('cs-CZ'), ts: t,
+        stamped: _stripB64(stamped), original: _stripB64(compressed), thumb: _stripB64(thumbUrl || '')
+      };
+      fetch(UPLOAD_SUB_FN_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)); })
+        .then(function(){ photoPending = Math.max(0, photoPending-1); _photoBadge(); setTimeout(_processPhotoQueue, 400); })
+        .catch(function(e){ fail((e && e.message) || 'síť'); });
+    });
+  }, (meta.soList && meta.soList.length ? meta.soList : meta.so));
 }
 function _processPhotoQueue(){
   if(!photoQueue.length){ photoUploading = false; return; }
   photoUploading = true;
   var job = photoQueue.shift();
+  if(job.sub){ _uploadSubJob(job); return; }   // SUB → přes Cloud Function (bez Firebase auth)
   var compressed = job.compressed, meta = job.meta, yes = job.yes;
   function fail(msg){
     if(job.tries < 1){ job.tries++; photoQueue.push(job); }   // 1× zkus znovu (výpadek sítě)
@@ -7686,7 +7722,10 @@ function applyGalleryFilters(items){
   var aut  = (document.getElementById('gfilt-author').value || '').trim();
   var soEl = document.getElementById('gfilt-so');
   var soF  = soEl ? (soEl.value || '').trim() : '';
+  var subEl = document.getElementById('gfilt-sub');
+  var onlySub = subEl ? subEl.checked : false;
   return items.filter(function(it){
+    if(onlySub && !(it.zdroj === 'SUB' || it.sub)) return false;
     if(!isNaN(kmOd) || !isNaN(kmDo)) {
       var km = parseKmStr(it.km);
       if(km === null) return false; // bez km neprochází filtr
@@ -7812,6 +7851,7 @@ function clearGalleryFilters(){
   document.getElementById('gfilt-date-do').value = '';
   document.getElementById('gfilt-author').value = '';
   var soEl = document.getElementById('gfilt-so'); if(soEl) soEl.value = '';
+  var subEl = document.getElementById('gfilt-sub'); if(subEl) subEl.checked = false;
   renderGallery();
 }
 
@@ -7846,6 +7886,12 @@ function _galleryItemEl(item) {
       };
     })(item);
     div.appendChild(badge);
+  }
+  if(item.zdroj === 'SUB' || item.sub){
+    div.classList.add('gallery-sub');
+    var subB = document.createElement('div');
+    subB.className = 'gallery-sub-badge'; subB.textContent = 'SUB';
+    div.appendChild(subB);
   }
   var meta = document.createElement('div');
   meta.className = 'gallery-item-meta';
@@ -8059,6 +8105,7 @@ var FEATURES = [
 ];
 // Allow-by-default: povoleno, dokud admin výslovně nenastaví perms[feature]===false. Admin má vždy vše.
 function hasPerm(feature){
+  if(window.subMode) return feature === 'foto';   // SUB režim: povoleno JEN focení, nic jiného
   if(isAdmin()) return true;
   var me = window.currentUser && window.currentUser.uid;
   if(!me) return false;
@@ -8182,7 +8229,12 @@ function _renderUserAdmin(){
   var box = document.getElementById('user-admin-list');
   if(!box) return;
   var users = window.allUsers || {};
-  var keys = Object.keys(users).sort(function(a,b){ return (users[b].lastSeen||0) - (users[a].lastSeen||0); });
+  var keys = Object.keys(users).sort(function(a,b){
+    var pa = (!isAdmin(a) && users[a].approved !== true) ? 1 : 0;   // čekající na schválení nahoru
+    var pb = (!isAdmin(b) && users[b].approved !== true) ? 1 : 0;
+    if(pa !== pb) return pb - pa;
+    return (users[b].lastSeen||0) - (users[a].lastSeen||0);
+  });
   if(!keys.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px 10px;font-size:14px;">Zatím se nikdo nepřihlásil.</div>'; return; }
   var me = window.currentUser ? window.currentUser.uid : '';
   var html = '';
@@ -8191,24 +8243,27 @@ function _renderUserAdmin(){
     var self = (uid === me);
     var adm = isAdmin(uid);
     var blk = !!u.blocked;
+    var pending = !adm && u.approved !== true;   // nový, čeká na schválení
     var online = (Date.now() - (u.lastSeen||0)) < 5*60*1000;
     var av = (u.photo && /^https?:\/\//.test(u.photo))
       ? '<img src="'+escapeHtml(u.photo)+'" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
       : '<div style="width:38px;height:38px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">👤</div>';
-    html += '<div style="border-bottom:1px solid var(--border);padding:10px 4px;'+(blk?'opacity:.55;':'')+'">'+
+    html += '<div style="border-bottom:1px solid var(--border);padding:10px 4px;'+(blk?'opacity:.55;':'')+(pending?'background:rgba(245,166,35,0.10);border-left:3px solid #f5a623;':'')+'">'+
       '<div style="display:flex;align-items:center;gap:10px;">'+
         av+
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+
             escapeHtml(u.name||'(bez jména)')+
             (adm?' <span style="background:#f5a623;color:#0f3460;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;">ADMIN</span>':'')+
+            (pending?' <span style="background:#f5a623;color:#0f3460;font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;">⏳ ČEKÁ</span>':'')+
             (blk?' <span style="background:#e57373;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;">BLOKOVÁN</span>':'')+
           '</div>'+
           '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(u.email||u.phone||'')+'</div>'+
           '<div style="font-size:11px;color:'+(online?'#48bb78':'var(--text2)')+';">'+(online?'● online':('naposledy '+_relTime(u.lastSeen)))+(self?' · to jsi ty':'')+'</div>'+
         '</div>'+
-        // Blokace + admin (sebe nelze)
+        // Schválit (jen u čekajících) + blokace (sebe nelze)
         (self?'' :
+          (pending ? '<button onclick="toggleUserApprove(\''+uid+'\')" title="Schválit přístup" style="background:#48bb78;border:none;border-radius:8px;color:#fff;padding:8px 12px;font-size:13px;font-weight:800;cursor:pointer;min-height:40px;flex-shrink:0;white-space:nowrap;">✅ Schválit</button>' : '')+
           '<button onclick="toggleUserBlocked(\''+uid+'\')" title="'+(blk?'Odblokovat':'Zablokovat')+'" style="background:'+(blk?'#48bb78':'#e57373')+';border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">'+(blk?'✅':'🚫')+'</button>')+
       '</div>'+
       // Per-funkce práva (admin má vždy vše → u admina skryj)
@@ -8228,6 +8283,13 @@ function _renderUserAdmin(){
     '</div>';
   });
   box.innerHTML = html;
+}
+function toggleUserApprove(uid){
+  if(!isAdmin()) return;
+  var u = (window.allUsers||{})[uid] || {};
+  db.ref('uzivatele/'+uid+'/approved').set(true)
+    .then(function(){ showToast('✅ '+(u.name||'Uživatel')+' schválen', 1800); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 function toggleUserBlocked(uid){
   if(!isAdmin()){ return; }
@@ -8321,9 +8383,10 @@ function completeLogin(user, nameOverride) {
     photo:    window.currentUser.photo,
     lastSeen: Date.now()
   });
-  // BLOKACE: zablokovaného uživatele nepustíme do aplikace (tvrdě řeší i Firebase pravidla).
-  db.ref('uzivatele/' + user.uid + '/blocked').once('value').then(function(snap){
-    if(snap.val() === true){
+  // BLOKACE + SCHVÁLENÍ: zablokovaného nepustíme; nového (neschváleného) necháme čekat na admina.
+  db.ref('uzivatele/' + user.uid).once('value').then(function(snap){
+    var u = snap.val() || {};
+    if(u.blocked === true){
       window.currentUser = null;
       _setAuthView('main');
       showAuthError('⛔ Tvůj přístup do aplikace zablokoval administrátor.');
@@ -8331,8 +8394,40 @@ function completeLogin(user, nameOverride) {
       if(fbAuth) fbAuth.signOut();
       return;
     }
+    var adminBypass = (ADMIN_UIDS.indexOf(user.uid) !== -1) || (u.role === 'admin');
+    if(u.approved !== true && !adminBypass){
+      _showPendingApproval(user.uid, displayName);   // čeká na schválení – zůstává přihlášený, ale nevpustíme
+      return;
+    }
     _enterApp(displayName);
-  }).catch(function(){ _enterApp(displayName); });  // chybu čtení neřešíme tvrdě (UX) – blokaci zajistí pravidla
+  }).catch(function(){ _enterApp(displayName); });  // chybu čtení neřešíme tvrdě (UX) – zajistí pravidla
+}
+// Nový uživatel čeká na schválení administrátora. Zůstane přihlášený (admin ho vidí v /uzivatele),
+// ale do appky nevstoupí. Živě poslouchá – jakmile ho admin schválí, appka se sama otevře.
+function _showPendingApproval(uid, displayName){
+  var g = document.getElementById('auth-gate'); if(g) g.classList.remove('hide');
+  ['main','phone','code','name'].forEach(function(v){ var el=document.getElementById('auth-view-'+v); if(el) el.style.display='none'; });
+  showAuthError('');
+  var p = document.getElementById('auth-view-pending');
+  if(!p){
+    p = document.createElement('div'); p.id='auth-view-pending';
+    p.innerHTML = '<div style="text-align:center;padding:6px 0;">'+
+      '<div style="font-size:44px;">⏳</div>'+
+      '<p style="margin:10px 0;">Ahoj <b id="pending-name"></b>,<br>tvůj přístup musí nejdřív <b>schválit administrátor</b>.</p>'+
+      '<p style="font-size:12px;color:var(--text2);line-height:1.4;">Jakmile tě schválí, aplikace se <b>sama otevře</b> — klidně nech okno otevřené.</p>'+
+      '<button class="auth-back" onclick="signOutUser()" style="margin-top:12px;">Odhlásit</button>'+
+      '</div>';
+    var box = document.querySelector('#auth-gate .auth-box'); if(box) box.appendChild(p);
+  }
+  var nm=document.getElementById('pending-name'); if(nm) nm.textContent = displayName;
+  p.style.display='block';
+  db.ref('uzivatele/'+uid+'/approved').on('value', function(s){
+    if(s.val() === true){
+      db.ref('uzivatele/'+uid+'/approved').off();
+      p.style.display='none';
+      _enterApp(displayName);
+    }
+  });
 }
 // Vpuštění do aplikace (po ověření, že uživatel není zablokovaný).
 function _enterApp(displayName){
@@ -8349,6 +8444,30 @@ function _enterApp(displayName){
   maybeShowIosHint();
   applyPermsToUI();   // schovat tlačítka funkcí, které uživatel nemá povolené
   setTimeout(_maybeQuickPhoto, 700);   // URL ?foto/#foto → rovnou foťák
+}
+
+// ── SUB / firma režim: bez přihlášení, jen jméno, JEN focení (přes Cloud Function) ──
+function startSubMode(){
+  var name = prompt('Zadej své jméno / firmu (ať víme, od koho fotky jsou):');
+  if(name === null) return;
+  name = name.trim();
+  if(!name){ showToast('Zadej jméno', 2000); return; }
+  window.subMode = { name: name };
+  window.currentUser = { uid: '', name: name, sub: true };   // pseudo-uživatel, aby foto-flow fungoval
+  localStorage.setItem('noteAuthor', name);
+  document.body.classList.add('submode');
+  document.getElementById('auth-gate').classList.add('hide');
+  try { loadCustomSO(); } catch(e){}   // vlastní objekty (čte se veřejně, bez přihlášení)
+  applyPermsToUI();                     // hasPerm v SUB režimu = jen 'foto' → vše ostatní se schová
+  var badge = document.getElementById('sub-badge');
+  if(!badge){
+    badge = document.createElement('div'); badge.id = 'sub-badge';
+    badge.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:1200;background:#1565c0;color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    document.body.appendChild(badge);
+  }
+  badge.textContent = '📷 SUB: ' + name + ' – fotíš k nám';
+  if(!gpsActive){ try { var g = document.getElementById('lyr-gps'); if(g) g.checked = true; startGPS(); } catch(e){} }
+  showToast('📷 Zapni GPS a foť. Fotky se pošlou do aplikace. Konec = obnov stránku.', 4500);
 }
 
 // Hlavní auth listener - běží automaticky po načtení stránky
@@ -11788,6 +11907,9 @@ function copyDiaryExport(){
       </div>
       <button onclick="clearGalleryFilters()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">⌫ Vynulovat</button>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer;">
+      <input type="checkbox" id="gfilt-sub" onchange="renderGallery()" style="width:18px;height:18px;"> <span style="background:#1565c0;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;">SUB</span> Jen fotky od SUB / firem
+    </label>
     <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
       <button onclick="generateMissingThumbs()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">🖼️ Zrychlit galerii (dogenerovat náhledy)</button>
       <div style="font-size:10px;color:var(--text2);margin-top:4px;">Jednorázově pro starší fotky – pak se galerie načítá rychleji. Běží na pozadí.</div>

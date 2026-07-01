@@ -353,3 +353,69 @@ exports.uploadDroneFoto = functions
       res.status(500).json({ error: 'Chyba serveru při uploadu' });
     }
   });
+
+/* ════════════════════════════════════════════════════════════════
+   HTTPS FUNKCE – SUB nahrání fotky BEZ přihlášení (jen jméno)
+   - Externí subdodavatel (SUB) fotí přes appku v „SUB režimu" (žádný Google login).
+   - Klient pošle POST { name, so, soList, km, lat, lng, date, time, ts, stamped, original, thumb }
+     (obrázky base64; stamped = s razítkem, original = bez, thumb = náhled).
+   - Funkce (admin SDK = důvěryhodný zapisovatel) nahraje do EU Storage `standalone/` a zapíše
+     do /standalone_photos s příznakem zdroj:'SUB'. Žádná změna Firebase pravidel není potřeba.
+   URL po deployi:
+     https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadSubFoto
+   ════════════════════════════════════════════════════════════════ */
+const crypto = require('crypto');
+const SUB_BUCKET = 'sulice-zelivec-eu';
+async function _subPut(pathname, b64, contentType) {
+  const buf = Buffer.from(b64, 'base64');
+  const token = crypto.randomUUID();
+  await admin.storage().bucket(SUB_BUCKET).file(pathname).save(buf, {
+    resumable: false,
+    metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } }
+  });
+  return pathname;
+}
+exports.uploadSubFoto = functions
+  .region('europe-west1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if(req.method !== 'POST')    { res.status(405).json({ error: 'Jen POST' }); return; }
+
+    const b = req.body || {};
+    const name = String(b.name || '').trim().slice(0, 60);
+    if(!name) { res.status(400).json({ error: 'Chybí jméno' }); return; }
+    const stamped  = String(b.stamped  || '');
+    const original = String(b.original || '');
+    const thumb    = String(b.thumb    || '');
+    if(!stamped || stamped.length > 12 * 1024 * 1024) { res.status(400).json({ error: 'Chybí/příliš velká fotka' }); return; }
+    if(original.length > 12 * 1024 * 1024 || thumb.length > 3 * 1024 * 1024) { res.status(400).json({ error: 'Příliš velká fotka' }); return; }
+
+    const ts = (typeof b.ts === 'number' && b.ts > 0) ? b.ts : Date.now();
+    try {
+      const base = 'standalone/foto_' + ts;
+      const pStamp = await _subPut(base + '_s.jpg', stamped, 'image/jpeg');
+      const pOrig  = original ? await _subPut(base + '_o.jpg', original, 'image/jpeg') : pStamp;
+      const pThumb = thumb    ? await _subPut(base + '_t.jpg', thumb,    'image/jpeg') : null;
+      const entry = {
+        url: pStamp, urlStamped: pStamp, urlOriginal: pOrig, stamped: true,
+        so: String(b.so || ''),
+        soList: Array.isArray(b.soList) ? b.soList : [],
+        km: String(b.km || ''),
+        author: name, zdroj: 'SUB', sub: true, uid: '',
+        lat: (typeof b.lat === 'number') ? b.lat : null,
+        lng: (typeof b.lng === 'number') ? b.lng : null,
+        time: String(b.time || new Date(ts).toISOString()),
+        date: String(b.date || ''),
+        ts: ts
+      };
+      if(pThumb) entry.thumb = pThumb;
+      await db.ref('standalone_photos/' + ts).set(entry);
+      res.status(200).json({ ok: true });
+    } catch(e) {
+      console.error('uploadSubFoto výjimka:', e);
+      res.status(500).json({ error: 'Upload selhal' });
+    }
+  });
