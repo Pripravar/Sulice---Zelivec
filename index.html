@@ -5870,6 +5870,44 @@ function reassignSelectedGalleryPhotos() {
   }, []);
 }
 
+// 📤 Poslat vybrané fotky do TDS aplikace (objednatel). Razítko SO+staničení+datum, BEZ JMÉNA.
+// Vypálí se čerstvě z originálu, nahraje do EU Storage (tds/) a zapíše odkaz do /tds_fotky.
+function sendSelectedToTds() {
+  var items = Object.values(gallerySelectedKeys);
+  if(!items.length){ showToast('Vyber nejdřív fotky', 1800); return; }
+  if(!window.currentUser){ showToast('Pro odeslání do TDS se přihlas', 2800); return; }
+  var list = items.filter(function(it){ return it.fbKey; });   // jen fotky z galerie
+  if(!list.length){ showToast('Do TDS jdou poslat jen fotky z galerie', 3200); return; }
+  if(!confirm('Poslat ' + list.length + ' fotek do TDS aplikace (objednatel)?\n\nRazítko: SO + staničení + datum (BEZ jména). Objednatel je jen prohlíží.')) return;
+  var TDS_FIELDS = { so:true, km:true, datum:true, jmeno:false };   // razítko bez jména
+  showSync('📤 Odesílám 0/' + list.length + '…');
+  var done = 0, fail = 0;
+  (function next(i){
+    if(i >= list.length){
+      hideSync();
+      showToast('📤 Do TDS odesláno ' + (list.length - fail) + ' fotek' + (fail ? (' (' + fail + '× chyba)') : ''), 3200);
+      return;
+    }
+    showSync('📤 Odesílám ' + (i+1) + '/' + list.length + '…');
+    var it = list[i];
+    preparePhotoBlobForDownload(it, { stamp: { stamp:true, fields:TDS_FIELDS } }).then(function(blob){
+      var path = 'tds/tds_' + Date.now() + '_' + i + '.jpg';
+      return _privStorage().ref(path).put(blob, { contentType:'image/jpeg' }).then(function(){
+        return db.ref('tds_fotky').push({
+          soubor:  path,
+          so:      (it.soList && it.soList.length ? it.soList.join(', ') : (it.so || '')),
+          km:      it.km || '',
+          date:    it.date || (it.ts ? new Date(it.ts).toLocaleDateString('cs-CZ') : ''),
+          ts:      it.ts || Date.now(),
+          pushedBy: (window.currentUser && window.currentUser.name) || '',
+          pushedTs: Date.now()
+        });
+      });
+    }).then(function(){ done++; setTimeout(function(){ next(i+1); }, 150); })
+      .catch(function(e){ fail++; console.warn('TDS send:', e); setTimeout(function(){ next(i+1); }, 150); });
+  })(0);
+}
+
 // ✏️ Přeřazení už nahrané fotky k jinému objektu (SO) – multi-výběr, zpětně.
 // Mění zatřídění (galerie „Po objektech" + filtr) i razítko PŘI STAŽENÍ (re-vypálí se z originálu).
 function editPhotoSO() {
@@ -11720,6 +11758,7 @@ function copyDiaryExport(){
     <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
     <button onclick="reassignSelectedGalleryPhotos()" title="Přeřadit vybrané k objektu (SO)" style="background:#f5a623;color:#0f3460;">🏗️ Přeřadit</button>
+    <button onclick="sendSelectedToTds()" title="Poslat vybrané do TDS aplikace (objednatel)" style="background:#1565c0;color:#fff;">📤 Do TDS</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
   </div>
 </div>
