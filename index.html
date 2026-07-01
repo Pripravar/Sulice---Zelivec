@@ -2118,6 +2118,7 @@ function addPRMarker(group, lat, lng, realKm, bear, pr) {
 }
 
 function openPRPanel(realKm, pr) {
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů ti admin nepovolil', 3000); return; }
   window._docPanelKm = (typeof realKm==='number') ? realKm : null;
   showToast('PŘ km '+fmtKm(realKm)+' (řez č.'+pr.rezIdx+'/'+pr.total+')', 2000);
   var prPos = realKmToLatLng(realKm);
@@ -6591,6 +6592,7 @@ function buildPropustky() {
 }
 
 function openPropPanel(prop) {
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů ti admin nepovolil', 3000); return; }
   var pPos = realKmToLatLng(prop.km); if(pPos) showSelectionRing(L.latLng(pPos[0],pPos[1]));
   currentPropId = prop.id;
   // Sulice: každý propustek má pole 'vykresy' s kompletní sadou (situace, PP, vzor.řezy, ...)
@@ -6959,6 +6961,7 @@ var currentPrikopId = null;
 var prikopLayers = {}; // id → {line, labelMarker}
 
 function openPrikopModal(u, stranaLabel) {
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení ti admin nepovolil', 3000); return; }
   currentPrikopId = u.id;
   document.getElementById('prikop-stav-title').textContent = '🧹 Čištění příkopu ' + stranaLabel;
   document.getElementById('prikop-stav-km').textContent = 'km ' + fmtKm(u.kmOd) + ' – ' + fmtKm(u.kmDo) + ' // délka: ' + u.delka + ' m';
@@ -7356,6 +7359,7 @@ function enqueuePhoto(compressed, meta, yes){
 }
 // SUB režim: fotka jde přes Cloud Function (SUB nemá Firebase přihlášení). Značí se zdroj:'SUB'.
 var UPLOAD_SUB_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadSubFoto';
+var LIST_SUB_FN_URL   = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/listSubFotos';
 function _stripB64(dataUrl){ return String(dataUrl||'').replace(/^data:image\/\w+;base64,/, ''); }
 function _uploadSubJob(job){
   var meta = job.meta, compressed = job.compressed;
@@ -8453,10 +8457,19 @@ function _enterApp(displayName){
 
 // ── SUB / firma režim: bez přihlášení, jen jméno, JEN focení (přes Cloud Function) ──
 function startSubMode(){
-  var name = prompt('Zadej své jméno / firmu (ať víme, od koho fotky jsou):');
+  var saved = localStorage.getItem('subName') || '';
+  var name = prompt('Zadej své jméno / firmu (ať víme, od koho fotky jsou):', saved);
   if(name === null) return;
   name = name.trim();
   if(!name){ showToast('Zadej jméno', 2000); return; }
+  // Zapamatuj SUB režim + jméno → po přenačtení stránky se sám vrátí (nemusí znovu zadávat jméno).
+  try { localStorage.setItem('subActive', '1'); localStorage.setItem('subName', name); } catch(e){}
+  _enterSubMode(name, true);
+}
+// Vstup do SUB UI. Volá se z startSubMode (nové zadání) i z _maybeRestoreSub (obnova po reloadu).
+function _enterSubMode(name, showHint){
+  if(window.subMode) return;   // už běží
+  name = (name || 'SUB').trim();
   window.subMode = { name: name };
   window.currentUser = { uid: '', name: name, sub: true };   // pseudo-uživatel, aby foto-flow fungoval
   localStorage.setItem('noteAuthor', name);
@@ -8474,29 +8487,84 @@ function startSubMode(){
   var tb = document.getElementById('sub-toolbar'); if(tb) tb.style.display = 'flex';
   _subUpdateCount();
   if(!gpsActive){ try { var g = document.getElementById('lyr-gps'); if(g) g.checked = true; startGPS(); } catch(e){} }
-  showToast('📷 Zapni GPS a foť. Fotky se pošlou nám i tobě do „Moje fotky". Konec = obnov stránku.', 5000);
+  if(showHint) showToast('📷 Zapni GPS a foť. Fotky se pošlou nám i tobě do „SUB galerie". Konec = tlačítko 🚪 Odhlásit.', 5000);
+}
+// Obnova SUB režimu po přenačtení stránky (SUB nemá Firebase login, tak si to pamatujeme sami).
+function _maybeRestoreSub(){
+  try { if(localStorage.getItem('subActive') === '1' && !window.subMode){ _enterSubMode(localStorage.getItem('subName') || 'SUB', false); return true; } } catch(e){}
+  return false;
+}
+// Odhlášení ze SUB režimu → zpět na přihlašovací obrazovku (čistě přes reload).
+function exitSubMode(){
+  if(!confirm('Odhlásit se ze SUB režimu a vrátit se na přihlášení?')) return;
+  try { localStorage.removeItem('subActive'); } catch(e){}
+  window.subMode = null;
+  location.reload();
 }
 // „Moje fotky" SUB – lokální seznam nahraných (token-odkazy z funkce), aby je SUB viděl a stáhl u sebe.
 function _subMyPhotos(){ try { return JSON.parse(localStorage.getItem('subMyPhotos')||'[]')||[]; } catch(e){ return []; } }
+// window._subAllPhotos = online seznam VŠECH SUB fotek (z listSubFotos), null = ještě nenačteno.
+window._subAllPhotos = null; window._subSort = 'new';
 function _subAddMyPhoto(item){
   var l = _subMyPhotos(); l.unshift(item); if(l.length > 300) l = l.slice(0,300);
   try { localStorage.setItem('subMyPhotos', JSON.stringify(l)); } catch(e){}
+  // Nová fotka rovnou do online seznamu, ať se v galerii objeví bez refetche.
+  if(Array.isArray(window._subAllPhotos)) window._subAllPhotos.unshift(item);
   _subUpdateCount();
-  if(document.getElementById('sub-photos-modal') && document.getElementById('sub-photos-modal').style.display==='flex') _renderSubMyPhotos();
+  if(document.getElementById('sub-photos-modal') && document.getElementById('sub-photos-modal').style.display==='flex'){ _subPopulateSoFilter(); _renderSubMyPhotos(); }
 }
 function _subUpdateCount(){ var c = document.getElementById('sub-count'); if(c) c.textContent = _subMyPhotos().length; }
-function openSubMyPhotos(){ document.getElementById('sub-photos-modal').style.display='flex'; _renderSubMyPhotos(); }
+function openSubMyPhotos(){
+  document.getElementById('sub-photos-modal').style.display='flex';
+  var box = document.getElementById('sub-photos-list');
+  if(box) box.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">⏳ Načítám SUB fotky…</div>';
+  fetch(LIST_SUB_FN_URL).then(function(r){ return r.json(); }).then(function(resp){
+    if(resp && resp.ok && Array.isArray(resp.photos)){
+      window._subAllPhotos = resp.photos.map(function(p){
+        return { url:p.full||p.thumb, thumb:p.thumb||p.full, so:p.so||'', soList:p.soList||[], km:p.km||'', date:p.date||'', author:p.author||'', ts:p.ts };
+      });
+    } else { window._subAllPhotos = _subMyPhotos(); }
+    _subPopulateSoFilter(); _renderSubMyPhotos();
+  }).catch(function(){
+    window._subAllPhotos = _subMyPhotos();
+    _subPopulateSoFilter(); _renderSubMyPhotos();
+    showToast('⚠️ Online galerie nedostupná – ukazuji fotky z tohoto telefonu', 3500);
+  });
+}
 function closeSubMyPhotos(){ document.getElementById('sub-photos-modal').style.display='none'; }
+function _subToggleSort(){
+  window._subSort = (window._subSort==='new') ? 'old' : 'new';
+  var b = document.getElementById('sub-filt-sort'); if(b) b.textContent = (window._subSort==='new') ? '🔽 Nejnovější' : '🔼 Nejstarší';
+  _renderSubMyPhotos();
+}
+function _subPopulateSoFilter(){
+  var sel = document.getElementById('sub-filt-so'); if(!sel) return;
+  var cur = sel.value, set = {};
+  (window._subAllPhotos||[]).forEach(function(p){ if(p.so) set[p.so]=1; (p.soList||[]).forEach(function(s){ if(s) set[s]=1; }); });
+  var opts = Object.keys(set).sort();
+  sel.innerHTML = '<option value="">Všechny SO</option>' + opts.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+  if(opts.indexOf(cur)!==-1) sel.value = cur;
+}
+function _subFilteredPhotos(){
+  var l = (window._subAllPhotos||[]).slice();
+  var soEl = document.getElementById('sub-filt-so'), txtEl = document.getElementById('sub-filt-txt');
+  var so = soEl ? soEl.value : '', txt = txtEl ? (txtEl.value||'').trim().toLowerCase() : '';
+  if(so) l = l.filter(function(p){ return p.so===so || (p.soList||[]).indexOf(so)!==-1; });
+  if(txt) l = l.filter(function(p){ return [p.so, p.km, p.author, p.date].concat(p.soList||[]).join(' ').toLowerCase().indexOf(txt)!==-1; });
+  l.sort(function(a,b){ return (window._subSort==='new') ? (b.ts||0)-(a.ts||0) : (a.ts||0)-(b.ts||0); });
+  return l;
+}
 function _renderSubMyPhotos(){
   var box = document.getElementById('sub-photos-list'); if(!box) return;
-  var l = _subMyPhotos();
-  if(!l.length){ box.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">Zatím žádné fotky. Vyfoť nebo nahraj z telefonu.</div>'; return; }
+  var l = _subFilteredPhotos();
+  var cnt = document.getElementById('sub-gal-count'); if(cnt) cnt.textContent = l.length ? (l.length+'×') : '';
+  if(!l.length){ box.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">Žádné fotky odpovídající filtru.</div>'; return; }
   box.innerHTML = '';
   l.forEach(function(it){
     var cell = document.createElement('div'); cell.style.cssText = 'position:relative;aspect-ratio:1;cursor:pointer;';
     var img = document.createElement('img'); img.loading='lazy'; img.src = it.thumb || it.url; img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:6px;background:var(--panel2);display:block;';
     var meta = document.createElement('div'); meta.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.62);color:#fff;font-size:9px;padding:2px 4px;border-radius:0 0 6px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    meta.textContent = [it.so, it.km ? ('km '+it.km) : '', it.date].filter(Boolean).join(' · ');
+    meta.textContent = [it.so, it.km ? ('km '+it.km) : '', it.author, it.date].filter(Boolean).join(' · ');
     cell.appendChild(img); cell.appendChild(meta);
     cell.onclick = function(){ _subOpenPreview(it.url, it.ts); };
     box.appendChild(cell);
@@ -8548,7 +8616,8 @@ if(fbAuth) fbAuth.onAuthStateChanged(function(user) {
       completeLogin(user);
     }
   } else {
-    // Není přihlášen
+    // Není přihlášen – nejdřív zkus obnovit SUB režim (SUB nemá Firebase login).
+    if(_maybeRestoreSub()) return;
     document.getElementById('auth-gate').classList.remove('hide');
     showMainView();
     if(!authConfigOk()) {
@@ -8556,6 +8625,8 @@ if(fbAuth) fbAuth.onAuthStateChanged(function(user) {
     }
   }
 });
+// Pojistka: kdyby onAuthStateChanged neběžel (legacy / bez fbAuth), obnov SUB režim po načtení.
+if(!fbAuth || !authConfigOk()) { try { _maybeRestoreSub(); } catch(e){} }
 
 // ── Přihlášení TELEFONEM ────────────────────────────────────────────
 window._phoneVerifier   = null;
@@ -11897,15 +11968,21 @@ function copyDiaryExport(){
 <div id="sub-toolbar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:1250;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:8px;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.5);flex-wrap:wrap;justify-content:center;max-width:94vw;">
   <button onclick="takeStandalonePhoto()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📷 Vyfotit</button>
   <button onclick="document.getElementById('sub-lib-input').click()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:48px;">🖼️ Nahrát z telefonu</button>
-  <button onclick="openSubMyPhotos()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:48px;">🗂️ Moje fotky (<span id="sub-count">0</span>)</button>
+  <button onclick="openSubMyPhotos()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:48px;">🗂️ SUB galerie (<span id="sub-count">0</span>)</button>
+  <button onclick="exitSubMode()" style="background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:48px;">🚪 Odhlásit</button>
 </div>
 <div id="sub-photos-modal" style="display:none;position:fixed;inset:0;z-index:3200;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:12px;">
   <div style="background:var(--panel);border-radius:14px;max-width:660px;width:100%;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🗂️ Moje fotky</div>
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🗂️ Galerie SUB fotek <span id="sub-gal-count" style="color:var(--text2);font-size:11px;font-weight:400;"></span></div>
       <button onclick="closeSubMyPhotos()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
-    <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;flex-shrink:0;">Fotky, cos poslal z tohoto telefonu. Ťukni = zobrazit + stáhnout k sobě.</div>
+    <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;flex-shrink:0;">Všechny fotky nahrané přes SUB (ze všech telefonů). Ťukni = zobrazit + stáhnout.</div>
+    <div style="display:flex;gap:6px;padding:8px 12px 0;flex-shrink:0;flex-wrap:wrap;">
+      <select id="sub-filt-so" onchange="_renderSubMyPhotos()" style="flex:1;min-width:110px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;"><option value="">Všechny SO</option></select>
+      <input id="sub-filt-txt" oninput="_renderSubMyPhotos()" placeholder="🔍 hledat…" style="flex:1;min-width:110px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;">
+      <button id="sub-filt-sort" onclick="_subToggleSort()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;">🔽 Nejnovější</button>
+    </div>
     <div id="sub-photos-list" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:12px;overflow-y:auto;"></div>
   </div>
 </div>

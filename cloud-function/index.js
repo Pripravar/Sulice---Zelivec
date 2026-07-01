@@ -423,3 +423,60 @@ exports.uploadSubFoto = functions
       res.status(500).json({ error: 'Upload selhal' });
     }
   });
+
+/* ════════════════════════════════════════════════════════════════
+   listSubFotos – vrátí VŠECHNY SUB fotky s token-odkazy (bez přihlášení).
+   SUB nemá Firebase auth → getDownloadURL na klientu by selhal. Tahle funkce
+   (admin SDK = důvěryhodná) přečte /standalone_photos, vyfiltruje SUB záznamy
+   a k uloženým CESTÁM dohledá download-token ze Storage metadat → poskládá
+   token-URL, které SUB <img>/stažení zvládne bez auth. Token URL se NIKAM
+   neukládají (nejdou do veřejně čitelné DB) – vydají se jen na dotaz.
+   ════════════════════════════════════════════════════════════════ */
+exports.listSubFotos = functions
+  .region('europe-west1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    try {
+      const snap = await db.ref('standalone_photos').once('value');
+      const all = snap.val() || {};
+      const bucket = admin.storage().bucket(SUB_BUCKET);
+      const cache = {};
+      async function toUrl(p) {
+        if(!p) return null;
+        if(cache[p] !== undefined) return cache[p];
+        try {
+          const [md] = await bucket.file(p).getMetadata();
+          const raw = md && md.metadata && md.metadata.firebaseStorageDownloadTokens;
+          if(!raw) { cache[p] = null; return null; }
+          const tok = String(raw).split(',')[0];
+          const url = 'https://firebasestorage.googleapis.com/v0/b/' + SUB_BUCKET + '/o/' +
+                      encodeURIComponent(p) + '?alt=media&token=' + tok;
+          cache[p] = url; return url;
+        } catch(_) { cache[p] = null; return null; }
+      }
+      const keys = Object.keys(all).filter(function(k){ const e = all[k]; return e && (e.sub === true || e.zdroj === 'SUB'); });
+      const photos = [];
+      for(const k of keys) {
+        const e = all[k];
+        const full  = await toUrl(e.urlStamped || e.url);
+        const thumb = (await toUrl(e.thumb)) || full;
+        if(!full && !thumb) continue;
+        photos.push({
+          ts: e.ts || Number(k),
+          so: e.so || '', soList: Array.isArray(e.soList) ? e.soList : [],
+          km: e.km || '', date: e.date || '', author: e.author || '',
+          lat: (typeof e.lat === 'number') ? e.lat : null,
+          lng: (typeof e.lng === 'number') ? e.lng : null,
+          thumb: thumb, full: full
+        });
+      }
+      photos.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+      res.status(200).json({ ok: true, photos: photos });
+    } catch(e) {
+      console.error('listSubFotos výjimka:', e);
+      res.status(500).json({ error: 'Načtení selhalo' });
+    }
+  });
