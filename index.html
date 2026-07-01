@@ -1150,6 +1150,10 @@ document.addEventListener('touchend', function(e){
       <input id="plochy-opacity" type="range" min="10" max="100" value="55" oninput="setPlochyOpacity(this.value)" style="flex:1;">
     </div>
   </div>
+  <div class="layer-row">
+    <label>🚰 Voda/elektro SO 103</label>
+    <label class="toggle"><input type="checkbox" id="lyr-voda" onchange="setVodaVisible(this.checked)"><span class="toggle-slider"></span></label>
+  </div>
   <h3>📍 Vrstvy</h3>
   <div class="layer-row">
     <label>🛣️ Trasa</label>
@@ -1650,6 +1654,7 @@ var DOCS_SITUACE = [
   {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'RDS/SO103/SO103_02_Situace.pdf',                    nazev:'Situace SO 103 - okružní křižovatka (km 1,040–1,340)'},
   {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'SO_103/D.103-2b_Situace_drenazi_PDPS.pdf',           nazev:'Situace drenáží SO 103 - okružní křižovatka'},
   {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'SO_103/D.103-2c_Situace_obrub_PDPS.pdf',             nazev:'Situace obrub SO 103 - okružní křižovatka'},
+  {kmOd:1.040, kmDo:1.340, soubor:PDF_BASE+'voda/Sulice_voda_elektro_SO103.pdf',                 nazev:'Koordinační situace voda + elektro SO 103'},
   {kmOd:1.300, kmDo:1.600, soubor:PDF_BASE+'RDS/SO102/SO102_02_2_Situace.pdf',                  nazev:'Situace SO 102 č.2 - extravilán (km 1,300–1,600)'},
   {kmOd:1.580, kmDo:1.980, soubor:PDF_BASE+'RDS/SO101/SO101_02_3_Situace.pdf',                  nazev:'Situace SO 101 č.3 (km 1,580–1,980)'},
   {kmOd:1.980, kmDo:2.360, soubor:PDF_BASE+'RDS/SO101/SO101_02_4_Situace.pdf',                  nazev:'Situace SO 101 č.4 (km 1,980–2,360)'},
@@ -4852,6 +4857,26 @@ function setPlochyVisible(on){
   }).catch(function(){ showToast('❌ Podbarvení se nepodařilo načíst', 2500); var c=document.getElementById('lyr-plochy'); if(c) c.checked=false; });
 }
 function setPlochyOpacity(v){ var op=(+v)/100; _situacePlochyShapes.forEach(function(s){ s.setStyle({fillOpacity:op}); }); }
+
+// Vrstva voda/elektro SO 103 (z DWG přes DXF+pyproj). overlay/voda_so103.json = {lines:[{c,w,pts}], body:[[lat,lng]]}.
+var vodaLayer = null;
+function setVodaVisible(on){
+  var cb=document.getElementById('lyr-voda'); if(cb) cb.checked=!!on;
+  if(!on){ if(vodaLayer && map.hasLayer(vodaLayer)) map.removeLayer(vodaLayer); return; }
+  if(vodaLayer){ vodaLayer.addTo(map); return; }
+  showToast('⏳ Načítám voda/elektro…', 1500);
+  resolveFileUrl('overlay/voda_so103.json').then(function(u){ return fetch(u + (u.indexOf('?')!==-1 ? SIT_V.replace('?','&') : SIT_V)); }).then(function(r){return r.json();}).then(function(data){
+    vodaLayer=L.layerGroup();
+    var lc=L.canvas({padding:0.5});
+    (data.lines||[]).forEach(function(ln){
+      L.polyline(ln.pts, {renderer:lc, color:ln.c||'#8a8f98', weight:ln.w||1.3, opacity:1, interactive:false}).addTo(vodaLayer);
+    });
+    (data.body||[]).forEach(function(p){
+      L.circleMarker(p, {renderer:lc, radius:3, color:'#0f3460', weight:1, fillColor:'#fff', fillOpacity:1, interactive:false}).addTo(vodaLayer);
+    });
+    vodaLayer.addTo(map);
+  }).catch(function(){ showToast('❌ Voda/elektro se nepodařilo načíst', 2500); var c=document.getElementById('lyr-voda'); if(c) c.checked=false; });
+}
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
 // Hodnota v localStorage: '1' = zapnuto, '0' = vypnuto. Default = '1' (zapnuto)
