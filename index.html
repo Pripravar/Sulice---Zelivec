@@ -5891,10 +5891,11 @@ function sendSelectedToTds() {
     showSync('📤 Odesílám ' + (i+1) + '/' + list.length + '…');
     var it = list[i];
     preparePhotoBlobForDownload(it, { stamp: { stamp:true, fields:TDS_FIELDS } }).then(function(blob){
-      var path = 'tds/tds_' + Date.now() + '_' + i + '.jpg';
-      return _privStorage().ref(path).put(blob, { contentType:'image/jpeg' }).then(function(){
+      var ref = _privStorage().ref('tds/tds_' + Date.now() + '_' + i + '.jpg');
+      // Ulož token-ODKAZ (ne cestu) → TDS appka je zobrazí bez přihlášení. Fotky jsou bez jmen (SO+km+datum).
+      return ref.put(blob, { contentType:'image/jpeg' }).then(function(){ return ref.getDownloadURL(); }).then(function(url){
         return db.ref('tds_fotky').push({
-          soubor:  path,
+          soubor:  url,
           so:      (it.soList && it.soList.length ? it.soList.join(', ') : (it.so || '')),
           km:      it.km || '',
           date:    it.date || (it.ts ? new Date(it.ts).toLocaleDateString('cs-CZ') : ''),
