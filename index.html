@@ -770,8 +770,8 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .auth-google { background:#fff; color:#3c4043; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; }
 .auth-google:hover { background:#f1f3f4; }
 .auth-google img { width:18px; height:18px; }
-/* SUB režim: schovat vše kromě mapy, GPS a foťáku (buttony funkcí řeší applyPermsToUI) */
-body.submode #user-badge, body.submode #btn-layers { display:none !important; }
+/* SUB režim: schovat vše kromě mapy, GPS a SUB lišty (buttony funkcí řeší applyPermsToUI) */
+body.submode #user-badge, body.submode #btn-layers, body.submode #btn-standalone-foto { display:none !important; }
 .auth-phone-btn { background:var(--accent2); color:#0f3460; border:none; border-radius:10px; padding:12px 14px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; }
 .auth-phone-btn:hover { background:#e89c1f; }
 .auth-back { background:transparent; color:var(--text2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; font-size:13px; cursor:pointer; width:100%; margin-top:6px; }
@@ -7376,7 +7376,10 @@ function _uploadSubJob(job){
       };
       fetch(UPLOAD_SUB_FN_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
         .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)); })
-        .then(function(){ photoPending = Math.max(0, photoPending-1); _photoBadge(); setTimeout(_processPhotoQueue, 400); })
+        .then(function(resp){
+          _subAddMyPhoto({ url: resp.visible, thumb: resp.thumb || resp.visible, so: meta.so||'', km: meta.km||'', date: new Date(t).toLocaleDateString('cs-CZ'), ts: t });
+          photoPending = Math.max(0, photoPending-1); _photoBadge(); setTimeout(_processPhotoQueue, 400);
+        })
         .catch(function(e){ fail((e && e.message) || 'síť'); });
     });
   }, (meta.soList && meta.soList.length ? meta.soList : meta.so));
@@ -7463,36 +7466,38 @@ function ppAnswer(yes) {
   }
 }
 
+// Zpracování jednoho foto-souboru (kamera i nahrání z telefonu → stejný flow: km z GPS, výběr SO, upload).
+function _processStandalonePhotoFile(file){
+  if(!file) return;
+  if(!gpsActive || !gpsMarker) { showToast('⚠️ Zapni GPS!', 3000); return; }
+  var latlng = gpsMarker.getLatLng();
+  var km = null;
+  try { km = fmtKm(gpxCumToRealKm(nearestOnRoute(latlng.lat, latlng.lng).cum)); } catch(ex){}
+  var author = (window.currentUser && window.currentUser.name) || localStorage.getItem('noteAuthor') || '';
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    compressImage(ev.target.result, function(compressed) {
+      window.photoSession.pendingPhoto = compressed;
+      window.photoSession.pendingMeta  = {km: km, author: author, lat: latlng.lat, lng: latlng.lng};
+      window.photoSession.phase = 'stamp';
+      chooseSOForPhoto(km, function(soArr){
+        soArr = soArr || [];
+        window.photoSession.pendingMeta.soList = soArr;
+        window.photoSession.pendingMeta.so     = soArr[0] || '';
+        ppAnswer(true);
+      });
+    });
+  };
+  reader.readAsDataURL(file);
+}
 window.addEventListener('load', function() {
   var inp = document.getElementById('standalone-photo-input');
-  if(!inp) return;
-  inp.addEventListener('change', function(e) {
-    var file = e.target.files[0];
-    if(!file) return;
-    e.target.value = '';
-    if(!gpsActive || !gpsMarker) { showToast('⚠️ GPS neni dostupna!', 3000); return; }
-    var latlng = gpsMarker.getLatLng();
-    var km = null;
-    try { km = fmtKm(gpxCumToRealKm(nearestOnRoute(latlng.lat, latlng.lng).cum)); } catch(ex){}
-    var author = (window.currentUser && window.currentUser.name) || localStorage.getItem('noteAuthor') || '';
-    var reader = new FileReader();
-    reader.onload = function(ev) {
-      compressImage(ev.target.result, function(compressed) {
-        // Vždy uložit obě verze (originál + s razítkem). V galerii zobrazit s razítkem.
-        // Dotaz "razítkovat?" se přeskakuje - volba se dělá až při stahování.
-        window.photoSession.pendingPhoto = compressed;
-        window.photoSession.pendingMeta  = {km: km, author: author, lat: latlng.lat, lng: latlng.lng};
-        window.photoSession.phase = 'stamp';
-        // Výběr stavebního objektu (složky) podle staničení, pak teprve razítko + upload.
-        chooseSOForPhoto(km, function(soArr){
-          soArr = soArr || [];
-          window.photoSession.pendingMeta.soList = soArr;
-          window.photoSession.pendingMeta.so     = soArr[0] || '';   // primární (zpětná kompatibilita)
-          ppAnswer(true);  // true = v galerii bude razítkovaná verze
-        });
-      });
-    };
-    reader.readAsDataURL(file);
+  if(inp) inp.addEventListener('change', function(e) {
+    var file = e.target.files[0]; e.target.value = ''; _processStandalonePhotoFile(file);
+  });
+  var slib = document.getElementById('sub-lib-input');   // SUB: nahrát z telefonu (galerie, bez capture)
+  if(slib) slib.addEventListener('change', function(e) {
+    var file = e.target.files[0]; e.target.value = ''; _processStandalonePhotoFile(file);
   });
 });
 
@@ -8466,8 +8471,58 @@ function startSubMode(){
     document.body.appendChild(badge);
   }
   badge.textContent = '📷 SUB: ' + name + ' – fotíš k nám';
+  var tb = document.getElementById('sub-toolbar'); if(tb) tb.style.display = 'flex';
+  _subUpdateCount();
   if(!gpsActive){ try { var g = document.getElementById('lyr-gps'); if(g) g.checked = true; startGPS(); } catch(e){} }
-  showToast('📷 Zapni GPS a foť. Fotky se pošlou do aplikace. Konec = obnov stránku.', 4500);
+  showToast('📷 Zapni GPS a foť. Fotky se pošlou nám i tobě do „Moje fotky". Konec = obnov stránku.', 5000);
+}
+// „Moje fotky" SUB – lokální seznam nahraných (token-odkazy z funkce), aby je SUB viděl a stáhl u sebe.
+function _subMyPhotos(){ try { return JSON.parse(localStorage.getItem('subMyPhotos')||'[]')||[]; } catch(e){ return []; } }
+function _subAddMyPhoto(item){
+  var l = _subMyPhotos(); l.unshift(item); if(l.length > 300) l = l.slice(0,300);
+  try { localStorage.setItem('subMyPhotos', JSON.stringify(l)); } catch(e){}
+  _subUpdateCount();
+  if(document.getElementById('sub-photos-modal') && document.getElementById('sub-photos-modal').style.display==='flex') _renderSubMyPhotos();
+}
+function _subUpdateCount(){ var c = document.getElementById('sub-count'); if(c) c.textContent = _subMyPhotos().length; }
+function openSubMyPhotos(){ document.getElementById('sub-photos-modal').style.display='flex'; _renderSubMyPhotos(); }
+function closeSubMyPhotos(){ document.getElementById('sub-photos-modal').style.display='none'; }
+function _renderSubMyPhotos(){
+  var box = document.getElementById('sub-photos-list'); if(!box) return;
+  var l = _subMyPhotos();
+  if(!l.length){ box.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">Zatím žádné fotky. Vyfoť nebo nahraj z telefonu.</div>'; return; }
+  box.innerHTML = '';
+  l.forEach(function(it){
+    var cell = document.createElement('div'); cell.style.cssText = 'position:relative;aspect-ratio:1;cursor:pointer;';
+    var img = document.createElement('img'); img.loading='lazy'; img.src = it.thumb || it.url; img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:6px;background:var(--panel2);display:block;';
+    var meta = document.createElement('div'); meta.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.62);color:#fff;font-size:9px;padding:2px 4px;border-radius:0 0 6px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    meta.textContent = [it.so, it.km ? ('km '+it.km) : '', it.date].filter(Boolean).join(' · ');
+    cell.appendChild(img); cell.appendChild(meta);
+    cell.onclick = function(){ _subOpenPreview(it.url, it.ts); };
+    box.appendChild(cell);
+  });
+}
+function _subOpenPreview(url, ts){
+  var ov = document.getElementById('sub-preview');
+  if(!ov){
+    ov = document.createElement('div'); ov.id='sub-preview';
+    ov.style.cssText='position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;';
+    ov.innerHTML = '<img id="sub-preview-img" style="max-width:100%;max-height:calc(100% - 60px);object-fit:contain;">'+
+      '<div style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:12px;background:rgba(0,0,0,.5);">'+
+        '<button id="sub-preview-dl" style="background:var(--accent2);color:#0f3460;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">⬇ Stáhnout do telefonu</button>'+
+        '<button onclick="document.getElementById(\'sub-preview\').style.display=\'none\'" style="background:var(--panel2);color:var(--text);border:none;padding:10px 18px;border-radius:8px;font-size:14px;cursor:pointer;">Zavřít</button>'+
+      '</div>';
+    document.body.appendChild(ov);
+  }
+  document.getElementById('sub-preview-img').src = url;
+  document.getElementById('sub-preview-dl').onclick = function(){ _subDownload(url, ts); };
+  ov.style.display = 'flex';
+}
+function _subDownload(url, ts){
+  showToast('⏳ Stahuji…', 1500);
+  fetch(url).then(function(r){ return r.blob(); }).then(function(blob){
+    triggerBlobDownload(blob, 'sulice_sub_' + (ts||Date.now()) + '.jpg');
+  }).catch(function(){ showToast('❌ Stažení selhalo', 2500); });
 }
 
 // Hlavní auth listener - běží automaticky po načtení stránky
@@ -11837,6 +11892,23 @@ function copyDiaryExport(){
 
 <!-- Standalone foto input -->
 <input type="file" id="standalone-photo-input" accept="image/*" capture="environment" style="display:none">
+<!-- SUB režim: lišta + galerie „Moje fotky" -->
+<input type="file" id="sub-lib-input" accept="image/*" style="display:none">
+<div id="sub-toolbar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:1250;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:8px;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.5);flex-wrap:wrap;justify-content:center;max-width:94vw;">
+  <button onclick="takeStandalonePhoto()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📷 Vyfotit</button>
+  <button onclick="document.getElementById('sub-lib-input').click()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:48px;">🖼️ Nahrát z telefonu</button>
+  <button onclick="openSubMyPhotos()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;min-height:48px;">🗂️ Moje fotky (<span id="sub-count">0</span>)</button>
+</div>
+<div id="sub-photos-modal" style="display:none;position:fixed;inset:0;z-index:3200;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:12px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:660px;width:100%;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🗂️ Moje fotky</div>
+      <button onclick="closeSubMyPhotos()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;flex-shrink:0;">Fotky, cos poslal z tohoto telefonu. Ťukni = zobrazit + stáhnout k sobě.</div>
+    <div id="sub-photos-list" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:12px;overflow-y:auto;"></div>
+  </div>
+</div>
 
 <!-- Fotogalerie modal -->
 <div id="gallery-modal">

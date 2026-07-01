@@ -373,7 +373,10 @@ async function _subPut(pathname, b64, contentType) {
     resumable: false,
     metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } }
   });
-  return pathname;
+  // token-odkaz (aby SUB fotku viděl/stáhl bez Firebase přihlášení)
+  const url = 'https://firebasestorage.googleapis.com/v0/b/' + SUB_BUCKET + '/o/' +
+              encodeURIComponent(pathname) + '?alt=media&token=' + token;
+  return { path: pathname, url: url };
 }
 exports.uploadSubFoto = functions
   .region('europe-west1')
@@ -396,11 +399,11 @@ exports.uploadSubFoto = functions
     const ts = (typeof b.ts === 'number' && b.ts > 0) ? b.ts : Date.now();
     try {
       const base = 'standalone/foto_' + ts;
-      const pStamp = await _subPut(base + '_s.jpg', stamped, 'image/jpeg');
-      const pOrig  = original ? await _subPut(base + '_o.jpg', original, 'image/jpeg') : pStamp;
-      const pThumb = thumb    ? await _subPut(base + '_t.jpg', thumb,    'image/jpeg') : null;
+      const rStamp = await _subPut(base + '_s.jpg', stamped, 'image/jpeg');
+      const rOrig  = original ? await _subPut(base + '_o.jpg', original, 'image/jpeg') : rStamp;
+      const rThumb = thumb    ? await _subPut(base + '_t.jpg', thumb,    'image/jpeg') : null;
       const entry = {
-        url: pStamp, urlStamped: pStamp, urlOriginal: pOrig, stamped: true,
+        url: rStamp.path, urlStamped: rStamp.path, urlOriginal: rOrig.path, stamped: true,
         so: String(b.so || ''),
         soList: Array.isArray(b.soList) ? b.soList : [],
         km: String(b.km || ''),
@@ -411,9 +414,10 @@ exports.uploadSubFoto = functions
         date: String(b.date || ''),
         ts: ts
       };
-      if(pThumb) entry.thumb = pThumb;
+      if(rThumb) entry.thumb = rThumb.path;
       await db.ref('standalone_photos/' + ts).set(entry);
-      res.status(200).json({ ok: true });
+      // Vrať token-odkazy, ať si je SUB uloží u sebe (zobrazení/stažení bez přihlášení).
+      res.status(200).json({ ok: true, visible: rStamp.url, thumb: (rThumb ? rThumb.url : rStamp.url), full: rStamp.url });
     } catch(e) {
       console.error('uploadSubFoto výjimka:', e);
       res.status(500).json({ error: 'Upload selhal' });
