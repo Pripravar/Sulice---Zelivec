@@ -1912,7 +1912,7 @@ var gpsActive = false;
 var gpsCentering = false;
 var gpxCumulative = [];
 var calibSorted = null;
-var layerGroups = {trasa:null, st100:null, st20:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null, drone:null};
+var layerGroups = {trasa:null, st100:null, st100sub:null, st20:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null, drone:null};
 
 // ── MATH ──────────────────────────────
 function haversine(lat1,lon1,lat2,lon2) {
@@ -2070,6 +2070,12 @@ function buildStaniceni20() {
   layerGroups.st20=L.layerGroup();
   addStaniceniMarkers(layerGroups.st20,0.020,false);
 }
+// Read-only staničení (100m) jen pro „subky" – vidí km, ale klik NIC neotevře (žádné výkresy).
+// Buduje se detached (nepřidá se na mapu); zobrazí ho applyPermsToUI jen pro isSubOnly().
+function buildStaniceni100Sub() {
+  layerGroups.st100sub=L.layerGroup();
+  addStaniceniMarkers(layerGroups.st100sub,0.100,true,true);   // noClick=true
+}
 
 function buildPR() {
   layerGroups.pr = L.layerGroup().addTo(map);
@@ -2172,7 +2178,7 @@ function bearingAtGpxM(gpxM) {
   return segBearing(GPX_POINTS[n-1][0],GPX_POINTS[n-1][1],GPX_POINTS[n][0],GPX_POINTS[n][1]);
 }
 
-function addStaniceniMarkers(group,stepKm,is100) {
+function addStaniceniMarkers(group,stepKm,is100,noClick) {
   var realKm=Math.round(Math.ceil(KM_START/stepKm)*stepKm*10000)/10000;
   while(realKm<=KM_END+0.0001){
     // Pro 20m staničení přeskočit pozice které jsou násobkem 100m (tam je 100m značka)
@@ -2185,13 +2191,13 @@ function addStaniceniMarkers(group,stepKm,is100) {
       var gpxM=interp(calibSorted,'realKm','gpxM',realKm);
       var bear=bearingAtGpxM(gpxM);
       var pos=realKmToLatLng(realKm);
-      if(pos) addStaniceniMarker(group,pos[0],pos[1],realKm,is100,bear);
+      if(pos) addStaniceniMarker(group,pos[0],pos[1],realKm,is100,bear,noClick);
     }
     realKm=Math.round((realKm+stepKm)*10000)/10000;
   }
 }
 
-function addStaniceniMarker(group,lat,lng,realKm,is100,bear) {
+function addStaniceniMarker(group,lat,lng,realKm,is100,bear,noClick) {
   var label   = fmtKm(realKm);
   var tickLen = is100 ? 22 : 12;
   var tickW   = is100 ? 3 : 1.5;
@@ -2235,7 +2241,7 @@ function addStaniceniMarker(group,lat,lng,realKm,is100,bear) {
 
   var textHtml =
     '<div style="width:'+DW+'px;height:'+DH+'px;display:flex;align-items:center;'+
-    'justify-content:flex-end;pointer-events:all;cursor:pointer;">'+
+    'justify-content:flex-end;pointer-events:'+(noClick?'none':'all')+';cursor:'+(noClick?'default':'pointer')+';">'+
     '<span style="color:'+color+';font-size:'+fontSize+';font-weight:'+fontW+';'+
     'font-family:Segoe UI,system-ui,sans-serif;white-space:nowrap;line-height:1;'+
     'text-shadow:'+shadow+';">'+label+'</span></div>';
@@ -2246,10 +2252,12 @@ function addStaniceniMarker(group,lat,lng,realKm,is100,bear) {
     iconSize: [DW, DH],
     iconAnchor: [ancX, ancY],
   });
-  var textM = L.marker([lat,lng],{icon:textIcon,interactive:true});
-  (function(km){
-    textM.on('click',function(e){L.DomEvent.stopPropagation(e);onStaniceniClick(km);});
-  })(realKm);
+  var textM = L.marker([lat,lng],{icon:textIcon,interactive:!noClick});
+  if(!noClick){
+    (function(km){
+      textM.on('click',function(e){L.DomEvent.stopPropagation(e);onStaniceniClick(km);});
+    })(realKm);
+  }
   textM.addTo(group);
 }
 
@@ -3093,6 +3101,7 @@ function init() {
   initMap();
   buildRoute();
   buildStaniceni100();
+  buildStaniceni100Sub();
   buildStaniceni20();
   // buildPR vyžaduje DOCS_PR (pracovní řezy) - PDPS Sulice je nemá
   if(Object.keys(DOCS_PR).length) buildPR();
@@ -8167,6 +8176,11 @@ function applyPermsToUI(){
       });
     }
   });
+  // 3) Subka: místo skrytého (pdf) staničení ukázat read-only staničení (vidí km, klik nic neotevře).
+  if(layerGroups && layerGroups.st100sub && map){
+    if(isSubOnly()){ layerGroups.st100sub.addTo(map); }
+    else { try { map.removeLayer(layerGroups.st100sub); } catch(e){} }
+  }
 }
 // Relativní čas pro „naposledy aktivní" v panelu správy uživatelů.
 function _relTime(ts){
