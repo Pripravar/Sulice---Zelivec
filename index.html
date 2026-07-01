@@ -7152,18 +7152,42 @@ function _closeSOPicker(){
 // ── Foto-flow: vyfotit → razítkovat? → vyfotit další? → smyčka ─────
 window.photoSession = {count: 0, pendingPhoto: null, pendingMeta: null, phase: null};
 
-// URL ?foto / #foto (iOS zkratka / akční tlačítko) → zapni GPS a jakmile je fix, otevři rovnou foťák.
+// URL ?foto / #foto (iOS zkratka / akční tlačítko) → velké tlačítko „Fotit" přes celou obrazovku.
+// (iOS NEdovolí spustit foťák automaticky bez gesta – proto 1 ťuknutí, které otevře foťák v rámci gesta.)
 function _quickPhotoDeepLink(){
   if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
-  showToast('📷 Otevírám foťák…', 1600);   // zpětná vazba, že se proklik chytil
   if(!gpsActive){ try { var g=document.getElementById('lyr-gps'); if(g) g.checked=true; startGPS(); } catch(e){} }
-  var tries = 0;
-  (function waitGps(){
-    if(gpsActive && gpsMarker){ takeStandalonePhoto(); return; }   // GPS fix → foťák
-    if(tries++ > 45){ takeStandalonePhoto(); return; }             // ~9 s timeout → zkus stejně (ukáže „Zapni GPS")
-    setTimeout(waitGps, 200);
+  var ov = document.getElementById('quick-foto-overlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'quick-foto-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9995;background:rgba(15,20,40,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center;padding:24px;box-sizing:border-box;';
+    ov.innerHTML =
+      '<div style="font-size:74px;">📷</div>'+
+      '<div id="qfo-status" style="color:#a0aec0;font-size:15px;min-height:20px;">Chytám GPS…</div>'+
+      '<button id="qfo-shoot" style="background:#555;color:#fff;border:none;border-radius:18px;font-size:24px;font-weight:800;padding:26px 40px;min-width:74vw;min-height:88px;cursor:pointer;opacity:.6;">📷 Fotit</button>'+
+      '<button id="qfo-close" style="background:transparent;border:none;color:#a0aec0;font-size:15px;padding:12px;cursor:pointer;">Zavřít</button>';
+    document.body.appendChild(ov);
+    document.getElementById('qfo-close').addEventListener('click', _hideQuickPhotoOverlay);
+    document.getElementById('qfo-shoot').addEventListener('click', function(){
+      if(!(gpsActive && gpsMarker)){ showToast('Ještě chytám GPS – chvilku a zkus znovu', 2200); return; }
+      _hideQuickPhotoOverlay();
+      takeStandalonePhoto();   // ⬅ v rámci ťuknutí (gesto) → iOS otevře foťák
+    });
+  }
+  ov.style.display = 'flex';
+  var secs = 0;
+  (function upd(){
+    var el = document.getElementById('quick-foto-overlay');
+    if(!el || el.style.display === 'none') return;
+    var st = document.getElementById('qfo-status'), b = document.getElementById('qfo-shoot');
+    if(gpsActive && gpsMarker){ if(st) st.textContent = '✅ GPS OK – ťukni a foť'; if(b){ b.style.background='#f5a623'; b.style.color='#0f3460'; b.style.opacity='1'; } return; }
+    if(st) st.textContent = 'Chytám GPS… ' + secs + ' s';
+    if(secs++ < 30) setTimeout(upd, 1000);
+    else { if(st) st.textContent = 'GPS se nedaří – zapni polohu, pak ťukni Fotit'; if(b){ b.style.opacity='1'; b.style.background='#f5a623'; b.style.color='#0f3460'; } }
   })();
 }
+function _hideQuickPhotoOverlay(){ var ov = document.getElementById('quick-foto-overlay'); if(ov) ov.style.display = 'none'; }
 // Spustí proklik jen když je v URL ?foto/#foto, uživatel je přihlášený a ještě se to nespustilo.
 // Volá se po loginu (_enterApp) i při každém zobrazení appky (iOS někdy jen popředí bez reloadu).
 function _maybeQuickPhoto(){
