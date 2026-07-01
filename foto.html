@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Foto">
+<meta name="theme-color" content="#16213e">
+<link rel="manifest" href="manifest-foto.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='0' fill='%2316213e'/><text x='90' y='124' font-size='100' text-anchor='middle' fill='%23f5a623'>📷</text></svg>">
+<title>📷 Foto Sulice</title>
+<script>
+  // Když je tahle „appka" spuštěná z plochy (standalone), rovnou skoč do hlavní appky s ?foto → spustí foťák.
+  // V Safari (přidávání na plochu) se NEskáče, aby šlo přidat na plochu a přečíst návod.
+  try {
+    var standalone = (window.navigator.standalone === true) ||
+                     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if(standalone) location.replace('index.html?foto');
+  } catch(e){}
+</script>
+<style>
+  html,body{margin:0;height:100%;background:#1a1a2e;color:#e8e8f0;font-family:-apple-system,system-ui,sans-serif;}
+  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box;gap:18px;}
+  .cam{font-size:64px;}
+  h1{font-size:20px;margin:0;}
+  p{font-size:14px;line-height:1.5;color:#a0aec0;max-width:340px;margin:0;}
+  .btn{background:#f5a623;color:#0f3460;font-size:17px;font-weight:800;border:none;border-radius:12px;padding:15px 26px;text-decoration:none;min-height:52px;display:inline-flex;align-items:center;}
+  .steps{text-align:left;background:#16213e;border:1px solid #2a3a5e;border-radius:12px;padding:14px 16px;max-width:360px;font-size:13px;line-height:1.6;color:#cbd5e0;}
+  .steps b{color:#f5a623;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="cam">📷</div>
+    <h1>Rychlé focení – Sulice</h1>
+    <a class="btn" href="index.html?foto">📷 Otevřít foťák teď</a>
+    <div class="steps">
+      <b>Jak z toho udělat tlačítko na iPhonu:</b><br>
+      1. Nahoře <b>Sdílet</b> → <b>Přidat na plochu</b> → vznikne ikona <b>Foto</b>.<br>
+      2. Ta ikona rovnou spustí foťák. 🎯<br>
+      3. (Volitelně) Nastavení → <b>Akční tlačítko</b> → Zkratka → <b>Otevřít aplikaci → Foto</b>.
+    </div>
+    <p>Otevři tuhle stránku v <b>Safari</b> (ne v appce), ať jde přidat na plochu.</p>
+  </div>
+</body>
+</html>
