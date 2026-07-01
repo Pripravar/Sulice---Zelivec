@@ -5327,12 +5327,37 @@ function photoCreationDate(item) {
 function pad2(n){ return (n<10?'0':'')+n; }
 
 // Souborové jméno: sulice_2026-05-12_1423_km1+540_Ondrej.jpg
-function photoFilename(item, idx) {
+// ASCII slug (diakritika → ASCII, pryč mezery/nepovolené znaky) pro název souboru.
+var _DIAKR = {'á':'a','Á':'A','č':'c','Č':'C','ď':'d','Ď':'D','é':'e','É':'E','ě':'e','Ě':'E','í':'i','Í':'I','ľ':'l','ň':'n','Ň':'N','ó':'o','Ó':'O','ř':'r','Ř':'R','š':'s','Š':'S','ť':'t','Ť':'T','ú':'u','Ú':'U','ů':'u','Ů':'U','ý':'y','Ý':'Y','ž':'z','Ž':'Z'};
+function _asciiSlug(s){
+  if(!s) return '';
+  return String(s).split('').map(function(ch){ return _DIAKR[ch]!==undefined ? _DIAKR[ch] : ch; }).join('')
+    .replace(/\s+/g,'').replace(/[^A-Za-z0-9.\-]/g,'');
+}
+// Iniciály autora: „Tomáš Klejna" → „TK", „Martin Bouška" → „MB".
+function _authorInitials(name){
+  if(!name) return '';
+  return String(name).trim().split(/\s+/).map(function(w){
+    var c = w.charAt(0)||''; return (_DIAKR[c]!==undefined ? _DIAKR[c] : c).toUpperCase();
+  }).join('').replace(/[^A-Z0-9]/g,'').slice(0,4);
+}
+// SO objekty fotky pro název: soList → „SO103" / víc → „SO103-SO443". Vlastní názvy oslugované.
+function _photoSoForName(item){
+  var sos = (item && item.soList && item.soList.length) ? item.soList : (item && item.so ? [item.so] : []);
+  return sos.map(function(s){ return _asciiSlug(s); }).filter(Boolean).join('-');
+}
+// Název souboru při stažení. fields = zaškrtnutá pole z razítkového dialogu (SO/km/datum/jméno);
+// název obsahuje jen zaškrtnutá pole (pořadí: SO · datum · staničení · autor-iniciály). idx = pořadí u dávky.
+function photoFilename(item, idx, fields) {
+  fields = fields || { so:true, km:true, datum:true, jmeno:true };
   var d = photoCreationDate(item);
-  var base = 'sulice_' + d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate())
-           + '_' + pad2(d.getHours()) + pad2(d.getMinutes());
-  if(item && item.km) base += '_km' + String(item.km).replace(/\s+/g,'').replace(/[^\w+\-.]/g,'');
-  if(item && item.author) base += '_' + String(item.author).replace(/\s+/g,'_').replace(/[^\w\-]/g,'');
+  var parts = ['sulice'];
+  if(fields.so){ var so = _photoSoForName(item); if(so) parts.push(so); }
+  if(fields.datum) parts.push(d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()));
+  if(fields.km && item && item.km) parts.push('km' + String(item.km).replace(/\s+/g,'').replace(/[^\w+\-.]/g,''));
+  if(fields.jmeno && item && item.author){ var ini = _authorInitials(item.author); if(ini) parts.push(ini); }
+  if(parts.length === 1) parts.push(d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()));  // nic nezaškrtnuto → aspoň čas kvůli kolizím
+  var base = parts.join('_');
   if(typeof idx === 'number') base += '_' + (idx+1);
   return base + '.jpg';
 }
@@ -5490,11 +5515,12 @@ function _resolveStampChoice(mode) {
   var modal = document.getElementById('dl-stamp-modal');
   if(modal) modal.style.display = 'none';
   var choice;
+  // Zaškrtnutá pole řídí razítko I NÁZEV SOUBORU (i u „bez razítka" – jen se pak nevypálí do obrázku).
+  var fields = { so: _dlsmChk('dlsm-f-so'), km: _dlsmChk('dlsm-f-km'),
+                 datum: _dlsmChk('dlsm-f-datum'), jmeno: _dlsmChk('dlsm-f-jmeno') };
   if(mode === null || mode === 'cancel') choice = null;
-  else if(mode === 'plain' || mode === false) choice = { stamp: false };
-  else choice = { stamp: true, fields: {
-        so: _dlsmChk('dlsm-f-so'), km: _dlsmChk('dlsm-f-km'),
-        datum: _dlsmChk('dlsm-f-datum'), jmeno: _dlsmChk('dlsm-f-jmeno') } };
+  else if(mode === 'plain' || mode === false) choice = { stamp: false, fields: fields };
+  else choice = { stamp: true, fields: fields };
   if(typeof _stampChoiceResolver === 'function') {
     var r = _stampChoiceResolver; _stampChoiceResolver = null; r(choice);
   }
@@ -5532,7 +5558,7 @@ function _doDownloadCurrentFsPhoto(item, applyStamp) {
     .then(function(blob){
       hideSync();
       var d = photoCreationDate(item);
-      var name = photoFilename(item);
+      var name = photoFilename(item, undefined, applyStamp && applyStamp.fields);
       var file;
       try { file = new File([blob], name, { type:'image/jpeg', lastModified:d.getTime() }); }
       catch(e) { file = null; }
@@ -5647,7 +5673,7 @@ function _prepareSelectedPhotosAsFiles(applyStamp) {
       done++;
       showSync('⏳ Připravuji ' + done + '/' + total + '...');
       var d = photoCreationDate(it);
-      var name = photoFilename(it, total > 1 ? idx : undefined);
+      var name = photoFilename(it, total > 1 ? idx : undefined, applyStamp && applyStamp.fields);
       try {
         return new File([blob], name, { type: 'image/jpeg', lastModified: d.getTime() });
       } catch(e) {
@@ -7126,6 +7152,34 @@ function _closeSOPicker(){
 // ── Foto-flow: vyfotit → razítkovat? → vyfotit další? → smyčka ─────
 window.photoSession = {count: 0, pendingPhoto: null, pendingMeta: null, phase: null};
 
+// URL ?foto / #foto (iOS zkratka / akční tlačítko) → zapni GPS a jakmile je fix, otevři rovnou foťák.
+function _quickPhotoDeepLink(){
+  if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
+  showToast('📷 Otevírám foťák…', 1600);   // zpětná vazba, že se proklik chytil
+  if(!gpsActive){ try { var g=document.getElementById('lyr-gps'); if(g) g.checked=true; startGPS(); } catch(e){} }
+  var tries = 0;
+  (function waitGps(){
+    if(gpsActive && gpsMarker){ takeStandalonePhoto(); return; }   // GPS fix → foťák
+    if(tries++ > 45){ takeStandalonePhoto(); return; }             // ~9 s timeout → zkus stejně (ukáže „Zapni GPS")
+    setTimeout(waitGps, 200);
+  })();
+}
+// Spustí proklik jen když je v URL ?foto/#foto, uživatel je přihlášený a ještě se to nespustilo.
+// Volá se po loginu (_enterApp) i při každém zobrazení appky (iOS někdy jen popředí bez reloadu).
+function _maybeQuickPhoto(){
+  try {
+    if(window._quickPhotoDone) return;
+    if(!(/[?&]foto(=|&|$)/i.test(location.search) || /(^|#)foto\b/i.test(location.hash))) return;
+    if(!window.currentUser) return;         // počkej na přihlášení – _enterApp zavolá znovu
+    window._quickPhotoDone = true;
+    _quickPhotoDeepLink();
+  } catch(e){}
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) _maybeQuickPhoto(); });
+// pageshow/hashchange = skutečná navigace (i další stisk akčního tlačítka) → povol nové spuštění
+window.addEventListener('pageshow', function(){ window._quickPhotoDone = false; _maybeQuickPhoto(); });
+window.addEventListener('hashchange', function(){ window._quickPhotoDone = false; _maybeQuickPhoto(); });
+
 function takeStandalonePhoto() {
   if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
   if(!gpsActive || !gpsMarker) {
@@ -7852,6 +7906,7 @@ function toggleGalleryGrouped() {
 
 // ── AUTH STATE ──────────────────────────────────────────────────────
 window.currentUser = null;     // {uid, name, email, photo}
+window._quickPhotoDone = false;   // URL ?foto/#foto → foťák (jednou za návštěvu)
 
 // ── Mazání jen vlastních záznamů ────────────────────────────────────
 // Doplň sem uid koordinátora/koordinátorů (admin smí mazat cokoliv).
@@ -8184,6 +8239,7 @@ function _enterApp(displayName){
   setupFcmIfPossible();
   maybeShowIosHint();
   applyPermsToUI();   // schovat tlačítka funkcí, které uživatel nemá povolené
+  setTimeout(_maybeQuickPhoto, 700);   // URL ?foto/#foto → rovnou foťák
 }
 
 // Hlavní auth listener - běží automaticky po načtení stránky
