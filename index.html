@@ -1123,7 +1123,7 @@ document.addEventListener('touchend', function(e){
     <label>🗺️ Katastr (KN)</label>
     <label class="toggle"><input type="checkbox" id="lyr-katastr" onchange="toggleKatastr(this.checked)"><span class="toggle-slider"></span></label>
   </div>
-  <div style="padding:4px 0 2px;">
+  <div style="padding:4px 0 2px;" data-perm="dron">
     <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">🛰️ Dron snímky (klikni datum = zobraz)</div>
     <div id="drone-date-row" style="display:flex;flex-wrap:wrap;gap:6px;">
       <span style="font-size:12px;color:var(--text2);opacity:.7;">zatím žádné</span>
@@ -1167,6 +1167,7 @@ document.addEventListener('touchend', function(e){
     <label>📐 Staničení 20m</label>
     <label class="toggle"><input type="checkbox" id="lyr-st20" onchange="toggleLayer('st20',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div data-perm="pripominky">
   <div class="layer-row">
     <label>📝 Poznámky</label>
     <label class="toggle"><input type="checkbox" id="lyr-notes" onchange="toggleNotesLayer(this.checked)"><span class="toggle-slider"></span></label>
@@ -1199,6 +1200,8 @@ document.addEventListener('touchend', function(e){
     <label style="font-size:12px;" id="notes-lbl-6">↳ 🏷️ Vlastní</label>
     <label class="toggle"><input type="checkbox" id="lyr-notes6" onchange="toggleLayer('notes6',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /pripominky -->
+  <div data-perm="ukoly">
   <div class="layer-row">
     <label>✅ Úkoly</label>
     <label class="toggle"><input type="checkbox" id="lyr-tasks" checked onchange="toggleTasksLayer(this.checked)"><span class="toggle-slider"></span></label>
@@ -1211,6 +1214,7 @@ document.addEventListener('touchend', function(e){
     <label style="font-size:12px;">↳ 🟢 Hotové</label>
     <label class="toggle"><input type="checkbox" id="lyr-tasks-done" onchange="toggleTaskSubLayer('done',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /ukoly -->
   <div class="layer-row">
     <label>🔵 Propustky (SO 104, SO 105)</label>
     <label class="toggle"><input type="checkbox" id="lyr-prop" checked onchange="toggleLayer('propustky',this.checked)"><span class="toggle-slider"></span></label>
@@ -1227,6 +1231,7 @@ document.addEventListener('touchend', function(e){
     <label>📍 GPS poloha</label>
     <label class="toggle"><input type="checkbox" id="lyr-gps" checked onchange="toggleGPS(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div data-perm="mereni">
   <div class="layer-row">
     <label>📏 Měření (uložená)</label>
     <label class="toggle"><input type="checkbox" id="lyr-mereni" onchange="toggleLayer('mereni',this.checked)"><span class="toggle-slider"></span></label>
@@ -1239,6 +1244,7 @@ document.addEventListener('touchend', function(e){
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="mshow-datum" checked onchange="setMereniShow('datum',this.checked)"> Datum</label>
     </div>
   </div>
+  </div><!-- /mereni -->
   <h3>📷 Fotky</h3>
   <div class="layer-row">
     <label>🏷️ Razítko (km, datum, jméno)</label>
@@ -8063,12 +8069,27 @@ function hasPerm(feature){
 // Skryje/zobrazí tlačítka funkcí podle práv (volá se po přihlášení i živě po změně práv adminem).
 function applyPermsToUI(){
   if(!window.currentUser) return;
+  // 1) Tlačítka funkcí (zakládání)
   FEATURES.forEach(function(f){
     var on = hasPerm(f.key);
     (f.btns||[]).forEach(function(id){
       var el = document.getElementById(id);
       if(el) el.style.display = on ? '' : 'none';
     });
+  });
+  // 2) Vrstvy: sekce označené data-perm SCHOVAT + VYPNOUT, když uživatel funkci nemá
+  //    (nesmí ji ani vidět – ne jen zakládat). Vypne se každý zapnutý přepínač vrstvy uvnitř.
+  document.querySelectorAll('[data-perm]').forEach(function(sec){
+    var allowed = hasPerm(sec.getAttribute('data-perm'));
+    sec.style.display = allowed ? '' : 'none';
+    if(!allowed){
+      sec.querySelectorAll('input[type=checkbox]').forEach(function(cb){
+        if(cb.id && cb.id.indexOf('lyr-') === 0 && cb.checked){   // jen vrstvové přepínače (lyr-*)
+          cb.checked = false;
+          try { if(typeof cb.onchange === 'function') cb.onchange(); else cb.dispatchEvent(new Event('change')); } catch(e){}
+        }
+      });
+    }
   });
 }
 // Relativní čas pro „naposledy aktivní" v panelu správy uživatelů.
