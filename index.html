@@ -1062,8 +1062,7 @@ document.addEventListener('touchend', function(e){
         ⚠️ <b>Jen pro nouzové případy.</b> Každou SMS platí tvůrce aplikace ze svého. Aplikace ho stojí čas i peníze, tak ho prosím šetři — Google login je doslova rychlejší a všem nám usnadní život 🙏
       </div>
       <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:12px;">
-        <button class="auth-phone-btn" onclick="startSubMode()" style="background:#1565c0;color:#fff;border:none;">📷 Jsem SUB / firma – jen přidat fotky</button>
-        <div style="text-align:center;color:var(--text2);font-size:11px;margin-top:6px;line-height:1.4;">Bez přihlášení – jen zadáš jméno a fotíš. Fotky se pošlou nám do aplikace.</div>
+        <div style="text-align:center;color:var(--text2);font-size:11px;line-height:1.4;">📷 <b>Subdodavatel / firma:</b> přihlas se přes Google nebo SMS. Administrátor tě schválí a nastaví ti režim „fotí jako subka" (uvidíš jen focení a galerii svých fotek).</div>
       </div>
     </div>
 
@@ -1158,15 +1157,18 @@ document.addEventListener('touchend', function(e){
       <input id="plochy-opacity" type="range" min="10" max="100" value="55" oninput="setPlochyOpacity(this.value)" style="flex:1;">
     </div>
   </div>
+  <div data-perm="pdf">
   <div class="layer-row">
     <label>🚰 Voda/elektro SO 103</label>
     <label class="toggle"><input type="checkbox" id="lyr-voda" onchange="setVodaVisible(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /pdf voda -->
   <h3>📍 Vrstvy</h3>
   <div class="layer-row">
     <label>🛣️ Trasa</label>
     <label class="toggle"><input type="checkbox" id="lyr-trasa" checked onchange="toggleLayer('trasa',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div data-perm="pdf">
   <div class="layer-row">
     <label>📏 Staničení 100m</label>
     <label class="toggle"><input type="checkbox" id="lyr-st100" checked onchange="toggleLayer('st100',this.checked)"><span class="toggle-slider"></span></label>
@@ -1175,6 +1177,7 @@ document.addEventListener('touchend', function(e){
     <label>📐 Staničení 20m</label>
     <label class="toggle"><input type="checkbox" id="lyr-st20" onchange="toggleLayer('st20',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /pdf staničení -->
   <div data-perm="pripominky">
   <div class="layer-row">
     <label>📝 Poznámky</label>
@@ -1223,6 +1226,7 @@ document.addEventListener('touchend', function(e){
     <label class="toggle"><input type="checkbox" id="lyr-tasks-done" onchange="toggleTaskSubLayer('done',this.checked)"><span class="toggle-slider"></span></label>
   </div>
   </div><!-- /ukoly -->
+  <div data-perm="pdf">
   <div class="layer-row">
     <label>🔵 Propustky (SO 104, SO 105)</label>
     <label class="toggle"><input type="checkbox" id="lyr-prop" checked onchange="toggleLayer('propustky',this.checked)"><span class="toggle-slider"></span></label>
@@ -1235,6 +1239,7 @@ document.addEventListener('touchend', function(e){
     <label>🏗️ Stavební objekty SO</label>
     <label class="toggle"><input type="checkbox" id="lyr-so" checked onchange="toggleLayer('so',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /pdf objekty -->
   <div class="layer-row">
     <label>📍 GPS poloha</label>
     <label class="toggle"><input type="checkbox" id="lyr-gps" checked onchange="toggleGPS(this.checked)"><span class="toggle-slider"></span></label>
@@ -7419,6 +7424,7 @@ function _processPhotoQueue(){
           };
           if(urlOrig) entry.urlOriginal = urlOrig;
           if(urlStamp) entry.urlStamped = urlStamp;
+          if(isSubOnly()){ entry.zdroj = 'SUB'; entry.sub = true; }   // subka → fotka označená SUB
           function saveEntry(){
             db.ref('standalone_photos/' + t).set(entry).then(function(){
               photoPending = Math.max(0, photoPending-1); _photoBadge();
@@ -7657,6 +7663,7 @@ function submitLibImport(){
               if(urlO) entry.urlOriginal = urlO;
               if(urlS) entry.urlStamped  = urlS;
               if(it.lat!=null){ entry.lat = it.lat; entry.lng = it.lng; }
+              if(isSubOnly()){ entry.zdroj = 'SUB'; entry.sub = true; }   // subka → fotka označená SUB
               function saveImp(){ db.ref('standalone_photos/'+t).set(entry).then(function(){ done++; processOne(idx+1); }).catch(function(){ fail++; processOne(idx+1); }); }
               resizeImageMax(stamped, 400, 0.5, function(thumbUrl){
                 if(!thumbUrl){ saveImp(); return; }
@@ -7676,6 +7683,9 @@ function openGallery() {
   document.getElementById('gallery-modal').classList.add('open');
   unlockViewport();
   applyGalleryCols();
+  // Subka: filtr „jen SUB" natvrdo zapnutý a zamčený (uvidí jen SUB fotky).
+  var subEl = document.getElementById('gfilt-sub');
+  if(subEl){ if(isSubOnly()){ subEl.checked = true; subEl.disabled = true; } else { subEl.disabled = false; } }
   renderGallery();
 }
 
@@ -7733,6 +7743,7 @@ function applyGalleryFilters(items){
   var soF  = soEl ? (soEl.value || '').trim() : '';
   var subEl = document.getElementById('gfilt-sub');
   var onlySub = subEl ? subEl.checked : false;
+  if(isSubOnly()) onlySub = true;   // subka VŽDY jen SUB fotky (nejde vypnout)
   return items.filter(function(it){
     if(onlySub && !(it.zdroj === 'SUB' || it.sub)) return false;
     if(!isNaN(kmOd) || !isNaN(kmDo)) {
@@ -8097,6 +8108,13 @@ function isBlocked(uid){
   if(!u) return false;
   return !!(window.allUsers[u] && window.allUsers[u].blocked);
 }
+// „Fotí jako subka" – uživatel smí JEN fotit + galerii, a v galerii vidí jen SUB fotky.
+// Nastaví admin zaškrtávátkem v panelu správy uživatelů.
+function isSubOnly(uid){
+  var u = uid || (window.currentUser && window.currentUser.uid);
+  if(!u) return false;
+  return !!(window.allUsers[u] && window.allUsers[u].subOnly);
+}
 // Funkce, které jdou per-uživatel povolit/zakázat. btn = id tlačítka, které se bez práva schová.
 // btns = tlačítka, která se bez práva schovají (může jich být víc; prázdné = funkce bez tlačítka, jen guard).
 var FEATURES = [
@@ -8114,11 +8132,13 @@ var FEATURES = [
 ];
 // Allow-by-default: povoleno, dokud admin výslovně nenastaví perms[feature]===false. Admin má vždy vše.
 function hasPerm(feature){
-  if(window.subMode) return feature === 'foto';   // SUB režim: povoleno JEN focení, nic jiného
+  if(window.subMode) return feature === 'foto';   // (starý bezloginový SUB režim – ponecháno pro kompatibilitu)
   if(isAdmin()) return true;
   var me = window.currentUser && window.currentUser.uid;
   if(!me) return false;
   if(isBlocked(me)) return false;
+  // „Fotí jako subka": tvrdě jen focení + galerie, vše ostatní zakázáno (i kdyby perms říkaly jinak).
+  if(isSubOnly(me) && feature !== 'foto' && feature !== 'galerie') return false;
   var u = window.allUsers[me];
   return !(u && u.perms && u.perms[feature] === false);
 }
@@ -8284,6 +8304,11 @@ function _renderUserAdmin(){
           '</label>';
         }).join('')+
       '</div>')+
+      // „Fotí jako subka" (jen non-admin) – jedním klikem: smí jen fotit + galerii (jen SUB fotky)
+      (adm||self ? '' :
+        '<div style="margin:6px 0 0 48px;"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:'+(u.subOnly?'#1565c0':'var(--text2)')+';cursor:pointer;font-weight:'+(u.subOnly?'700':'400')+';">'+
+          '<input type="checkbox" '+(u.subOnly?'checked':'')+' onchange="toggleUserSubOnly(\''+uid+'\',this.checked)" style="width:16px;height:16px;"> 📷 Fotí jako subka (jen focení + galerie, v ní jen SUB fotky)'+
+        '</label></div>')+
       // Admin přepínač (sebe nelze odadminovat)
       (self?'' :
         '<div style="margin:6px 0 0 48px;"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;">'+
@@ -8314,6 +8339,13 @@ function toggleUserPerm(uid, key, allowed){
   if(!isAdmin()) return;
   // allow-by-default → povoleno mažeme (null), zakázáno ukládáme jako false
   db.ref('uzivatele/'+uid+'/perms/'+key).set(allowed ? null : false)
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
+}
+function toggleUserSubOnly(uid, on){
+  if(!isAdmin()) return;
+  var u = (window.allUsers||{})[uid] || {};
+  db.ref('uzivatele/'+uid+'/subOnly').set(on ? true : null)
+    .then(function(){ showToast(on ? ('📷 '+(u.name||'Uživatel')+' = subka (jen focení + galerie)') : 'Subka zrušena', 2200); })
     .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 function toggleUserAdmin(uid, makeAdmin){
@@ -8491,7 +8523,9 @@ function _enterSubMode(name, showHint){
 }
 // Obnova SUB režimu po přenačtení stránky (SUB nemá Firebase login, tak si to pamatujeme sami).
 function _maybeRestoreSub(){
-  try { if(localStorage.getItem('subActive') === '1' && !window.subMode){ _enterSubMode(localStorage.getItem('subName') || 'SUB', false); return true; } } catch(e){}
+  // Starý bezloginový SUB režim je nahrazený login-based subkou (admin nastaví „fotí jako subka").
+  // Auto-obnovu vypínáme + uklidíme zbytkový příznak, ať se nikdo nevrátí do mrtvého pseudo-režimu.
+  try { localStorage.removeItem('subActive'); } catch(e){}
   return false;
 }
 // Odhlášení ze SUB režimu → zpět na přihlašovací obrazovku (čistě přes reload).
