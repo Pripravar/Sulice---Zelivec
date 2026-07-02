@@ -1178,7 +1178,11 @@ document.addEventListener('touchend', function(e){
     <label>🚰 Voda/elektro SO 103</label>
     <label class="toggle"><input type="checkbox" id="lyr-voda" onchange="setVodaVisible(this.checked)"><span class="toggle-slider"></span></label>
   </div>
-  </div><!-- /pdf voda -->
+  <div class="layer-row">
+    <label>💡 Veřejné osvětlení SO 443</label>
+    <label class="toggle"><input type="checkbox" id="lyr-vo443" onchange="setVo443Visible(this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  </div><!-- /pdf voda + VO -->
   <h3>📍 Vrstvy</h3>
   <div class="layer-row">
     <label>🛣️ Trasa</label>
@@ -4961,6 +4965,27 @@ function setVodaVisible(on){
     });
     vodaLayer.addTo(map);
   }).catch(function(){ showToast('❌ Voda/elektro se nepodařilo načíst', 2500); var c=document.getElementById('lyr-voda'); if(c) c.checked=false; });
+}
+
+// Vrstva veřejné osvětlení SO 443 (z DWG „Situace VO 443" přes DXF+pyproj, EPSG:5514, ořez na koridor
+// silnice). overlay/vo443.json = {lines:[{c,w,pts}], body:[[lat,lng]]}; body = symboly lamp.
+var vo443Layer = null;
+function setVo443Visible(on){
+  var cb=document.getElementById('lyr-vo443'); if(cb) cb.checked=!!on;
+  if(!on){ if(vo443Layer && map.hasLayer(vo443Layer)) map.removeLayer(vo443Layer); return; }
+  if(vo443Layer){ vo443Layer.addTo(map); return; }
+  showToast('⏳ Načítám veřejné osvětlení…', 1500);
+  resolveFileUrl('overlay/vo443.json').then(function(u){ return fetch(u + (u.indexOf('?')!==-1 ? SIT_V.replace('?','&') : SIT_V)); }).then(function(r){return r.json();}).then(function(data){
+    vo443Layer=L.layerGroup();
+    var lc=L.canvas({padding:0.5});
+    (data.lines||[]).forEach(function(ln){
+      L.polyline(ln.pts, {renderer:lc, color:ln.c||'#f0a020', weight:ln.w||2, opacity:1, interactive:false}).addTo(vo443Layer);
+    });
+    (data.body||[]).forEach(function(p){
+      L.circleMarker(p, {renderer:lc, radius:3.5, color:'#8a5a00', weight:1, fillColor:'#ffd166', fillOpacity:1, interactive:false}).addTo(vo443Layer);
+    });
+    vo443Layer.addTo(map);
+  }).catch(function(){ showToast('❌ Veřejné osvětlení se nepodařilo načíst', 2500); var c=document.getElementById('lyr-vo443'); if(c) c.checked=false; });
 }
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
