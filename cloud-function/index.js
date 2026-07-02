@@ -480,3 +480,94 @@ exports.listSubFotos = functions
       res.status(500).json({ error: 'Načtení selhalo' });
     }
   });
+
+/* ════════════════════════════════════════════════════════════════
+   tagFoto – AI popis obsahu fotky (Claude Haiku vision) → klíčová slova.
+   Umožní v galerii hledat podle TOHO, CO JE NA FOTCE (finišer, válec, roura…),
+   ne jen podle SO/km/data. Přečte fotku ze Storage, pošle ji Claude Haiku,
+   uloží česká klíčová slova do /standalone_photos/{ts}/tags.
+   Idempotentní: fotku s tags přeskočí (pokud force!==true) → hlídá náklady.
+   Secret ANTHROPIC_API_KEY: firebase functions:secrets:set ANTHROPIC_API_KEY
+   ════════════════════════════════════════════════════════════════ */
+const TAG_PROMPT =
+  'Jsi asistent na stavbě silnice. Podívej se na fotografii a vypiš 5–12 českých ' +
+  'klíčových slov (podstatná jména, malá písmena, oddělená čárkou) popisujících, CO je na ní vidět: ' +
+  'stroje, prvky, materiály, činnosti, stav. Např.: finišer, asfalt, válec, obrubník, výkop, kanalizace, ' +
+  'roura, šachta, bednění, výztuž, dělník, nákladní auto, bagr, silnice, značení, mostek, příkop. ' +
+  'Vrať POUZE klíčová slova oddělená čárkou, nic jiného, žádné věty.';
+
+async function _imgBase64(imgRef) {
+  // imgRef je buď cesta ve Storage (standalone/foto_..._t.jpg) nebo plná http URL (staré fotky na GitHubu).
+  if(/^https?:\/\//.test(imgRef)) {
+    const r = await fetch(imgRef);
+    if(!r.ok) throw new Error('fetch obrázku ' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    return buf.toString('base64');
+  }
+  const [buf] = await admin.storage().bucket(SUB_BUCKET).file(imgRef).download();
+  return buf.toString('base64');
+}
+
+exports.tagFoto = functions
+  .region('europe-west1')
+  .runWith({ secrets: ['ANTHROPIC_API_KEY'] })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if(req.method !== 'POST')    { res.status(405).json({ error: 'Jen POST' }); return; }
+    try {
+      const b = req.body || {};
+      const ts = String(b.ts || '').trim();
+      if(!ts) { res.status(400).json({ error: 'Chybí ts' }); return; }
+      const snap = await db.ref('standalone_photos/' + ts).once('value');
+      const e = snap.val();
+      if(!e) { res.status(404).json({ error: 'Fotka nenalezena' }); return; }
+      if(e.tags && b.force !== true) { res.status(200).json({ ok: true, skipped: true, tags: e.tags }); return; }
+      // Pošli pořádné rozlišení kvůli přesnějšímu rozpoznání – Claude si velký obrázek
+      // sám zmenší na své straně, takže cena se nezvedne (účtuje se strop tokenů, ne plné px).
+      // Preferuj ORIGINÁL (bez razítka), fallback stamped → visible → thumb.
+      const imgRef = e.urlOriginal || e.urlStamped || e.url || e.thumb;
+      if(!imgRef) { res.status(400).json({ error: 'Fotka bez obrázku' }); return; }
+      const data = await _imgBase64(imgRef);
+      const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5',
+          max_tokens: 80,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: data } },
+              { type: 'text', text: TAG_PROMPT }
+            ]
+          }]
+        })
+      });
+      if(!aiResp.ok) {
+        const errTxt = await aiResp.text();
+        console.error('Claude API chyba', aiResp.status, errTxt);
+        res.status(502).json({ error: 'AI popis selhal (' + aiResp.status + ')' });
+        return;
+      }
+      const ai = await aiResp.json();
+      let tags = '';
+      if(ai && Array.isArray(ai.content)) {
+        const t = ai.content.find(function(c){ return c.type === 'text'; });
+        if(t) tags = String(t.text || '').trim().toLowerCase();
+      }
+      tags = tags.replace(/[\r\n]+/g, ' ').replace(/\.$/, '').slice(0, 300);
+      if(!tags) { res.status(502).json({ error: 'AI vrátila prázdný popis' }); return; }
+      await db.ref('standalone_photos/' + ts).update({ tags: tags, tagsAt: Date.now() });
+      res.status(200).json({ ok: true, tags: tags });
+    } catch(err) {
+      console.error('tagFoto výjimka:', err);
+      res.status(500).json({ error: 'Tagování selhalo' });
+    }
+  });

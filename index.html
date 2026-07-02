@@ -7430,6 +7430,47 @@ function enqueuePhoto(compressed, meta, yes){
 // SUB režim: fotka jde přes Cloud Function (SUB nemá Firebase přihlášení). Značí se zdroj:'SUB'.
 var UPLOAD_SUB_FN_URL = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/uploadSubFoto';
 var LIST_SUB_FN_URL   = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/listSubFotos';
+var TAG_FN_URL        = 'https://europe-west1-sulice-zelivec.cloudfunctions.net/tagFoto';
+// AI popis fotek (vyhledávání podle obsahu) je HOTOVÝ, ale ZATÍM VYPNUTÝ – čeká na nasazení
+// Cloud Function tagFoto + ANTHROPIC_API_KEY. Aktivace: nasaď funkci, přepni na true, pushni.
+var AI_TAGS_ENABLED   = false;
+// Pošle fotku (podle ts) na AI popis obsahu → klíčová slova pro vyhledávání. Fire-and-forget.
+function _tagPhoto(ts, force){
+  if(!AI_TAGS_ENABLED || !ts) return;
+  try {
+    fetch(TAG_FN_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ts: String(ts), force: !!force }) })
+      .then(function(r){ return r.json(); })
+      .then(function(resp){ if(resp && resp.ok && resp.tags && document.getElementById('gallery-modal') && document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); })
+      .catch(function(){});
+  } catch(e){}
+}
+// Admin: jednorázově otaguje všechny fotky bez tags (aby šly hledat podle obsahu).
+function batchTagPhotos(){
+  if(!AI_TAGS_ENABLED){ showToast('AI tagování zatím není nasazené', 2500); return; }
+  if(!isAdmin()){ showToast('Jen pro administrátora', 2500); return; }
+  db.ref('standalone_photos').once('value').then(function(snap){
+    var all = snap.val() || {};
+    var todo = Object.keys(all).filter(function(k){ var e=all[k]; return e && !e.tags && (e.urlOriginal || e.urlStamped || e.url || e.thumb); });
+    if(!todo.length){ showToast('✅ Všechny fotky už jsou otagované', 2500); return; }
+    if(!confirm('Otagovat '+todo.length+' fotek přes AI?\nBěží na pozadí (pár minut) a stojí to zhruba '+ Math.max(1, Math.round(todo.length*0.07)) +' Kč jednorázově.')) return;
+    var i=0, ok=0, fail=0;
+    function next(){
+      if(i >= todo.length){
+        showToast('✅ Hotovo: otagováno '+ok+' fotek'+(fail?(', '+fail+' selhalo'):''), 4000);
+        if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+        return;
+      }
+      var k = todo[i++];
+      if(i % 5 === 1) showToast('🏷️ Tagování '+i+'/'+todo.length+'…', 1500);
+      fetch(TAG_FN_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ts: String(k) }) })
+        .then(function(r){ return r.json(); })
+        .then(function(resp){ if(resp && resp.ok) ok++; else fail++; })
+        .catch(function(){ fail++; })
+        .then(function(){ setTimeout(next, 400); });
+    }
+    next();
+  }).catch(function(){ showToast('❌ Nepodařilo se načíst fotky', 3000); });
+}
 function _stripB64(dataUrl){ return String(dataUrl||'').replace(/^data:image\/\w+;base64,/, ''); }
 function _uploadSubJob(job){
   var meta = job.meta, compressed = job.compressed;
@@ -7492,6 +7533,7 @@ function _processPhotoQueue(){
           if(isSubOnly()){ entry.zdroj = 'SUB'; entry.sub = true; }   // subka → fotka označená SUB
           function saveEntry(){
             db.ref('standalone_photos/' + t).set(entry).then(function(){
+              _tagPhoto(t);   // AI popis obsahu na pozadí (pro vyhledávání)
               photoPending = Math.max(0, photoPending-1); _photoBadge();
               setTimeout(_processPhotoQueue, 400);
             }).catch(function(){ fail('db'); });
@@ -7729,7 +7771,7 @@ function submitLibImport(){
               if(urlS) entry.urlStamped  = urlS;
               if(it.lat!=null){ entry.lat = it.lat; entry.lng = it.lng; }
               if(isSubOnly()){ entry.zdroj = 'SUB'; entry.sub = true; }   // subka → fotka označená SUB
-              function saveImp(){ db.ref('standalone_photos/'+t).set(entry).then(function(){ done++; processOne(idx+1); }).catch(function(){ fail++; processOne(idx+1); }); }
+              function saveImp(){ db.ref('standalone_photos/'+t).set(entry).then(function(){ _tagPhoto(t); done++; processOne(idx+1); }).catch(function(){ fail++; processOne(idx+1); }); }
               resizeImageMax(stamped, 400, 0.5, function(thumbUrl){
                 if(!thumbUrl){ saveImp(); return; }
                 setTimeout(function(){ uploadPhotoToGitHubP(thumbUrl, 'standalone/foto_'+t+'_t.jpg').then(function(urlT){ if(urlT) entry.thumb = urlT; saveImp(); }); }, 500);
@@ -7751,6 +7793,9 @@ function openGallery() {
   // Subka: filtr „jen SUB" natvrdo zapnutý a zamčený (uvidí jen SUB fotky).
   var subEl = document.getElementById('gfilt-sub');
   if(subEl){ if(isSubOnly()){ subEl.checked = true; subEl.disabled = true; } else { subEl.disabled = false; } }
+  // AI hledání v obsahu fotek – zobraz jen když je feature zapnutá (nasazená)
+  var srWrap = document.getElementById('gfilt-search-wrap'); if(srWrap) srWrap.style.display = AI_TAGS_ENABLED ? '' : 'none';
+  var btBtn = document.getElementById('gallery-batchtag-btn'); if(btBtn) btBtn.style.display = (AI_TAGS_ENABLED && isAdmin()) ? '' : 'none';
   renderGallery();
 }
 
@@ -7809,13 +7854,21 @@ function applyGalleryFilters(items){
   var subEl = document.getElementById('gfilt-sub');
   var onlySub = subEl ? subEl.checked : false;
   if(isSubOnly()) onlySub = true;   // subka VŽDY jen SUB fotky (nejde vypnout)
+  var srchEl = document.getElementById('gfilt-search');
+  var srch = srchEl ? (srchEl.value || '').trim().toLowerCase() : '';
+  var srchWords = srch ? srch.split(/[\s,]+/).filter(Boolean) : [];
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
+  var anyActive = srch || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   return items.filter(function(it){
     if(onlySub && !(it.zdroj === 'SUB' || it.sub)) return false;
+    if(srchWords.length){
+      // Hledá v AI popisu (tags) + SO + km + autor + datum. Všechna slova musí sedět (AND).
+      var hay = [it.tags, it.so, (it.soList||[]).join(' '), it.km, it.author, it.date].filter(Boolean).join(' ').toLowerCase();
+      for(var w=0; w<srchWords.length; w++){ if(hay.indexOf(srchWords[w]) === -1) return false; }
+    }
     if(!isNaN(kmOd) || !isNaN(kmDo)) {
       var km = parseKmStr(it.km);
       if(km === null) return false; // bez km neprochází filtr
@@ -7942,6 +7995,7 @@ function clearGalleryFilters(){
   document.getElementById('gfilt-author').value = '';
   var soEl = document.getElementById('gfilt-so'); if(soEl) soEl.value = '';
   var subEl = document.getElementById('gfilt-sub'); if(subEl) subEl.checked = false;
+  var srchEl = document.getElementById('gfilt-search'); if(srchEl) srchEl.value = '';
   renderGallery();
 }
 
@@ -12127,6 +12181,11 @@ function copyDiaryExport(){
     <div class="gallery-tab" id="gtab-1" onclick="switchGalleryTab(1)">&#128204; Z poznámek</div>
   </div>
   <div id="gallery-filter-bar" style="display:none;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div id="gfilt-search-wrap" style="margin-bottom:10px;display:none;">
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🔎 Hledat v obsahu fotek (např. finišer, válec, roura…)</div>
+      <input type="text" id="gfilt-search" placeholder="napiš co hledáš na fotkách…" oninput="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--accent);border-radius:6px;color:var(--text);padding:9px 10px;font-size:14px;">
+      <button id="gallery-batchtag-btn" onclick="batchTagPhotos()" style="display:none;margin-top:6px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:7px 10px;font-size:12px;cursor:pointer;">🏷️ Otagovat staré fotky (jednorázově, ať jdou hledat)</button>
+    </div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;">
       <div style="flex:1;">
         <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">↕️ Řadit podle</div>

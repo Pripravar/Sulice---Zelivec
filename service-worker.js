@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 // VERZE cache - při změně příště zvedni, ať si telefony stáhnou novou verzi.
-const CACHE_VERSION = 'sulice-v73-2026-07-01';
+const CACHE_VERSION = 'sulice-v76-2026-07-01';
 
 const CORE_ASSETS = [
   './',
