@@ -1130,6 +1130,14 @@ document.addEventListener('touchend', function(e){
 <div id="map"></div>
 
 <div id="layers-panel">
+  <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:9px 10px;margin-bottom:6px;">
+    <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;">⚙️ Zobrazení při spuštění</div>
+    <div style="display:flex;gap:6px;">
+      <button onclick="saveLayerDefaults()" style="flex:2;background:var(--accent2);color:#0f3460;border:none;border-radius:8px;padding:9px 8px;font-size:12px;font-weight:700;cursor:pointer;">💾 Uložit toto jako výchozí</button>
+      <button onclick="resetLayerDefaults()" title="Vrátit standardní zobrazení" style="flex:1;background:var(--panel);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:9px 8px;font-size:12px;cursor:pointer;">↺ Standardní</button>
+    </div>
+    <div style="font-size:10px;color:var(--text2);margin-top:5px;">Nastav si vrstvy jak chceš a ulož — takhle se ti appka otevře příště. Platí jen na tomhle zařízení.</div>
+  </div>
   <h3>🗺️ Podklady</h3>
   <div id="basemap-row">
     <button class="bm-btn" onclick="setBasemap('outdoor',this)">Outdoor</button>
@@ -3246,6 +3254,44 @@ function _syncMereniShowCheckboxes(){
   if(d) d.checked = !!mereniShow.datum;
 }
 function closeLayersPanel(){document.getElementById('layers-panel').classList.remove('open');}
+
+// ── Výchozí zobrazení vrstev (per zařízení, localStorage) ──────────────
+// Snímá všechny přepínače vrstev (id „lyr-…", mimo razítka, které má vlastní ukládání).
+function _layerToggleEls(){
+  var out = [];
+  var nodes = document.querySelectorAll('#layers-panel input[type="checkbox"][id^="lyr-"]');
+  for(var i=0;i<nodes.length;i++){ if(nodes[i].id !== 'lyr-stamp') out.push(nodes[i]); }
+  return out;
+}
+function saveLayerDefaults(){
+  var map = {};
+  _layerToggleEls().forEach(function(cb){ map[cb.id] = cb.checked; });
+  try { localStorage.setItem('layerDefaults', JSON.stringify(map)); showToast('💾 Uloženo – takhle se appka otevře příště', 2500); }
+  catch(e){ showToast('❌ Nepodařilo se uložit', 2500); }
+}
+function _getLayerDefaults(){
+  try { var s = localStorage.getItem('layerDefaults'); return s ? JSON.parse(s) : null; }
+  catch(e){ return null; }
+}
+// Aplikuje uložené výchozí stavy – nastaví checkbox a vyvolá jeho onchange (=přidá/odebere vrstvu).
+function applyLayerDefaults(){
+  if(window.subMode || isSubOnly()) return;   // subka má vynucený omezený pohled
+  var saved = _getLayerDefaults(); if(!saved) return;
+  _layerToggleEls().forEach(function(cb){
+    if(!(cb.id in saved)) return;
+    var want = !!saved[cb.id];
+    cb.checked = want;
+    cb.dispatchEvent(new Event('change'));
+  });
+}
+// „Standardní" = zpět na výchozí stav z HTML (defaultChecked) + zapomenout uložené.
+function resetLayerDefaults(){
+  try { localStorage.removeItem('layerDefaults'); } catch(e){}
+  _layerToggleEls().forEach(function(cb){
+    if(cb.checked !== cb.defaultChecked){ cb.checked = cb.defaultChecked; cb.dispatchEvent(new Event('change')); }
+  });
+  showToast('↺ Vráceno na standardní zobrazení', 2200);
+}
 
 function toggleLayer(name,en){
   if(!layerGroups[name])return;
@@ -9397,6 +9443,10 @@ function _enterApp(displayName){
   maybeShowIosHint();
   applyPermsToUI();   // schovat tlačítka funkcí, které uživatel nemá povolené
   setTimeout(_maybeQuickPhoto, 700);   // URL ?foto/#foto → rovnou foťák
+  // Výchozí zobrazení vrstev (per zařízení). Dvě vlny – hned pro synchronní vrstvy,
+  // pak znovu, až se dotáhnou vrstvy z Firebase (poznámky/úkoly/SO/měření…).
+  setTimeout(applyLayerDefaults, 1000);
+  setTimeout(applyLayerDefaults, 3000);
   setTimeout(_checkGeoReminders, 8000);   // #4 geo připomínky po fixaci GPS
   if(!window._geoRemTimer) window._geoRemTimer = setInterval(_checkGeoReminders, 90000);
 }
