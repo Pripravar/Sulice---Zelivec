@@ -57,6 +57,11 @@ exports.sendTaskNotifications = functions
       // Posíláme zadavateli i všem přiřazeným
       if(rec.zadalUid) recipientUids.push(rec.zadalUid);
       (rec.prirazeno || []).forEach(p => { if(p.uid) recipientUids.push(p.uid); });
+    } else if(rec.typ === 'foto_komentar') {
+      title = '💬 Komentář k fotce';
+      body = (rec.zadalName || 'Někdo') + ': ' + (rec.komentText || '') + (rec.label ? (' (' + rec.label + ')') : '');
+      // Příjemci přijdou přímo v záznamu (autor fotky + dřívější komentující, bez pisatele)
+      recipientUids = (rec.recipientUids || []).filter(Boolean);
     }
 
     // PRIORITA řídí, JESTLI a JAK se push pošle:

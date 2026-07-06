@@ -5538,26 +5538,79 @@ function _renderFsItem(url, firebaseKey, item) {
   if(delBtn) delBtn.style.display = canEd ? 'inline-block' : 'none';
   var soBtn = document.getElementById('photo-fs-soedit');
   if(soBtn) soBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';   // přeřadit smí kdokoliv přihlášený
-  // Komentář k fotce (#2)
-  var com = (_photoFsItem && _photoFsItem.komentar) ? String(_photoFsItem.komentar) : '';
-  var cEl = document.getElementById('photo-fs-comment');
-  if(cEl){ if(com){ cEl.textContent = '💬 ' + com; cEl.style.display='block'; } else cEl.style.display='none'; }
+  // Komentář k fotce (#2) – text + autor + datum
+  _renderFsCommentBar();
   var cBtn = document.getElementById('photo-fs-comment-btn');
   if(cBtn) cBtn.style.display = (_photoFsKey && window.currentUser && !window.subMode) ? 'inline-block' : 'none';
 }
-// Přidat/upravit komentář k fotce → /standalone_photos/{key}/komentar
+// VLÁKNO komentářů k fotce. Zpětná kompat.: starý `komentar` (string/objekt) = první komentář,
+// nové jdou do `komentare/{cid}`. Vrací pole {id?,text,author,uid,ts} seřazené podle času.
+function _photoComments(it){
+  var out = [];
+  var legacy = it && it.komentar;
+  if(legacy){
+    if(typeof legacy === 'string') out.push({ text: legacy, author:'', uid:'', ts:0 });
+    else if(legacy.text) out.push({ text: legacy.text, author: legacy.author||'', uid: legacy.uid||'', ts: legacy.ts||0 });
+  }
+  var kk = it && it.komentare;
+  if(kk) Object.keys(kk).forEach(function(cid){ var c=kk[cid]; if(c && c.text) out.push({ id:cid, text:c.text, author:c.author||'', uid:c.uid||'', ts:c.ts||0 }); });
+  out.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  return out;
+}
+function _photoLatestComment(it){ var a=_photoComments(it); return a.length ? a[a.length-1] : null; }
+// Alias – galerie/řazení/odznak berou „ten komentář" = nejnovější
+function _photoComment(it){ return _photoLatestComment(it); }
+function _renderFsCommentBar(){
+  var cEl = document.getElementById('photo-fs-comment');
+  if(!cEl) return;
+  var arr = _photoComments(_photoFsItem);
+  if(!arr.length){ cEl.style.display='none'; cEl.innerHTML=''; return; }
+  cEl.innerHTML = arr.map(function(c){
+    var meta = [c.author, c.ts ? new Date(c.ts).toLocaleDateString('cs-CZ') : ''].filter(Boolean).join(' · ');
+    return '<div style="padding:2px 0;">💬 '+escapeHtml(c.text)+(meta?(' <span style="opacity:.7;">— '+escapeHtml(meta)+'</span>'):'')+'</div>';
+  }).join('');
+  cEl.style.display='block';
+}
+// Přidá komentář do vlákna fotky + pošle upozornění (autorovi fotky + dřívějším komentujícím).
 function editPhotoComment(){
   if(!_photoFsKey || !window.currentUser){ showToast('Komentovat lze jen fotky po přihlášení', 2500); return; }
-  var cur = (_photoFsItem && _photoFsItem.komentar) || '';
-  var v = prompt('Komentář k fotce:', cur);
+  var v = prompt('Napiš komentář k fotce:');
   if(v === null) return;
-  v = v.trim();
-  db.ref('standalone_photos/'+_photoFsKey+'/komentar').set(v || null).then(function(){
-    if(_photoFsItem) _photoFsItem.komentar = v;
-    var cEl=document.getElementById('photo-fs-comment');
-    if(cEl){ if(v){ cEl.textContent='💬 '+v; cEl.style.display='block'; } else cEl.style.display='none'; }
-    showToast(v ? '💬 Komentář uložen' : 'Komentář smazán', 1500);
+  v = v.trim(); if(!v) return;
+  var prev = _photoComments(_photoFsItem);   // pro upozornění: kdo už komentoval (před přidáním)
+  var cid = 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
+  var c = { text: v, author: (window.currentUser.name||''), uid: window.currentUser.uid, ts: Date.now() };
+  db.ref('standalone_photos/'+_photoFsKey+'/komentare/'+cid).set(c).then(function(){
+    if(!_photoFsItem.komentare) _photoFsItem.komentare = {};
+    _photoFsItem.komentare[cid] = c;
+    _renderFsCommentBar();
+    _notifyPhotoComment(_photoFsItem, prev, v);
+    showToast('💬 Komentář přidán', 1500);
   }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
+}
+// Zařadí upozornění na komentář k fotce (Cloud Function pošle push). Příjemci = autor fotky +
+// všichni dřívější komentující, mimo toho, kdo právě píše.
+function _notifyPhotoComment(photo, prevComments, text){
+  if(!window.currentUser) return;
+  var me = window.currentUser.uid;
+  var uids = [];
+  if(photo && photo.uid) uids.push(photo.uid);
+  (prevComments||[]).forEach(function(cc){ if(cc.uid) uids.push(cc.uid); });
+  uids = uids.filter(function(u){ return u && u !== me; });
+  uids = uids.filter(function(u, i){ return uids.indexOf(u) === i; });   // unikáty
+  if(!uids.length) return;
+  var label = [photo.so, (photo.km?('km '+photo.km):''), photo.date].filter(Boolean).join(' · ') || 'fotka';
+  var rec = {
+    id: 'n_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+    typ: 'foto_komentar',
+    recipientUids: uids,
+    fotoKey: _photoFsKey,
+    label: label,
+    komentText: text.slice(0, 140),
+    zadalName: window.currentUser.name || '',
+    time: Date.now()
+  };
+  db.ref('notifikace_fronta/' + rec.id).set(rec).catch(function(e){ console.warn('foto-komentář notif:', e); });
 }
 
 // Posun na předchozí/další fotku v galerii (dir = -1 / +1). Plná verze, ne náhled.
@@ -7419,7 +7472,7 @@ var _soPick = null;
 function chooseSOForPhoto(kmStr, cb, preset){
   var kmNum = parseKmStr(kmStr);
   var kand  = soKandidati(kmNum);           // blízké objekty (±50 m)
-  _soPick = { cb: cb, sel: (preset||[]).slice(), kand: kand, manual: kand.length === 0, view: 'main' };
+  _soPick = { cb: cb, sel: (preset||[]).slice(), kand: kand, manual: kand.length === 0, view: 'main', sdilenoSub: false };
   var modal = document.getElementById('so-pick-modal');
   if(!modal){ cb([]); _soPick = null; return; }
   _renderSOPicker();
@@ -7480,16 +7533,27 @@ function _renderSOPicker(){
     chips.textContent = 'Vybráno: ' + P.sel.join(', ');
     foot.appendChild(chips);
   }
+  // Přepínač „Sdílet subce" – jen pro přihlášeného (ne subku); default NE, lze překliknout ANO.
+  if(window.currentUser && !isSubOnly() && !window.subMode){
+    var shareRow = document.createElement('label');
+    shareRow.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;padding:6px 2px;';
+    var chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!P.sdilenoSub; chk.style.cssText='width:18px;height:18px;';
+    chk.onchange = function(){ P.sdilenoSub = chk.checked; };
+    shareRow.appendChild(chk);
+    var lbl = document.createElement('span'); lbl.innerHTML = '📷 Sdílet subce <span style="color:var(--text2);">(uvidí tuhle fotku ve své galerii)</span>';
+    shareRow.appendChild(lbl);
+    foot.appendChild(shareRow);
+  }
   var done = document.createElement('button');
   done.className = 'so-pick-btn';
   done.style.cssText = 'background:var(--accent);color:#fff;font-weight:800;text-align:center;justify-content:center;';
   done.textContent = P.sel.length ? ('✓ Hotovo (' + P.sel.length + ')') : '✓ Hotovo';
-  done.onclick = function(){ var s = P.sel.slice(); _closeSOPicker(); P.cb(s); };
+  done.onclick = function(){ var s = P.sel.slice(); var sh = !!P.sdilenoSub; _closeSOPicker(); P.cb(s, sh); };
   foot.appendChild(done);
   var none = document.createElement('button');
   none.className = 'so-pick-btn so-pick-none';
   none.textContent = '⊘ Nepřiřazovat';
-  none.onclick = function(){ _closeSOPicker(); P.cb([]); };
+  none.onclick = function(){ var sh = !!P.sdilenoSub; _closeSOPicker(); P.cb([], sh); };
   foot.appendChild(none);
   body.appendChild(foot);
 }
@@ -7781,6 +7845,7 @@ function _processPhotoQueue(){
           if(urlOrig) entry.urlOriginal = urlOrig;
           if(urlStamp) entry.urlStamped = urlStamp;
           if(isSubOnly()){ entry.zdroj = 'SUB'; entry.sub = true; }   // subka → fotka označená SUB
+          if(meta.sdilenoSub){ entry.sdilenoSub = true; }             // #16 sdíleno subce
           function saveEntry(){
             db.ref('standalone_photos/' + t).set(entry).then(function(){
               _tagPhoto(t);   // AI popis obsahu na pozadí (pro vyhledávání)
@@ -7847,10 +7912,11 @@ function _processStandalonePhotoFile(file){
       window.photoSession.pendingPhoto = compressed;
       window.photoSession.pendingMeta  = {km: km, author: author, lat: latlng.lat, lng: latlng.lng};
       window.photoSession.phase = 'stamp';
-      chooseSOForPhoto(km, function(soArr){
+      chooseSOForPhoto(km, function(soArr, sdilenoSub){
         soArr = soArr || [];
         window.photoSession.pendingMeta.soList = soArr;
         window.photoSession.pendingMeta.so     = soArr[0] || '';
+        window.photoSession.pendingMeta.sdilenoSub = !!sdilenoSub;
         ppAnswer(true);
       });
     });
@@ -8107,16 +8173,24 @@ function applyGalleryFilters(items){
   var srchEl = document.getElementById('gfilt-search');
   var srch = srchEl ? (srchEl.value || '').trim().toLowerCase() : '';
   var srchWords = srch ? srch.split(/[\s,]+/).filter(Boolean) : [];
+  var komEl = document.getElementById('gfilt-komentar');
+  var onlyKom = komEl ? komEl.checked : false;
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = srch || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
+  var anyActive = srch || onlyKom || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   return items.filter(function(it){
-    if(onlySub && !(it.zdroj === 'SUB' || it.sub)) return false;
+    if(onlySub){
+      var isSubPhoto = (it.zdroj === 'SUB' || it.sub);
+      var sharedToSub = isSubOnly() && it.sdilenoSub;   // subka vidí i fotky sdílené subce
+      if(!(isSubPhoto || sharedToSub)) return false;
+    }
+    var kom = _photoComment(it);
+    if(onlyKom && !(kom && kom.text)) return false;
     if(srchWords.length){
-      // Hledá v AI popisu (tags) + SO + km + autor + datum. Všechna slova musí sedět (AND).
-      var hay = [it.tags, it.so, (it.soList||[]).join(' '), it.km, it.author, it.date].filter(Boolean).join(' ').toLowerCase();
+      // Hledá v AI popisu (tags) + SO + km + autor + datum + komentář (text i autor). AND.
+      var hay = [it.tags, it.so, (it.soList||[]).join(' '), it.km, it.author, it.date, (kom?kom.text:''), (kom?kom.author:'')].filter(Boolean).join(' ').toLowerCase();
       for(var w=0; w<srchWords.length; w++){ if(hay.indexOf(srchWords[w]) === -1) return false; }
     }
     if(!isNaN(kmOd) || !isNaN(kmDo)) {
@@ -8246,6 +8320,7 @@ function clearGalleryFilters(){
   var soEl = document.getElementById('gfilt-so'); if(soEl) soEl.value = '';
   var subEl = document.getElementById('gfilt-sub'); if(subEl) subEl.checked = false;
   var srchEl = document.getElementById('gfilt-search'); if(srchEl) srchEl.value = '';
+  var komEl = document.getElementById('gfilt-komentar'); if(komEl) komEl.checked = false;
   renderGallery();
 }
 
@@ -8286,6 +8361,14 @@ function _galleryItemEl(item) {
     var subB = document.createElement('div');
     subB.className = 'gallery-sub-badge'; subB.textContent = 'SUB';
     div.appendChild(subB);
+  }
+  var _kc = _photoComment(item);
+  if(_kc && _kc.text){
+    var kB = document.createElement('div');
+    kB.textContent = '💬';
+    kB.title = _kc.text + (_kc.author ? (' — ' + _kc.author) : '');
+    kB.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:1px 4px;border-radius:6px;z-index:3;';
+    div.appendChild(kB);
   }
   var meta = document.createElement('div');
   meta.className = 'gallery-item-meta';
@@ -8395,6 +8478,12 @@ function sortGalleryItems(items) {
       if(kb === null) return -1;
       return ka - kb;
     });
+  } else if(gallerySort === 'komentar') {
+    // fotky s komentářem nahoře, řazené podle data komentáře (nejnovější první)
+    arr.sort(function(a, b){ var ca=_photoComment(a), cb=_photoComment(b); return ((cb?cb.ts:0)||0) - ((ca?ca.ts:0)||0); });
+  } else if(gallerySort === 'komentar-autor') {
+    // podle autora komentáře (A→Z), bez komentáře na konec
+    arr.sort(function(a, b){ var ca=_photoComment(a), cb=_photoComment(b); var aa=ca?(ca.author||'￿'):'￿', ba=cb?(cb.author||'￿'):'￿'; return aa.localeCompare(ba, 'cs'); });
   } else {
     arr.sort(function(a, b) {
       return photoCreationDate(b).getTime() - photoCreationDate(a).getTime();
@@ -8405,7 +8494,7 @@ function sortGalleryItems(items) {
 
 // Změna řazení galerie ze selectu v liště filtru.
 function setGallerySort(mode) {
-  gallerySort = (mode === 'km') ? 'km' : 'date';
+  gallerySort = (['km','komentar','komentar-autor'].indexOf(mode) !== -1) ? mode : 'date';
   renderGallery();
 }
 
@@ -12556,9 +12645,9 @@ function copyDiaryExport(){
   <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
   <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
-  <div id="photo-fs-comment" onclick="event.stopPropagation();editPhotoComment()" style="display:none;position:absolute;left:0;right:0;bottom:56px;bottom:calc(56px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.6);color:#fff;font-size:13px;line-height:1.4;padding:8px 14px;cursor:pointer;"></div>
+  <div id="photo-fs-comment" onclick="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:56px;bottom:calc(56px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.65);color:#fff;font-size:13px;line-height:1.4;padding:8px 14px;max-height:38vh;overflow-y:auto;"></div>
   <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
-    <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💬 Komentář</button>
+    <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💬 Přidat komentář</button>
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="background:var(--accent2);color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout s datem</button>
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">&#128247; Otevřít</a>
     <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;background:#f5a623;color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🏗️ Přeřadit (SO)</button>
@@ -12621,6 +12710,8 @@ function copyDiaryExport(){
         <select id="gallery-sort-sel" onchange="setGallerySort(this.value)" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
           <option value="date">📅 Datum pořízení (nejnovější první)</option>
           <option value="km">📏 Staničení (od začátku stavby)</option>
+          <option value="komentar">💬 Datum komentáře (nejnovější první)</option>
+          <option value="komentar-autor">💬 Autor komentáře (A→Z)</option>
         </select>
       </div>
     </div>
@@ -12671,6 +12762,9 @@ function copyDiaryExport(){
     </div>
     <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer;">
       <input type="checkbox" id="gfilt-sub" onchange="renderGallery()" style="width:18px;height:18px;"> <span style="background:#1565c0;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;">SUB</span> Jen fotky od SUB / firem
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--text);cursor:pointer;">
+      <input type="checkbox" id="gfilt-komentar" onchange="renderGallery()" style="width:18px;height:18px;"> 💬 Jen fotky s komentářem
     </label>
     <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
       <button onclick="generateMissingThumbs()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">🖼️ Zrychlit galerii (dogenerovat náhledy)</button>
