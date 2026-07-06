@@ -1071,11 +1071,11 @@ document.addEventListener('touchend', function(e){
         📱 Přihlásit se telefonem
       </button>
       <div class="auth-note">
-        Stačí zadat <b>číslo a jméno</b> — žádná SMS ani kód. Příště tě aplikace přihlásí sama.
+        Stačí zadat <b>číslo a jméno</b> — žádná SMS ani kód. Příště Tě aplikace přihlásí sama.
       </div>
       <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:12px;text-align:left;font-size:11px;color:var(--text2);line-height:1.5;">
-        <div>📷 <b>Subdodavatel / firma:</b> přihlas se libovolně (Google i telefon). Administrátor tě schválí a přidělí ti přístup.</div>
-        <div style="margin-top:8px;">🏛️ <b>Investor / objednatel:</b> přihlas se libovolně. Administrátor tě schválí a přidělí ti přístup.</div>
+        <div>📷 <b>Subdodavatel / firma:</b> přihlas se libovolně (Google i telefon). Administrátor Tě schválí a přidělí Ti přístup.</div>
+        <div style="margin-top:8px;">🏛️ <b>Investor / objednatel:</b> přihlas se libovolně. Administrátor Tě schválí a přidělí Ti přístup.</div>
       </div>
     </div>
 
@@ -1094,7 +1094,7 @@ document.addEventListener('touchend', function(e){
       <input type="text" id="name-input" class="auth-input" placeholder="Jméno a příjmení" autocapitalize="words" autocomplete="name">
       <div class="auth-note auth-note-warn" style="text-align:left;">
         ⚠️ <b>Napiš CELÉ jméno a příjmení.</b> Žádné přezdívky ani zkratky!<br>
-        Podle jména tě administrátor pozná a schválí. <b>Bez plného jména může být přístup odmítnut.</b>
+        Podle jména Tě administrátor pozná a schválí. <b>Bez plného jména může být přístup odmítnut.</b>
       </div>
       <button class="auth-google" onclick="savePhoneUserName()">Pokračovat →</button>
     </div>
@@ -1137,7 +1137,7 @@ document.addEventListener('touchend', function(e){
       <button onclick="saveLayerDefaults()" style="flex:2;background:var(--accent2);color:#0f3460;border:none;border-radius:8px;padding:9px 8px;font-size:12px;font-weight:700;cursor:pointer;">💾 Uložit toto jako výchozí</button>
       <button onclick="resetLayerDefaults()" title="Vrátit standardní zobrazení" style="flex:1;background:var(--panel);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:9px 8px;font-size:12px;cursor:pointer;">↺ Standardní</button>
     </div>
-    <div style="font-size:10px;color:var(--text2);margin-top:5px;">Nastav si vrstvy jak chceš a ulož — takhle se ti appka otevře příště. Platí jen na tomhle zařízení.</div>
+    <div style="font-size:10px;color:var(--text2);margin-top:5px;">Nastav si vrstvy jak chceš a ulož — takhle se Ti appka otevře příště. Platí jen na tomhle zařízení.</div>
   </div>
   <h3>🗺️ Podklady</h3>
   <div id="basemap-row">
@@ -2342,7 +2342,7 @@ function addPRMarker(group, lat, lng, realKm, bear, pr) {
 }
 
 function openPRPanel(realKm, pr) {
-  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů ti admin nepovolil', 3000); return; }
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů Ti admin nepovolil', 3000); return; }
   window._docPanelKm = (typeof realKm==='number') ? realKm : null;
   showToast('PŘ km '+fmtKm(realKm)+' (řez č.'+pr.rezIdx+'/'+pr.total+')', 2000);
   var prPos = realKmToLatLng(realKm);
@@ -2566,7 +2566,7 @@ function openVykresUpload(realKm, preferSO){
   var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
   if(!user){ showToast('Pro nahrání výkresu se přihlas (úkolníček → přihlášení)', 3500); return; }
   trackEvent('vykresy');
-  if(!hasPerm('vykresy')){ showToast('📄 Nahrávání výkresů ti admin nepovolil', 3000); return; }
+  if(!hasPerm('vykresy')){ showToast('📄 Nahrávání výkresů Ti admin nepovolil', 3000); return; }
   _vykUploadKm = (typeof realKm==='number') ? realKm : null;
   // Naplnit SO select
   var soSel = document.getElementById('vyk-so');
@@ -2862,7 +2862,7 @@ function soAtKm(realKm){
   return out;
 }
 function openStaniceniPanel(realKm) {
-  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů ti admin nepovolil', 3000); return; }
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů Ti admin nepovolil', 3000); return; }
   _ensureSoIndex();
   var sos = soAtKm(realKm);
   var pages = [];
@@ -2961,7 +2961,7 @@ var currentPdfSrc = '';
 // Inženýrské sítě – vyjádření / situace správců sítí (statická PDF v repu pdf/IS/).
 // Přibyde-li další, jen přidej řádek do pole níž a nahraj PDF do pdf/IS/.
 function openInzenyrskeSite(){
-  if(!hasPerm('inzsite')){ showToast('🔌 Inženýrské sítě ti admin nepovolil', 3000); return; }
+  if(!hasPerm('inzsite')){ showToast('🔌 Inženýrské sítě Ti admin nepovolil', 3000); return; }
   var pages = [
     {soubor:'pdf/IS/Situace_CEZd_0102462206.pdf', nazev:'Situační výkres ČEZ Distribuce (0102462206)', typ:'⚡ ČEZ Distribuce'},
     {soubor:'pdf/IS/Situace_15346-26.pdf',        nazev:'Situační výkres (15346-26)',                 typ:'📄 Situace 15346-26'}
@@ -3515,7 +3515,7 @@ function _noteKm(note){
   catch(e){ return ''; }
 }
 function openNotesEvidence(){
-  if(!hasPerm('pripominky')){ showToast('📝 Poznámky/úkoly ti admin nepovolil', 3000); return; }
+  if(!hasPerm('pripominky')){ showToast('📝 Poznámky/úkoly Ti admin nepovolil', 3000); return; }
   document.getElementById('notes-evidence-modal').style.display = 'flex';
   var sb = document.getElementById('notes-ev-search'); if(sb) sb.value = '';
   renderNotesEvidence();
@@ -3868,7 +3868,7 @@ function cancelPlacing() {
 }
 function confirmPlacing() {
   if(!placingMode) return;
-  if(!hasPerm('pripominky')){ showToast('📝 Poznámky/úkoly ti admin nepovolil', 3000); cancelPlacing(); return; }
+  if(!hasPerm('pripominky')){ showToast('📝 Poznámky/úkoly Ti admin nepovolil', 3000); cancelPlacing(); return; }
   var c = map.getCenter();
   cancelPlacing();
   _lpLat = c.lat;
@@ -4112,7 +4112,7 @@ function saveMereniGeometry(){
 // ── Uložení měření pro tým (/mereni) ──
 function measureSave(){
   if(!measureMode) return;
-  if(!hasPerm('mereni')){ showToast('📏 Měření ti admin nepovolil', 3000); return; }
+  if(!hasPerm('mereni')){ showToast('📏 Měření Ti admin nepovolil', 3000); return; }
   if(measureType === 'bod'){ if(measurePts.length < 1){ showToast('Umísti bod (➕ Bod)', 2000); return; } }
   else if(measurePts.length < 2){ showToast('Přidej aspoň 2 body', 2000); return; }
   if(measureType === 'plocha' && measurePts.length < 3){ showToast('Plocha potřebuje aspoň 3 body', 2500); return; }
@@ -4239,7 +4239,7 @@ function renderZkouskyMarkers(){
   });
 }
 function openZkouskyPanel(){
-  if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky ti admin nepovolil', 3000); return; }
+  if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky Ti admin nepovolil', 3000); return; }
   trackEvent('zkousky');
   zkouskaFillSoOptions();
   document.getElementById('zkousky-modal').style.display='flex';
@@ -4282,14 +4282,14 @@ function _fillZkouskaForm(z){
   var tit=document.getElementById('zk-form-title'); if(tit) tit.textContent = window.editingZkouskaId ? '✏️ Upravit zkoušku' : '➕ Nová zkouška';
 }
 function newZkouska(){ window.editingZkouskaId=null; _fillZkouskaForm({}); showToast('Nová zkouška – vyplň formulář', 1500); }
-function editZkouska(id){ if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky ti admin nepovolil', 3000); return; } window.editingZkouskaId=id; document.getElementById('zkousky-modal').style.display='flex'; renderZkouskyList(); _fillZkouskaForm(zkouskyData[id]||{}); }
+function editZkouska(id){ if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky Ti admin nepovolil', 3000); return; } window.editingZkouskaId=id; document.getElementById('zkousky-modal').style.display='flex'; renderZkouskyList(); _fillZkouskaForm(zkouskyData[id]||{}); }
 function zkouskaFillKmFromGps(){
   if(!gpsActive || !gpsMarker){ showToast('⚠️ Zapni GPS', 2500); return; }
   try { var ll=gpsMarker.getLatLng(); var km=gpxCumToRealKm(nearestOnRoute(ll.lat, ll.lng).cum); _zf('km').value=Math.round(km*1000)/1000; showToast('📍 Staničení z GPS: km '+fmtKm(km), 1800); } catch(e){ showToast('❌ Nepodařilo se', 2000); }
 }
 function saveZkouska(){
   if(!window.currentUser){ showToast('Přihlaš se', 2000); return; }
-  if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky ti admin nepovolil', 3000); return; }
+  if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky Ti admin nepovolil', 3000); return; }
   var nazev=(_zf('nazev').value||'').trim();
   if(!nazev){ showToast('Zadej název zkoušky', 2000); return; }
   var kmv=parseFloat(_zf('km').value);
@@ -4326,7 +4326,7 @@ function loadDokumenty(){
   try { db.ref('dokumenty').on('value', function(snap){ dokumentyData = snap.val() || {}; var m=document.getElementById('dokumenty-modal'); if(m && m.style.display==='flex') renderDokumentyList(); }, function(e){ console.warn('loadDokumenty', e&&e.message); }); } catch(e){}
 }
 function openDokumentyPanel(){
-  if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty ti admin nepovolil', 3000); return; }
+  if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty Ti admin nepovolil', 3000); return; }
   trackEvent('dokumenty');
   document.getElementById('dokumenty-modal').style.display='flex';
   renderDokumentyList();
@@ -4367,7 +4367,7 @@ function deleteDokument(id){
 function submitDokument(){
   var user=(typeof fbAuth!=='undefined'&&fbAuth)?fbAuth.currentUser:null;
   if(!user || !window.currentUser){ showToast('Přihlaš se', 2000); return; }
-  if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty ti admin nepovolil', 3000); return; }
+  if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty Ti admin nepovolil', 3000); return; }
   var kat=document.getElementById('dok-kat').value||'ostatni';
   var nazev=(document.getElementById('dok-nazev').value||'').trim();
   var so=(document.getElementById('dok-so').value||'').trim();
@@ -4565,7 +4565,7 @@ function startEditMereniGeometry(){
 }
 
 // ── Evidence uložených měření (seznam + přiblížení + úprava + mazání) ──
-function openMereniEvidence(){ if(!hasPerm('mereni')){ showToast('📐 Měření ti admin nepovolil', 3000); return; } _renderMereniEvidence(); document.getElementById('mereni-evidence-modal').style.display = 'flex'; }
+function openMereniEvidence(){ if(!hasPerm('mereni')){ showToast('📐 Měření Ti admin nepovolil', 3000); return; } _renderMereniEvidence(); document.getElementById('mereni-evidence-modal').style.display = 'flex'; }
 function closeMereniEvidence(){ document.getElementById('mereni-evidence-modal').style.display = 'none'; }
 function _mereniTypeIcon(typ){ return typ === 'bod' ? '📍' : (typ === 'plocha' ? '🟦' : (typ === 'obvod' ? '⬡' : '📏')); }
 function _mereniValue(r){
@@ -4744,7 +4744,7 @@ function droneInitialCorners(lat, lng, halfW, halfH){
 
 function startDroneOverlay(){
   if(!window.currentUser){ showToast('Pro vložení dronu se přihlas (úkolníček → přihlášení)', 3500); return; }
-  if(!hasPerm('dron')){ showToast('🛰️ Dron snímky ti admin nepovolil', 3000); return; }
+  if(!hasPerm('dron')){ showToast('🛰️ Dron snímky Ti admin nepovolil', 3000); return; }
   if(typeof L.distortableImageOverlay === 'undefined'){ showToast('Plugin pro dron se nenačetl (zkus obnovit)', 3000); return; }
   if(measureMode) stopMeasureMode();
   if(droneEditOverlay){ cancelDroneOverlay(); }
@@ -5391,7 +5391,7 @@ var fotoMapaLayer = null;
 var _fotoMapaPhotos = null;   // cache načtených fotek (pro filtrování bez opakovaného čtení DB)
 
 function setFotoMapaVisible(on){
-  if(on && !hasPerm('fotomapa')){ var c0=document.getElementById('lyr-fotomapa'); if(c0) c0.checked=false; showToast('📍 Fotky v mapě ti admin nepovolil', 2800); return; }
+  if(on && !hasPerm('fotomapa')){ var c0=document.getElementById('lyr-fotomapa'); if(c0) c0.checked=false; showToast('📍 Fotky v mapě Ti admin nepovolil', 2800); return; }
   var cb=document.getElementById('lyr-fotomapa'); if(cb) cb.checked=!!on;
   _setLayerSub('sub-fotomapa', on);
   if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
@@ -5958,7 +5958,7 @@ function _renderFsCommentBar(){
 // Přidá komentář do vlákna fotky + pošle upozornění (autorovi fotky + dřívějším komentujícím).
 function editPhotoComment(){
   if(!_photoFsKey || !window.currentUser){ showToast('Komentovat lze jen fotky po přihlášení', 2500); return; }
-  if(!hasPerm('komentare')){ showToast('💬 Komentování ti admin nepovolil', 2800); return; }
+  if(!hasPerm('komentare')){ showToast('💬 Komentování Ti admin nepovolil', 2800); return; }
   var v = prompt('Napiš komentář k fotce:');
   if(v === null) return;
   v = v.trim(); if(!v) return;
@@ -7403,7 +7403,7 @@ function buildPropustky() {
 }
 
 function openPropPanel(prop) {
-  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů ti admin nepovolil', 3000); return; }
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů Ti admin nepovolil', 3000); return; }
   var pPos = realKmToLatLng(prop.km); if(pPos) showSelectionRing(L.latLng(pPos[0],pPos[1]));
   currentPropId = prop.id;
   // Sulice: každý propustek má pole 'vykresy' s kompletní sadou (situace, PP, vzor.řezy, ...)
@@ -7772,7 +7772,7 @@ var currentPrikopId = null;
 var prikopLayers = {}; // id → {line, labelMarker}
 
 function openPrikopModal(u, stranaLabel) {
-  if(!hasPerm('pdf')){ showToast('📄 Prohlížení ti admin nepovolil', 3000); return; }
+  if(!hasPerm('pdf')){ showToast('📄 Prohlížení Ti admin nepovolil', 3000); return; }
   currentPrikopId = u.id;
   document.getElementById('prikop-stav-title').textContent = '🧹 Čištění příkopu ' + stranaLabel;
   document.getElementById('prikop-stav-km').textContent = 'km ' + fmtKm(u.kmOd) + ' – ' + fmtKm(u.kmDo) + ' // délka: ' + u.delka + ' m';
@@ -8121,7 +8121,7 @@ window.photoSession = {count: 0, pendingPhoto: null, pendingMeta: null, phase: n
 // URL ?foto / #foto (iOS zkratka / akční tlačítko) → velké tlačítko „Fotit" přes celou obrazovku.
 // (iOS NEdovolí spustit foťák automaticky bez gesta – proto 1 ťuknutí, které otevře foťák v rámci gesta.)
 function _quickPhotoDeepLink(){
-  if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
+  if(!hasPerm('foto')){ showToast('📷 Focení Ti admin nepovolil', 3000); return; }
   if(!gpsActive){ try { var g=document.getElementById('lyr-gps'); if(g) g.checked=true; startGPS(); } catch(e){} }
   var ov = document.getElementById('quick-foto-overlay');
   if(!ov){
@@ -8171,7 +8171,7 @@ window.addEventListener('pageshow', function(){ window._quickPhotoDone = false; 
 window.addEventListener('hashchange', function(){ window._quickPhotoDone = false; _maybeQuickPhoto(); });
 
 function takeStandalonePhoto() {
-  if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
+  if(!hasPerm('foto')){ showToast('📷 Focení Ti admin nepovolil', 3000); return; }
   trackEvent('foto');
   if(!gpsActive || !gpsMarker) {
     showToast('⚠️ Zapni si GPS!', 3000);
@@ -8652,7 +8652,7 @@ function submitLibImport(){
 }
 
 function openGallery() {
-  if(!hasPerm('galerie')){ showToast('🖼️ Galerie ti admin nepovolil', 3000); return; }
+  if(!hasPerm('galerie')){ showToast('🖼️ Galerie Ti admin nepovolil', 3000); return; }
   trackEvent('galerie');
   window.galleryMonthsBack = 1;   // po otevření vždy jen poslední měsíc (výkon)
   document.getElementById('gallery-modal').classList.add('open');
@@ -9768,8 +9768,8 @@ function _showPendingApproval(uid, displayName){
     p = document.createElement('div'); p.id='auth-view-pending';
     p.innerHTML = '<div style="text-align:center;padding:6px 0;">'+
       '<div style="font-size:44px;">⏳</div>'+
-      '<p style="margin:10px 0;">Ahoj <b id="pending-name"></b>,<br>tvůj přístup musí nejdřív <b>schválit administrátor</b>.</p>'+
-      '<p style="font-size:12px;color:var(--text2);line-height:1.4;">Jakmile tě schválí, aplikace se <b>sama otevře</b> — klidně nech okno otevřené.</p>'+
+      '<p style="margin:10px 0;">Ahoj <b id="pending-name"></b>,<br>Tvůj přístup musí nejdřív <b>schválit administrátor</b>.</p>'+
+      '<p style="font-size:12px;color:var(--text2);line-height:1.4;">Jakmile Tě schválí, aplikace se <b>sama otevře</b> — klidně nech okno otevřené.</p>'+
       '<button class="auth-back" onclick="signOutUser()" style="margin-top:12px;">Odhlásit</button>'+
       '</div>';
     var box = document.querySelector('#auth-gate .auth-box'); if(box) box.appendChild(p);
@@ -9840,7 +9840,7 @@ function _enterSubMode(name, showHint){
   var tb = document.getElementById('sub-toolbar'); if(tb) tb.style.display = 'flex';
   _subUpdateCount();
   if(!gpsActive){ try { var g = document.getElementById('lyr-gps'); if(g) g.checked = true; startGPS(); } catch(e){} }
-  if(showHint) showToast('📷 Zapni GPS a foť. Fotky se pošlou nám i tobě do „SUB galerie". Konec = tlačítko 🚪 Odhlásit.', 5000);
+  if(showHint) showToast('📷 Zapni GPS a foť. Fotky se pošlou nám i Tobě do „SUB galerie". Konec = tlačítko 🚪 Odhlásit.', 5000);
 }
 // Obnova SUB režimu po přenačtení stránky (SUB nemá Firebase login, tak si to pamatujeme sami).
 function _maybeRestoreSub(){
@@ -10044,7 +10044,7 @@ function savePhoneUserName() {
   var name = (document.getElementById('name-input').value || '').trim().replace(/\s+/g, ' ');
   // Vyžadujeme CELÉ jméno i příjmení – aspoň dvě slova, žádné přezdívky/zkratky.
   if(name.split(' ').length < 2 || name.length < 4) {
-    showAuthError('❗ Zadej CELÉ jméno i příjmení (ne přezdívku ani zkratku) — jinak tě admin nemusí schválit.');
+    showAuthError('❗ Zadej CELÉ jméno i příjmení (ne přezdívku ani zkratku) — jinak Tě admin nemusí schválit.');
     return;
   }
   var u = fbAuth.currentUser;
@@ -10300,7 +10300,7 @@ function updateTaskBadge() {
 
 function openTasksPanel() {
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
-  if(!hasPerm('ukoly')){ showToast('✅ Úkolníček ti admin nepovolil', 3000); return; }
+  if(!hasPerm('ukoly')){ showToast('✅ Úkolníček Ti admin nepovolil', 3000); return; }
   trackEvent('ukoly');
   document.getElementById('tasks-panel').classList.add('open');
   renderTasksList();
@@ -10481,9 +10481,9 @@ function _updateRemindUI(){
   if(bef) bef.style.display = (typ==='termin') ? 'block' : 'none';
   if(hint) hint.innerHTML = {
     '': '',
-    cas: 'Přijde ti připomínka v zadaný čas (i když appku nemáš otevřenou).',
-    termin: 'Připomene se ti v daném předstihu před termínem úkolu. (Vyplň termín výše.)',
-    geo: '📍 Když otevřeš aplikaci poblíž stavby, appka ti tenhle úkol připomene. Nic se neposílá na dálku.'
+    cas: 'Přijde Ti připomínka v zadaný čas (i když appku nemáš otevřenou).',
+    termin: 'Připomene se Ti v daném předstihu před termínem úkolu. (Vyplň termín výše.)',
+    geo: '📍 Když otevřeš aplikaci poblíž stavby, appka Ti tenhle úkol připomene. Nic se neposílá na dálku.'
   }[typ] || '';
 }
 // Sestaví objekt připomínky z formuláře (nebo null).
@@ -11304,7 +11304,7 @@ function svatekFor(d){
 
 function openDiaryPanel(){
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
-  if(!hasPerm('denik')){ showToast('📒 Deník ti admin nepovolil', 3000); return; }
+  if(!hasPerm('denik')){ showToast('📒 Deník Ti admin nepovolil', 3000); return; }
   trackEvent('denik');
   document.getElementById('diary-panel').classList.add('open');
   if(!window.diaryCurrentDate) diaryDateToday();
@@ -12128,7 +12128,7 @@ window.kzpManual = {};  // Manuálně přidané přes "+ Položka" (Firebase)
 
 function openKzpPanel(){
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
-  if(!hasPerm('kvalita')){ showToast('🧪 Kvalita/KZP ti admin nepovolil', 3000); return; }
+  if(!hasPerm('kvalita')){ showToast('🧪 Kvalita/KZP Ti admin nepovolil', 3000); return; }
   document.getElementById('kzp-panel').classList.add('open');
   loadKzpSeed();
   loadTeprSeed();
@@ -13785,7 +13785,7 @@ function copyDiaryExport(){
     </div>
     <div id="tnm-prio-hint" style="font-size:11px;color:var(--text2);line-height:1.4;margin:-4px 0 4px;"></div>
 
-    <label>⏰ Připomínka (volitelně – ať to na tebe skočí znovu)</label>
+    <label>⏰ Připomínka (volitelně – ať to na Tebe skočí znovu)</label>
     <select class="task-field" id="tnm-remind-typ" onchange="_updateRemindUI()">
       <option value="">— bez připomínky —</option>
       <option value="cas">V určitý čas</option>
