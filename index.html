@@ -1056,46 +1056,44 @@ document.addEventListener('touchend', function(e){
 
     <!-- Pohled 1: výchozí – Google nebo telefon -->
     <div id="auth-view-main">
-      <p>Pro vstup do aplikace se přihlas.<br>(používá se pro úkoly a notifikace)</p>
+      <p>Pro vstup do aplikace se přihlas.</p>
       <button class="auth-google" onclick="signInWithGoogle()">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
         <span>Přihlásit se Googlem ⭐</span>
       </button>
       <div class="auth-note">
-        ✅ <b>Doporučená cesta.</b> Pokud máš Gmail (i pracovní), klepni nahoře — je to rychlé, zdarma a bezpečné.
+        ✅ <b>Nejjednodušší cesta.</b> Máš-li Gmail (i pracovní), klepni nahoře — je to rychlé a bezpečné.
       </div>
-      <div style="text-align:center;color:var(--text2);font-size:11px;margin:6px 0;">— nebo, pokud Gmail nemáš —</div>
+      <div style="text-align:center;color:var(--text2);font-size:11px;margin:6px 0;">— nebo —</div>
       <button class="auth-phone-btn" onclick="showPhoneView()">
         📱 Přihlásit se telefonem
       </button>
-      <div class="auth-note auth-note-warn">
-        ⚠️ <b>Jen pro nouzové případy.</b> Každou SMS platí tvůrce aplikace ze svého. Aplikace ho stojí čas i peníze, tak ho prosím šetři — Google login je doslova rychlejší a všem nám usnadní život 🙏
+      <div class="auth-note">
+        Stačí zadat <b>číslo a jméno</b> — žádná SMS ani kód. Příště tě aplikace přihlásí sama.
       </div>
-      <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:12px;">
-        <div style="text-align:center;color:var(--text2);font-size:11px;line-height:1.4;">📷 <b>Subdodavatel / firma:</b> přihlas se přes Google nebo SMS. Administrátor tě schválí a nastaví ti režim „fotí jako subka" (uvidíš jen focení a galerii svých fotek).</div>
+      <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:12px;text-align:left;font-size:11px;color:var(--text2);line-height:1.5;">
+        <div>📷 <b>Subdodavatel / firma:</b> přihlas se libovolně (Google i telefon). Administrátor tě schválí a nastaví režim „fotí jako subka" — uvidíš jen focení a galerii svých fotek.</div>
+        <div style="margin-top:8px;">🏛️ <b>Investor / objednatel:</b> přihlas se libovolně. Administrátor tě schválí a přidělí ti přístup jen k tomu, co máš vidět.</div>
       </div>
     </div>
 
-    <!-- Pohled 2: zadání telefonního čísla -->
+    <!-- Pohled 2: zadání telefonního čísla (bez SMS/kódu) -->
     <div id="auth-view-phone" style="display:none;">
-      <p style="text-align:left;">Telefonní číslo:</p>
-      <input type="tel" id="phone-input" class="auth-input" placeholder="+420 600 123 456" autocomplete="tel">
-      <button id="btn-send-sms" class="auth-google" onclick="sendSmsCode()">📨 Odeslat SMS kód</button>
+      <p style="text-align:left;">Zadej svoje telefonní číslo:</p>
+      <input type="tel" id="phone-input" class="auth-input" placeholder="+420 600 123 456" autocomplete="tel" inputmode="tel">
+      <button id="btn-phone-continue" class="auth-google" onclick="startPhoneLogin()">Pokračovat →</button>
+      <div class="auth-note">Žádná SMS ani ověřovací kód. Napiš číslo → pak celé jméno.</div>
       <button class="auth-back" onclick="showMainView()">↩ Zpět</button>
-    </div>
-
-    <!-- Pohled 3: zadání SMS kódu -->
-    <div id="auth-view-code" style="display:none;">
-      <p style="text-align:left;">Zadej 6-místný kód, který jsme ti poslali:</p>
-      <input type="tel" id="sms-code-input" class="auth-input" placeholder="123456" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
-      <button class="auth-google" onclick="verifySmsCode()">✓ Ověřit kód</button>
-      <button class="auth-back" onclick="showPhoneView()">↩ Změnit číslo</button>
     </div>
 
     <!-- Pohled 4: první přihlášení – doplnění jména -->
     <div id="auth-view-name" style="display:none;">
-      <p style="text-align:left;">Vítej! Pro ostatní v týmu, jak se jmenuješ?</p>
-      <input type="text" id="name-input" class="auth-input" placeholder="Jméno a příjmení" autocapitalize="words">
+      <p style="text-align:left;">Jak se jmenuješ?</p>
+      <input type="text" id="name-input" class="auth-input" placeholder="Jméno a příjmení" autocapitalize="words" autocomplete="name">
+      <div class="auth-note auth-note-warn" style="text-align:left;">
+        ⚠️ <b>Napiš CELÉ jméno a příjmení.</b> Žádné přezdívky ani zkratky!<br>
+        Podle jména tě administrátor pozná a schválí. <b>Bez plného jména může být přístup odmítnut.</b>
+      </div>
       <button class="auth-google" onclick="savePhoneUserName()">Pokračovat →</button>
     </div>
 
@@ -9517,10 +9515,10 @@ function showCodeView()  { _setAuthView('code'); }
 function showNameView()  { _setAuthView('name'); }
 
 // ── Dokončit přihlášení (společné pro Google i telefon) ─────────────
-function completeLogin(user, nameOverride) {
+function completeLogin(user, nameOverride, phoneOverride) {
   var displayName = nameOverride || user.displayName || '';
   var email = user.email || '';
-  var phone = user.phoneNumber || '';
+  var phone = phoneOverride || user.phoneNumber || '';
   // Fallback name: část před @ nebo telefon
   if(!displayName) displayName = email ? email.split('@')[0] : (phone || 'uživatel');
 
@@ -9531,15 +9529,17 @@ function completeLogin(user, nameOverride) {
     phone: phone,
     photo: user.photoURL || ''
   };
-  // Zapsat / aktualizovat profil v DB
-  db.ref('uzivatele/' + user.uid).update({
+  // Zapsat / aktualizovat profil v DB. Telefon zapisujeme jen když ho známe,
+  // ať se při automatickém přihlášení (anonymní session) nepřepíše dřív uložené číslo.
+  var upd = {
     uid:      user.uid,
     name:     displayName,
     email:    email,
-    phone:    phone,
     photo:    window.currentUser.photo,
     lastSeen: Date.now()
-  });
+  };
+  if(phone) upd.phone = phone;
+  db.ref('uzivatele/' + user.uid).update(upd);
   // BLOKACE + SCHVÁLENÍ: zablokovaného nepustíme; nového (neschváleného) necháme čekat na admina.
   db.ref('uzivatele/' + user.uid).once('value').then(function(snap){
     var u = snap.val() || {};
@@ -9814,82 +9814,58 @@ function normalizePhone(input) {
   return s; // necháme být - Firebase odmítne pokud je špatné
 }
 
-function sendSmsCode() {
+// Přihlášení telefonem BEZ SMS/kódu: číslo je jen (neověřený) štítek pro admina,
+// samotné přihlášení jede přes Firebase Anonymous Auth → má reálný uid + token
+// (splní pravidla auth!=null) a session se drží napříč návštěvami stejně jako Google.
+function startPhoneLogin() {
   var raw = document.getElementById('phone-input').value;
   var phone = normalizePhone(raw);
-  if(!phone || phone.length < 8) {
+  if(!phone || phone.replace(/\D/g,'').length < 9) {
     showAuthError('Zadej platné telefonní číslo (např. +420600123456)');
     return;
   }
-  showAuthError('⏳ Odesílám SMS…');
-  var verifier = _ensureRecaptcha();
-  if(!verifier) {
-    showAuthError('Chyba: reCAPTCHA se nepodařilo inicializovat.');
-    return;
-  }
-  fbAuth.signInWithPhoneNumber(phone, verifier)
-    .then(function(result){
-      window._phoneConfirm = result;
-      showAuthError('✓ SMS odeslána na ' + phone);
-      showCodeView();
-      setTimeout(function(){ var i = document.getElementById('sms-code-input'); if(i) i.focus(); }, 200);
-    })
-    .catch(function(err){
-      console.error('SMS error:', err);
-      showAuthError('Chyba SMS: ' + (err.message || err.code));
-      // Reset reCAPTCHA, jinak nelze poslat další pokus
-      try { if(window._phoneVerifier && window._phoneVerifier.clear) window._phoneVerifier.clear(); } catch(e){}
-      window._phoneVerifier = null;
-    });
-}
-
-function verifySmsCode() {
-  var code = (document.getElementById('sms-code-input').value || '').trim();
-  if(!code || code.length < 4) {
-    showAuthError('Zadej kód z SMS');
-    return;
-  }
-  if(!window._phoneConfirm) {
-    showAuthError('Žádné čekající ověření. Začni znovu.');
-    showPhoneView();
-    return;
-  }
-  showAuthError('⏳ Ověřuji…');
-  window._phoneConfirm.confirm(code)
-    .then(function(result){
-      // Přihlášeno. onAuthStateChanged se postará o zobrazení pohledu "name"
-      // pro nové uživatele, nebo o completeLogin pro stávající.
+  window._pendingPhone = phone;
+  showAuthError('⏳ Přihlašuji…');
+  fbAuth.signInAnonymously()
+    .then(function(){
+      // onAuthStateChanged: nový anonymní uživatel bez jména → zobrazí pohled „jméno".
       showAuthError('');
     })
     .catch(function(err){
-      console.error('SMS verify error:', err);
-      showAuthError('Chybný kód: ' + (err.message || err.code));
+      console.error('Anon login error:', err);
+      if(err && err.code === 'auth/operation-not-allowed'){
+        showAuthError('⚠ Přihlášení telefonem zatím není zapnuté. (Admin: Firebase → Authentication → Sign-in method → Anonymous → Enable.)');
+      } else {
+        showAuthError('Chyba přihlášení: ' + (err.message || err.code));
+      }
     });
 }
 
 function savePhoneUserName() {
-  var name = (document.getElementById('name-input').value || '').trim();
-  if(!name || name.length < 2) {
-    showAuthError('Zadej prosím jméno a příjmení');
+  var name = (document.getElementById('name-input').value || '').trim().replace(/\s+/g, ' ');
+  // Vyžadujeme CELÉ jméno i příjmení – aspoň dvě slova, žádné přezdívky/zkratky.
+  if(name.split(' ').length < 2 || name.length < 4) {
+    showAuthError('❗ Zadej CELÉ jméno i příjmení (ne přezdívku ani zkratku) — jinak tě admin nemusí schválit.');
     return;
   }
   var u = fbAuth.currentUser;
   if(!u) { showAuthError('Chyba: nejsi přihlášen.'); return; }
+  var phone = window._pendingPhone || u.phoneNumber || '';
   showAuthError('⏳ Ukládám…');
-  u.updateProfile({displayName: name})
+  u.updateProfile({displayName: name}).catch(function(){})   // u anon accountu nemusí vždy projít – nevadí, jméno je i v DB
     .then(function(){
       return db.ref('uzivatele/' + u.uid).update({
         uid: u.uid,
         name: name,
         email: u.email || '',
-        phone: u.phoneNumber || '',
+        phone: phone,
         photo: u.photoURL || '',
         lastSeen: Date.now()
       });
     })
     .then(function(){
       // Manuálně dokončit login (onAuthStateChanged se neopakuje při updateProfile)
-      completeLogin(u, name);
+      completeLogin(u, name, phone);
     })
     .catch(function(err){
       console.error('Save name error:', err);
