@@ -102,6 +102,9 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #layers-panel h3:first-child { margin-top:0; }
 .layer-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:14px; }
 .layer-row:last-child { border-bottom:none; }
+/* Sbalitelné podkategorie vrstev — skryté, dokud není zapnutá hlavní vrstva */
+.layer-sub { display:none; margin-left:2px; padding-left:8px; border-left:2px solid var(--border); }
+.layer-sub.open { display:block; }
 #basemap-row { display:flex; gap:5px; margin-bottom:4px; }
 .bm-btn { flex:1; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:10px; padding:5px 2px; cursor:pointer; text-align:center; transition:all .15s; }
 .bm-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(233,69,96,0.1); }
@@ -1207,6 +1210,7 @@ document.addEventListener('touchend', function(e){
     <label>📝 Poznámky</label>
     <label class="toggle"><input type="checkbox" id="lyr-notes" onchange="toggleNotesLayer(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div class="layer-sub" id="sub-notes">
   <div class="layer-row" style="padding-left:12px;">
     <label style="font-size:12px;">↳ 📌 Obecná</label>
     <label class="toggle"><input type="checkbox" id="lyr-notes0" onchange="toggleLayer('notes0',this.checked)"><span class="toggle-slider"></span></label>
@@ -1235,12 +1239,14 @@ document.addEventListener('touchend', function(e){
     <label style="font-size:12px;" id="notes-lbl-6">↳ 🏷️ Vlastní</label>
     <label class="toggle"><input type="checkbox" id="lyr-notes6" onchange="toggleLayer('notes6',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /sub-notes -->
   </div><!-- /pripominky -->
   <div data-perm="ukoly">
   <div class="layer-row">
     <label>✅ Úkoly</label>
     <label class="toggle"><input type="checkbox" id="lyr-tasks" checked onchange="toggleTasksLayer(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div class="layer-sub" id="sub-tasks">
   <div class="layer-row" style="padding-left:12px;">
     <label style="font-size:12px;">↳ 🟡 Otevřené</label>
     <label class="toggle"><input type="checkbox" id="lyr-tasks-open" checked onchange="toggleTaskSubLayer('open',this.checked)"><span class="toggle-slider"></span></label>
@@ -1249,6 +1255,7 @@ document.addEventListener('touchend', function(e){
     <label style="font-size:12px;">↳ 🟢 Hotové</label>
     <label class="toggle"><input type="checkbox" id="lyr-tasks-done" onchange="toggleTaskSubLayer('done',this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  </div><!-- /sub-tasks -->
   </div><!-- /ukoly -->
   <div data-perm="pdf">
   <div class="layer-row">
@@ -1297,6 +1304,22 @@ document.addEventListener('touchend', function(e){
     <label>📍 Fotky v mapě (kde vyfoceno)</label>
     <label class="toggle"><input type="checkbox" id="lyr-fotomapa" onchange="setFotoMapaVisible(this.checked)"><span class="toggle-slider"></span></label>
   </div>
+  <div class="layer-sub" id="sub-fotomapa">
+  <div class="layer-row" style="padding-left:12px;">
+    <label style="font-size:12px;">↳ 👤 Osoba</label>
+    <select id="fm-osoba" onchange="applyFotoMapaFilter()" style="font-size:12px;max-width:120px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 4px;">
+      <option value="">Všichni</option>
+    </select>
+  </div>
+  <div class="layer-row" style="padding-left:12px;">
+    <label style="font-size:12px;">↳ 📷 Jen fotky pro SUB</label>
+    <label class="toggle"><input type="checkbox" id="fm-jensub" onchange="applyFotoMapaFilter()"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="layer-row" style="padding-left:12px;">
+    <label style="font-size:12px;">↳ 🕘 I starší než měsíc</label>
+    <label class="toggle"><input type="checkbox" id="fm-vse" onchange="applyFotoMapaFilter()"><span class="toggle-slider"></span></label>
+  </div>
+  </div><!-- /sub-fotomapa -->
 </div>
 
 <button id="btn-gps" onclick="toggleGpsBtn()" title="GPS zapnout/vypnout / centrovat">📍</button>
@@ -5279,34 +5302,77 @@ function setVodaVisible(on){
 
 // Fotky v mapě (à la Apple Fotky) – marker 📷 tam, kde byla fotka pořízena; klik = otevři fullscreen.
 var fotoMapaLayer = null;
+var _fotoMapaPhotos = null;   // cache načtených fotek (pro filtrování bez opakovaného čtení DB)
+
 function setFotoMapaVisible(on){
   var cb=document.getElementById('lyr-fotomapa'); if(cb) cb.checked=!!on;
+  _setLayerSub('sub-fotomapa', on);
   if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
   if(!on) return;
   showToast('⏳ Načítám fotky do mapy…', 1200);
-  // Jen poslední měsíc (výkon); starší se dají prohlížet v galerii přes filtry.
-  var _mc = new Date(); _mc.setMonth(_mc.getMonth() - 1); _mc.setHours(0,0,0,0);
-  var cutoff = _mc.getTime();
   db.ref('standalone_photos').once('value').then(function(snap){
-    // Clustering, když je knihovna k dispozici; jinak prostá vrstva.
-    fotoMapaLayer = (typeof L.markerClusterGroup === 'function')
-      ? L.markerClusterGroup({ maxClusterRadius: 45, spiderfyOnMaxZoom: true, showCoverageOnHover: false })
-      : L.layerGroup();
-    var n = 0;
+    var arr = [];
     snap.forEach(function(ch){
       var v = ch.val(); if(!v) return;
       if(typeof v.lat !== 'number' || typeof v.lng !== 'number') return;
       v.fbKey = ch.key;
-      if(photoCreationDate(v).getTime() < cutoff) return;   // starší než měsíc přeskoč
-      var html = '<div style="width:26px;height:26px;border-radius:50%;background:#0ea5e9;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:13px;">📷</div>';
-      var icon = L.divIcon({ className:'', html:html, iconSize:[26,26], iconAnchor:[13,13] });
-      var mk = L.marker([v.lat, v.lng], { icon:icon, interactive:true, zIndexOffset:150 });
-      (function(it){ mk.on('click', function(e){ L.DomEvent.stopPropagation(e); openPhotoFs(it.url, it.fbKey||null, it); }); })(v);
-      fotoMapaLayer.addLayer(mk); n++;
+      arr.push(v);
     });
-    fotoMapaLayer.addTo(map);
-    showToast(n ? ('📍 Fotky v mapě (poslední měsíc): ' + n) : 'Žádné fotky za poslední měsíc', 2200);
+    _fotoMapaPhotos = arr;
+    _fillFotoMapaOsoby(arr);
+    renderFotoMapa();
   }).catch(function(){ showToast('❌ Fotky se nepodařilo načíst', 2500); var c=document.getElementById('lyr-fotomapa'); if(c) c.checked=false; });
+}
+
+// Naplní select osob z autorů načtených fotek (zachová aktuální výběr)
+function _fillFotoMapaOsoby(arr){
+  var sel = document.getElementById('fm-osoba'); if(!sel) return;
+  var cur = sel.value;
+  var names = {};
+  arr.forEach(function(v){ var a=(v.autor||v.author||'').trim(); if(a) names[a]=1; });
+  var sorted = Object.keys(names).sort(function(a,b){ return a.localeCompare(b,'cs'); });
+  sel.innerHTML = '<option value="">Všichni</option>' + sorted.map(function(n){
+    return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';
+  }).join('');
+  if(cur && names[cur]) sel.value = cur;
+}
+
+// Překreslí markery fotek dle filtrů (osoba / jen SUB / i starší měsíc)
+function renderFotoMapa(){
+  if(!_fotoMapaPhotos) return;
+  if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
+  var fOsoba = (document.getElementById('fm-osoba')||{}).value || '';
+  var fJenSub = !!(document.getElementById('fm-jensub')||{}).checked;
+  var fVse    = !!(document.getElementById('fm-vse')||{}).checked;
+  var cutoff = 0;
+  if(!fVse){ var _mc=new Date(); _mc.setMonth(_mc.getMonth()-1); _mc.setHours(0,0,0,0); cutoff=_mc.getTime(); }
+  fotoMapaLayer = (typeof L.markerClusterGroup === 'function')
+    ? L.markerClusterGroup({ maxClusterRadius: 45, spiderfyOnMaxZoom: true, showCoverageOnHover: false })
+    : L.layerGroup();
+  var n = 0;
+  _fotoMapaPhotos.forEach(function(v){
+    if(cutoff && photoCreationDate(v).getTime() < cutoff) return;
+    if(fOsoba && (v.autor||v.author||'').trim() !== fOsoba) return;
+    if(fJenSub && !(v.sdilenoSub || v.sub || v.zdroj==='SUB')) return;
+    // Fotky pro SUB odliš zeleně (stejná logika jako v galerii)
+    var forSub = !!(v.sdilenoSub || v.sub || v.zdroj==='SUB');
+    var bg = forSub ? '#16a34a' : '#0ea5e9';
+    var html = '<div style="width:26px;height:26px;border-radius:50%;background:'+bg+';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:13px;">📷</div>';
+    var icon = L.divIcon({ className:'', html:html, iconSize:[26,26], iconAnchor:[13,13] });
+    var mk = L.marker([v.lat, v.lng], { icon:icon, interactive:true, zIndexOffset:150 });
+    (function(it){ mk.on('click', function(e){ L.DomEvent.stopPropagation(e); openPhotoFs(it.url, it.fbKey||null, it); }); })(v);
+    fotoMapaLayer.addLayer(mk); n++;
+  });
+  fotoMapaLayer.addTo(map);
+  var suffix = fVse ? '' : ' (poslední měsíc)';
+  showToast(n ? ('📍 Fotky v mapě'+suffix+': ' + n) : ('Žádné fotky'+(fVse?'':' za poslední měsíc')), 2000);
+}
+
+// Změna filtru — jen překreslit z cache (bez čtení DB)
+function applyFotoMapaFilter(){
+  if(!(document.getElementById('lyr-fotomapa')||{}).checked) return;
+  if(!_fotoMapaPhotos){ setFotoMapaVisible(true); return; }
+  renderFotoMapa();
 }
 
 // ── Preference razítka (km, datum, jméno) do fotek ──
@@ -5332,6 +5398,11 @@ function onStampToggle(checked) {
 window.addEventListener('load', function(){
   var t = document.getElementById('lyr-stamp');
   if(t) t.checked = getStampPref();
+  // Sbalitelné podkategorie — otevři ty, jejichž hlavní přepínač je zapnutý (Úkoly default zap)
+  [['lyr-notes','sub-notes'],['lyr-tasks','sub-tasks'],['lyr-fotomapa','sub-fotomapa']].forEach(function(p){
+    var cb = document.getElementById(p[0]);
+    _setLayerSub(p[1], cb && cb.checked);
+  });
 });
 
 function selectCat(idx) {
@@ -6542,7 +6613,14 @@ function deleteCurrentNote() {
 }
 
 // ── Layer toggle pro poznámky ──────────────────────────
+// Sbalitelné podkategorie vrstev — zobraz/skryj sekci podle stavu hlavního přepínače
+function _setLayerSub(id, show){
+  var el = document.getElementById(id);
+  if(el) el.classList.toggle('open', !!show);
+}
+
 function toggleNotesLayer(en) {
+  _setLayerSub('sub-notes', en);
   if(!notesLayer) return;
   en ? notesLayer.addTo(map) : map.removeLayer(notesLayer);
 }
@@ -10314,6 +10392,7 @@ function renderTasksOnMap() {
 }
 
 function toggleTasksLayer(visible) {
+  _setLayerSub('sub-tasks', visible);
   window.tasksLayerVisible = visible;
   if(!window.tasksLayer) return;
   if(visible) {
