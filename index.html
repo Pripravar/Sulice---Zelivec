@@ -1312,8 +1312,12 @@ document.addEventListener('touchend', function(e){
     </select>
   </div>
   <div class="layer-row" style="padding-left:12px;">
-    <label style="font-size:12px;">↳ 📷 Jen fotky pro SUB</label>
-    <label class="toggle"><input type="checkbox" id="fm-jensub" onchange="applyFotoMapaFilter()"><span class="toggle-slider"></span></label>
+    <label style="font-size:12px;">↳ 📷 SUB fotky</label>
+    <select id="fm-sub" onchange="applyFotoMapaFilter()" style="font-size:12px;max-width:120px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 4px;">
+      <option value="">Všechny</option>
+      <option value="od">🔵 Od SUB / firem</option>
+      <option value="pro">🟢 Sdílené pro SUB</option>
+    </select>
   </div>
   <div class="layer-row" style="padding-left:12px;">
     <label style="font-size:12px;">↳ 🕘 I starší než měsíc</label>
@@ -5342,7 +5346,7 @@ function renderFotoMapa(){
   if(!_fotoMapaPhotos) return;
   if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
   var fOsoba = (document.getElementById('fm-osoba')||{}).value || '';
-  var fJenSub = !!(document.getElementById('fm-jensub')||{}).checked;
+  var fSub   = (document.getElementById('fm-sub')||{}).value || '';   // '' | 'od' | 'pro'
   var fVse    = !!(document.getElementById('fm-vse')||{}).checked;
   var cutoff = 0;
   if(!fVse){ var _mc=new Date(); _mc.setMonth(_mc.getMonth()-1); _mc.setHours(0,0,0,0); cutoff=_mc.getTime(); }
@@ -5353,7 +5357,8 @@ function renderFotoMapa(){
   _fotoMapaPhotos.forEach(function(v){
     if(cutoff && photoCreationDate(v).getTime() < cutoff) return;
     if(fOsoba && (v.autor||v.author||'').trim() !== fOsoba) return;
-    if(fJenSub && !(v.sdilenoSub || v.sub || v.zdroj==='SUB')) return;
+    if(fSub === 'od'  && !(v.sub || v.zdroj==='SUB')) return;   // jen fotky nahrané přes SUB/firmy
+    if(fSub === 'pro' && !v.sdilenoSub) return;                 // jen fotky sdílené pro SUB
     // Fotky pro SUB odliš zeleně (stejná logika jako v galerii)
     var forSub = !!(v.sdilenoSub || v.sub || v.zdroj==='SUB');
     var bg = forSub ? '#16a34a' : '#0ea5e9';
