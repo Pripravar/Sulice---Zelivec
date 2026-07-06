@@ -9276,43 +9276,97 @@ function trackEvent(key){
   try{
     if(window._applyingDefaults) return;   // nepočítat automaticky aplikované výchozí vrstvy
     if(!window.db || !key || typeof firebase === 'undefined') return;
-    db.ref('statistiky/'+key).update({
-      n: firebase.database.ServerValue.increment(1),
-      last: firebase.database.ServerValue.TIMESTAMP
-    }).catch(function(){});
+    var SV = firebase.database.ServerValue;
+    db.ref('statistiky/'+key).update({ n: SV.increment(1), last: SV.TIMESTAMP }).catch(function(){});
+    // Per-uživatel: celkový počet akcí + rozpad podle funkce + poslední aktivita
+    var uid = (window.currentUser && window.currentUser.uid) ? window.currentUser.uid : '';
+    if(uid){
+      db.ref('statistiky_uzivatele/'+uid).update({ n: SV.increment(1), last: SV.TIMESTAMP }).catch(function(){});
+      db.ref('statistiky_uzivatele/'+uid+'/akce/'+key).set(SV.increment(1)).catch(function(){});
+    }
   }catch(e){}
 }
+var _statsCache = null;   // {funkce:{}, lide:{}}
+var _statsTab = 'funkce';
 function openStats(){
   if(!isAdmin()){ showToast('Jen pro administrátora', 2500); return; }
   document.getElementById('stats-modal').style.display = 'flex';
   var box = document.getElementById('stats-list');
   box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:24px;">Načítám…</div>';
-  db.ref('statistiky').once('value').then(function(snap){
-    var data = snap.val() || {};
+  Promise.all([ db.ref('statistiky').once('value'), db.ref('statistiky_uzivatele').once('value') ]).then(function(res){
+    _statsCache = { funkce: (res[0].val() || {}), lide: (res[1].val() || {}) };
+    _renderStats();
+  }).catch(function(){ box.innerHTML = '<div style="color:#e94560;padding:24px;text-align:center;">Statistiky se nepodařilo načíst.</div>'; });
+}
+function setStatsTab(t){ _statsTab = t; _renderStats(); }
+function _statsTabsHtml(){
+  function tab(id,label){
+    var on = (_statsTab === id);
+    return '<button onclick="setStatsTab(\''+id+'\')" style="flex:1;padding:9px 6px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;background:'+(on?'#22d3ee':'var(--panel2)')+';color:'+(on?'#0f3460':'var(--text2)')+';">'+label+'</button>';
+  }
+  return '<div style="display:flex;gap:6px;margin-bottom:12px;">'+tab('funkce','📊 Podle funkcí')+tab('lide','👥 Podle lidí')+'</div>';
+}
+function _statBar(label, count, pct, sub, dim){
+  return '<div style="padding:8px 0;border-bottom:1px solid var(--border);'+(dim?'opacity:.55;':'')+'">'+
+    '<div style="display:flex;align-items:center;gap:8px;font-size:13px;">'+
+      '<span style="flex:1;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+label+'</span>'+
+      '<span style="font-weight:800;color:var(--text);min-width:38px;text-align:right;">'+count+'×</span>'+
+    '</div>'+
+    '<div style="height:7px;background:var(--panel2);border-radius:5px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(dim?'#555':'#22d3ee')+';border-radius:5px;"></div></div>'+
+    '<div style="font-size:10px;color:var(--text2);margin-top:3px;">'+sub+'</div>'+
+  '</div>';
+}
+function _renderStats(){
+  var box = document.getElementById('stats-list');
+  if(!box || !_statsCache) return;
+  var html = _statsTabsHtml();
+  if(_statsTab === 'funkce'){
+    var data = _statsCache.funkce;
     var rows = STAT_EVENTS.map(function(e){ var d = data[e.key] || {}; return { e:e, n:(d.n||0), last:(d.last||0) }; });
     rows.sort(function(a,b){ return b.n - a.n; });
     var max = rows.reduce(function(m,r){ return Math.max(m, r.n); }, 0) || 1;
     var total = rows.reduce(function(s,r){ return s + r.n; }, 0);
     var used = rows.filter(function(r){ return r.n > 0; });
     var top = used.length ? (used[0].e.emoji + ' ' + used[0].e.label) : '—';
-    var html = '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
       '<div style="flex:1;background:var(--panel2);border-radius:10px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);">Celkem akcí</div><div style="font-size:18px;font-weight:800;color:var(--text);">'+total+'</div></div>'+
       '<div style="flex:2;background:var(--panel2);border-radius:10px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);">Nejvíc frčí</div><div style="font-size:14px;font-weight:800;color:#22d3ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(top)+'</div></div>'+
     '</div>';
     rows.forEach(function(r){
-      var pct = Math.round(r.n / max * 100);
-      var dim = r.n === 0;
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);'+(dim?'opacity:.55;':'')+'">'+
-        '<div style="display:flex;align-items:center;gap:8px;font-size:13px;">'+
-          '<span style="flex:1;color:var(--text);">'+r.e.emoji+' '+escapeHtml(r.e.label)+'</span>'+
-          '<span style="font-weight:800;color:var(--text);min-width:38px;text-align:right;">'+r.n+'×</span>'+
-        '</div>'+
-        '<div style="height:7px;background:var(--panel2);border-radius:5px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(dim?'#555':'#22d3ee')+';border-radius:5px;"></div></div>'+
-        '<div style="font-size:10px;color:var(--text2);margin-top:3px;">'+(r.n===0 ? '⚠️ zatím nikdy nepoužito' : ('naposledy '+_relTime(r.last)))+'</div>'+
-      '</div>';
+      html += _statBar(r.e.emoji + ' ' + escapeHtml(r.e.label), r.n, Math.round(r.n/max*100),
+        (r.n===0 ? '⚠️ zatím nikdy nepoužito' : ('naposledy '+_relTime(r.last))), r.n===0);
     });
-    box.innerHTML = html;
-  }).catch(function(){ box.innerHTML = '<div style="color:#e94560;padding:24px;text-align:center;">Statistiky se nepodařilo načíst.</div>'; });
+  } else {
+    var udata = _statsCache.lide;
+    var users = window.allUsers || {};
+    var ids = {}; Object.keys(users).forEach(function(u){ ids[u]=1; }); Object.keys(udata).forEach(function(u){ ids[u]=1; });
+    var prows = Object.keys(ids).map(function(uid){
+      var u = users[uid] || {}; var s = udata[uid] || {};
+      return { uid:uid, name:(u.name||'(neznámý)'), adm:isAdmin(uid), n:(s.n||0), last:(s.last || u.lastSeen || 0), akce:(s.akce||{}) };
+    });
+    prows.sort(function(a,b){ return b.n - a.n; });
+    var pmax = prows.reduce(function(m,r){ return Math.max(m, r.n); }, 0) || 1;
+    var aktivni = prows.filter(function(r){ return r.n > 0; }).length;
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+      '<div style="flex:1;background:var(--panel2);border-radius:10px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);">Lidí celkem</div><div style="font-size:18px;font-weight:800;color:var(--text);">'+prows.length+'</div></div>'+
+      '<div style="flex:1;background:var(--panel2);border-radius:10px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);">Aktivně používá</div><div style="font-size:18px;font-weight:800;color:#22d3ee;">'+aktivni+'</div></div>'+
+    '</div>';
+    if(!prows.length){ html += '<div style="text-align:center;color:var(--text2);padding:20px;">Zatím nikdo.</div>'; }
+    prows.forEach(function(r){
+      // nejčastější akce daného člověka (malý štítek)
+      var topAkce = '';
+      var ak = Object.keys(r.akce||{});
+      if(ak.length){
+        ak.sort(function(a,b){ return (r.akce[b]||0)-(r.akce[a]||0); });
+        var lbl = (STAT_EVENTS.filter(function(e){ return e.key===ak[0]; })[0]||{});
+        if(lbl.label) topAkce = ' · nejvíc: '+lbl.emoji+' '+lbl.label;
+      }
+      var sub = (r.n===0) ? '⚠️ appku (skoro) nepoužívá' : ('naposledy '+_relTime(r.last)+topAkce);
+      html += _statBar(escapeHtml(r.name)+(r.adm?' <span style="background:#f5a623;color:#0f3460;font-size:9px;font-weight:800;padding:0 5px;border-radius:7px;">ADMIN</span>':''),
+        r.n, Math.round(r.n/pmax*100), sub, r.n===0);
+    });
+  }
+  box.innerHTML = html;
 }
 function closeStats(){ document.getElementById('stats-modal').style.display = 'none'; }
 
@@ -13381,7 +13435,6 @@ function copyDiaryExport(){
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
     <button onclick="reassignSelectedGalleryPhotos()" title="Přeřadit vybrané k objektu (SO)" style="background:#f5a623;color:#0f3460;">🏗️ Přeřadit</button>
     <button onclick="shareSelectedWithSub()" title="Sdílet vybrané fotky subce (uvidí je ve své galerii)" style="background:#0ea5e9;color:#fff;">📷 Pro SUB</button>
-    <button onclick="sendSelectedToTds()" title="Poslat vybrané do TDS aplikace (objednatel)" style="background:#1565c0;color:#fff;">📤 Do TDS</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
   </div>
 </div>
