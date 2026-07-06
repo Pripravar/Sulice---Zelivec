@@ -369,9 +369,10 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .note-edit-btn { flex:1; background:#1565c0; color:#fff; border:none; border-radius:8px; padding:9px; font-size:13px; font-weight:700; cursor:pointer; }
 
 /* Fullscreen foto */
-#photo-fs { position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:5000; display:none; flex-direction:column; align-items:center; justify-content:center; cursor:zoom-out; }
+#photo-fs { position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:5000; display:none; flex-direction:column; align-items:stretch; justify-content:flex-start; cursor:zoom-out; }
 #photo-fs.open { display:flex; }
-#photo-fs #photo-fs-img { flex:1 1 auto; min-height:0; max-width:100%; max-height:100%; object-fit:contain; }
+#photo-fs-stage { flex:1 1 auto; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+#photo-fs #photo-fs-img { max-width:100%; max-height:100%; object-fit:contain; }
 
 /* Sync indikátor */
 #sync-indicator {
@@ -6001,7 +6002,7 @@ function _fsBackdropClick(event){
   // Když je otevřené menu akcí, ťuknutí mimo ho jen zavře (nezavírá celou fotku)
   var m = document.getElementById('photo-fs-menu');
   if(m && m.style.display !== 'none' && m.style.display !== ''){ closeFsMenu(); return; }
-  if(event.target === event.currentTarget || event.target.id === 'photo-fs-img') closePhotoFs();
+  if(event.target === event.currentTarget || event.target.id === 'photo-fs-img' || event.target.id === 'photo-fs-stage') closePhotoFs();
 }
 
 // Vysouvací menu akcí ve fullscreenu
@@ -13225,7 +13226,7 @@ function copyDiaryExport(){
 
 <!-- Fullscreen foto -->
 <div id="photo-fs" ontouchstart="_fsTouchStart(event)" ontouchend="_fsTouchEnd(event)" onclick="_fsBackdropClick(event)">
-  <img id="photo-fs-img" src="">
+  <div id="photo-fs-stage"><img id="photo-fs-img" src=""></div>
   <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;z-index:7;"></div>
   <div id="photo-fs-info" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;max-width:66%;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;line-height:1.35;padding:6px 12px;border-radius:12px;z-index:7;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
