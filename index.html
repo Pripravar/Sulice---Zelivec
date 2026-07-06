@@ -5754,6 +5754,7 @@ function openPhotoFs(src, firebaseKey, item) {
 
 // Vykreslí jednu fotku do fullscreenu (sdílí openPhotoFs i navigace tažením). Vždy plná verze (url).
 function _renderFsItem(url, firebaseKey, item) {
+  closeFsMenu();
   resolveFileUrl(url).then(function(u){
     document.getElementById('photo-fs-img').src = u;
     var ob = document.getElementById('photo-fs-open'); if(ob) ob.href = u;
@@ -5770,6 +5771,9 @@ function _renderFsItem(url, firebaseKey, item) {
   _renderFsCommentBar();
   var cBtn = document.getElementById('photo-fs-comment-btn');
   if(cBtn) cBtn.style.display = (_photoFsKey && window.currentUser && !window.subMode) ? 'inline-block' : 'none';
+  // „Ukázat v mapě" jen když má fotka uloženou polohu
+  var mBtn = document.getElementById('photo-fs-tomap');
+  if(mBtn) mBtn.style.display = (_photoFsItem && typeof _photoFsItem.lat === 'number' && typeof _photoFsItem.lng === 'number') ? 'inline-block' : 'none';
   _updateFsShareBtn();
 }
 // Sdílet/odsdílet PRÁVĚ OTEVŘENOU fotku subce (logičtější než přes „Přeřadit SO").
@@ -5907,10 +5911,46 @@ function _fsTouchEnd(e){
 // Klik na pozadí/obrázek zavře – ale ne, když to byl jen dojezd tažení.
 function _fsBackdropClick(event){
   if(_fsSwiped){ _fsSwiped = false; return; }
+  // Když je otevřené menu akcí, ťuknutí mimo ho jen zavře (nezavírá celou fotku)
+  var m = document.getElementById('photo-fs-menu');
+  if(m && m.style.display !== 'none' && m.style.display !== ''){ closeFsMenu(); return; }
   if(event.target === event.currentTarget || event.target.id === 'photo-fs-img') closePhotoFs();
 }
 
+// Vysouvací menu akcí ve fullscreenu
+function toggleFsMenu(){
+  var m = document.getElementById('photo-fs-menu'); if(!m) return;
+  var open = m.style.display !== 'none' && m.style.display !== '';
+  m.style.display = open ? 'none' : 'flex';
+}
+function closeFsMenu(){
+  var m = document.getElementById('photo-fs-menu'); if(m) m.style.display = 'none';
+}
+
+// Skok z fotky na mapu na místo, kde byla vyfocena (+ dočasný zvýrazňovací pin)
+var _photoMapPin = null;
+function showPhotoOnMap(){
+  var it = _photoFsItem;
+  if(!it || typeof it.lat !== 'number' || typeof it.lng !== 'number'){ showToast('📍 Fotka nemá uloženou polohu', 2500); return; }
+  var lat = it.lat, lng = it.lng;
+  var label = [it.so, (it.km?('km '+it.km):''), it.date].filter(Boolean).join(' · ') || 'Fotka';
+  closeFsMenu();
+  closePhotoFs();
+  var gm = document.getElementById('gallery-modal'); if(gm && gm.classList.contains('open')) closeGallery();
+  var sm = document.getElementById('sub-photos-modal'); if(sm && sm.style.display !== 'none') closeSubMyPhotos();
+  map.setView([lat, lng], 19, { animate: true });
+  if(_photoMapPin){ try{ map.removeLayer(_photoMapPin); }catch(e){} _photoMapPin = null; }
+  var html = '<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#0ea5e9;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:16px;">📷</span></div>';
+  var icon = L.divIcon({ className:'', html:html, iconSize:[34,34], iconAnchor:[17,34] });
+  _photoMapPin = L.marker([lat, lng], { icon:icon, zIndexOffset:5000 }).addTo(map);
+  _photoMapPin.bindPopup('📷 ' + escapeHtml(label)).openPopup();
+  showToast('📍 Místo, kde byla fotka vyfocena', 2000);
+  // Pin sám zmizí po 25 s (nebo při dalším skoku na jinou fotku)
+  setTimeout(function(){ if(_photoMapPin){ try{ map.removeLayer(_photoMapPin); }catch(e){} _photoMapPin = null; } }, 25000);
+}
+
 function closePhotoFs() {
+  closeFsMenu();
   document.getElementById('photo-fs').classList.remove('open');
   _photoFsKey = null;
   _photoFsItem = null;
@@ -8450,7 +8490,7 @@ function openGallery() {
   applyGalleryCols();
   // Subka: filtr „jen SUB" natvrdo zapnutý a zamčený (uvidí jen SUB fotky).
   var subEl = document.getElementById('gfilt-sub');
-  if(subEl){ if(isSubOnly()){ subEl.checked = true; subEl.disabled = true; } else { subEl.disabled = false; } }
+  if(subEl){ if(isSubOnly()){ subEl.value = 'od'; subEl.disabled = true; } else { subEl.disabled = false; } }
   // AI hledání v obsahu fotek – zobraz jen když je feature zapnutá (nasazená)
   var srWrap = document.getElementById('gfilt-search-wrap'); if(srWrap) srWrap.style.display = AI_TAGS_ENABLED ? '' : 'none';
   var btBtn = document.getElementById('gallery-batchtag-btn'); if(btBtn) btBtn.style.display = (AI_TAGS_ENABLED && isAdmin()) ? '' : 'none';
@@ -8510,8 +8550,7 @@ function applyGalleryFilters(items){
   var soEl = document.getElementById('gfilt-so');
   var soF  = soEl ? (soEl.value || '').trim() : '';
   var subEl = document.getElementById('gfilt-sub');
-  var onlySub = subEl ? subEl.checked : false;
-  if(isSubOnly()) onlySub = true;   // subka VŽDY jen SUB fotky (nejde vypnout)
+  var subKind = subEl ? (subEl.value || '') : '';   // '' = vše, 'od' = od SUB, 'pro' = sdílené pro SUB
   var srchEl = document.getElementById('gfilt-search');
   var srch = srchEl ? (srchEl.value || '').trim().toLowerCase() : '';
   var srchWords = srch ? srch.split(/[\s,]+/).filter(Boolean) : [];
@@ -8519,7 +8558,7 @@ function applyGalleryFilters(items){
   var onlyKom = komEl ? komEl.checked : false;
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = srch || onlyKom || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
+  var anyActive = srch || onlyKom || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subKind && !isSubOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   // Měsíční okno: bez filtru (a v ploché mřížce) ukaž jen posledních N měsíců (výkon u tisíců fotek).
@@ -8531,10 +8570,14 @@ function applyGalleryFilters(items){
   }
   var _older = false;
   var out = items.filter(function(it){
-    if(onlySub){
-      var isSubPhoto = (it.zdroj === 'SUB' || it.sub);
-      var sharedToSub = isSubOnly() && it.sdilenoSub;   // subka vidí i fotky sdílené subce
-      if(!(isSubPhoto || sharedToSub)) return false;
+    var isSubPhoto = (it.zdroj === 'SUB' || it.sub);
+    if(isSubOnly()){
+      // subka VŽDY vidí jen fotky od SUB nebo sdílené pro SUB (nejde vypnout)
+      if(!(isSubPhoto || it.sdilenoSub)) return false;
+    } else if(subKind === 'od'){
+      if(!isSubPhoto) return false;                  // jen fotky nahrané přes SUB/firmy
+    } else if(subKind === 'pro'){
+      if(!it.sdilenoSub) return false;               // jen fotky, které náš tým sdílel subce (zelené)
     }
     if(monthCutoff !== null){
       var _pt = photoCreationDate(it).getTime();
@@ -8675,7 +8718,7 @@ function clearGalleryFilters(){
   document.getElementById('gfilt-date-do').value = '';
   document.getElementById('gfilt-author').value = '';
   var soEl = document.getElementById('gfilt-so'); if(soEl) soEl.value = '';
-  var subEl = document.getElementById('gfilt-sub'); if(subEl) subEl.checked = false;
+  var subEl = document.getElementById('gfilt-sub'); if(subEl && !isSubOnly()) subEl.value = '';
   var srchEl = document.getElementById('gfilt-search'); if(srchEl) srchEl.value = '';
   var komEl = document.getElementById('gfilt-komentar'); if(komEl) komEl.checked = false;
   renderGallery();
@@ -13026,15 +13069,20 @@ function copyDiaryExport(){
   <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
   <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
-  <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:56px;bottom:calc(56px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.72);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:6;"></div>
-  <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
-    <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💬 Přidat komentář</button>
-    <button id="photo-fs-share" onclick="toggleFsShareSub()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📷 Pro SUB</button>
-    <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="background:var(--accent2);color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout s datem</button>
-    <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">&#128247; Otevřít</a>
-    <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;background:#f5a623;color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🏗️ Přeřadit (SO)</button>
-    <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;background:#e94560;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">&#128465; Smazat</button>
-    <button onclick="closePhotoFs()" style="background:#333;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;">Zavřít</button>
+  <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:60px;bottom:calc(60px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.95);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:32vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:6;border-top:1px solid rgba(255,255,255,0.12);"></div>
+  <!-- Vysouvací menu „co s fotkou“ (skryté; otevře ⋯ Možnosti) -->
+  <div id="photo-fs-menu" onclick="event.stopPropagation();closeFsMenu()" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom));width:min(320px,92vw);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:8px;flex-direction:column;gap:6px;z-index:8;box-shadow:0 8px 28px rgba(0,0,0,.65);">
+    <button id="photo-fs-tomap" onclick="showPhotoOnMap()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🗺️ Ukázat v mapě (kde vyfoceno)</button>
+    <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">💬 Přidat komentář</button>
+    <button id="photo-fs-share" onclick="toggleFsShareSub()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📷 Pro SUB</button>
+    <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">⬇ Stáhnout s datem</button>
+    <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;text-decoration:none;font-size:15px;font-weight:700;min-height:48px;display:flex;align-items:center;">&#128247; Otevřít v prohlížeči</a>
+    <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🏗️ Přeřadit (SO)</button>
+    <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;text-align:left;background:rgba(233,69,96,0.15);color:#e94560;border:1px solid #e94560;padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">&#128465; Smazat</button>
+  </div>
+  <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.6);" onclick="event.stopPropagation()">
+    <button id="photo-fs-menu-btn" onclick="toggleFsMenu()" style="flex:1;max-width:240px;background:var(--accent2);color:#0f3460;border:none;padding:13px 14px;border-radius:11px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">⋯ Možnosti</button>
+    <button onclick="closePhotoFs()" style="flex:1;max-width:150px;background:#333;color:#fff;border:none;padding:13px 14px;border-radius:11px;font-size:15px;cursor:pointer;min-height:48px;">✕ Zavřít</button>
   </div>
 </div>
 
@@ -13142,8 +13190,13 @@ function copyDiaryExport(){
       </div>
       <button onclick="clearGalleryFilters()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">⌫ Vynulovat</button>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text);cursor:pointer;">
-      <input type="checkbox" id="gfilt-sub" onchange="renderGallery()" style="width:18px;height:18px;"> <span style="background:#1565c0;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;">SUB</span> Jen fotky od SUB / firem
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text);">
+      <span style="background:#1565c0;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;">SUB</span> Fotky&nbsp;SUB:
+      <select id="gfilt-sub" onchange="renderGallery()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+        <option value="">Všechny</option>
+        <option value="od">🔵 Jen od SUB / firem</option>
+        <option value="pro">🟢 Jen sdílené pro SUB</option>
+      </select>
     </label>
     <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--text);cursor:pointer;">
       <input type="checkbox" id="gfilt-komentar" onchange="renderGallery()" style="width:18px;height:18px;"> 💬 Jen fotky s komentářem
