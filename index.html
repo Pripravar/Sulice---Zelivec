@@ -21,6 +21,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Plugin pro otáčení mapy dvěma prsty (touch rotate jako v Google Maps) -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+<!-- Leaflet.markercluster – shlukování fotek v mapě (výkon u stovek/tisíců fotek) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <!-- Leaflet.DistortableImage – vkládání fotek z dronu na mapu (posun/rotace/měřítko/průhlednost) -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/leaflet.distortableimage.css"/>
 <script src="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/leaflet.distortableimage.js"></script>
@@ -1108,6 +1112,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
   <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
   <button id="btn-zkousky" onclick="openZkouskyPanel()" title="Zkoušky na stavbě (laboratorní průvodka)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔬</button>
+  <button id="btn-dokumenty" onclick="openDokumentyPanel()" title="Dokumenty – KZP, TePř, protokoly zkoušek" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📋</button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-drone" onclick="startDroneOverlay()" title="Vložit foto z dronu na mapu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🛰️</button>
@@ -1405,6 +1410,41 @@ document.addEventListener('touchend', function(e){
           <button type="button" onclick="newZkouska()" style="flex:0 0 auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:10px 12px;font-size:13px;cursor:pointer;">Vyčistit</button>
           <button type="button" onclick="saveZkouska()" style="flex:1;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:10px;font-size:14px;font-weight:700;cursor:pointer;">💾 Uložit zkoušku</button>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- MODAL: Dokumenty – KZP / TePř / protokoly -->
+<div id="dokumenty-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:560px;width:100%;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">📋 Dokumenty (KZP / TePř / protokoly)</div>
+      <button onclick="closeDokumentyPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0;flex-shrink:0;">
+      <button class="dok-fbtn" data-k="all" onclick="setDokFilter('all')" style="background:var(--accent);color:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Vše</button>
+      <button class="dok-fbtn" data-k="kzp" onclick="setDokFilter('kzp')" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">📋 KZP</button>
+      <button class="dok-fbtn" data-k="tepr" onclick="setDokFilter('tepr')" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">📑 TePř</button>
+      <button class="dok-fbtn" data-k="protokol" onclick="setDokFilter('protokol')" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">🧪 Protokoly</button>
+    </div>
+    <div style="padding:8px 14px;overflow-y:auto;">
+      <div id="dokumenty-list"></div>
+      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px;">
+        <div style="font-weight:800;font-size:14px;color:var(--accent);margin-bottom:8px;">➕ Nahrát dokument (PDF)</div>
+        <label style="font-size:11px;color:var(--text2);">Druh</label>
+        <select id="dok-kat" class="task-field">
+          <option value="kzp">📋 KZP – kontrolní zkušební plán</option>
+          <option value="tepr">📑 TePř – technologický předpis</option>
+          <option value="protokol">🧪 Protokol zkoušky</option>
+          <option value="ostatni">📄 Ostatní</option>
+        </select>
+        <label style="font-size:11px;color:var(--text2);">Název (nepovinný)</label>
+        <input id="dok-nazev" class="task-field" type="text" placeholder="např. KZP asfaltové vrstvy">
+        <label style="font-size:11px;color:var(--text2);">SO / objekt (nepovinné)</label>
+        <input id="dok-so" class="task-field" type="text" placeholder="např. SO 101">
+        <label style="font-size:11px;color:var(--text2);">PDF soubor</label>
+        <input id="dok-file" class="task-field" type="file" accept="application/pdf,.pdf">
+        <button type="button" onclick="submitDokument()" style="margin-top:10px;width:100%;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:11px;font-size:14px;font-weight:700;cursor:pointer;">📤 Nahrát dokument</button>
       </div>
     </div>
   </div>
@@ -3232,6 +3272,7 @@ function init() {
   loadVykresRevize();
   loadMereni();
   loadZkousky();
+  loadDokumenty();
   loadDroneOverlays();
   loadCustomSO();
   // Situační vrstvy ukázat jen když existují data (overlay/situace_lines.json) – jinak skryté
@@ -4164,6 +4205,84 @@ function deleteZkouska(id){
   if(!canDelete(z.uid)){ showToast('Můžeš mazat jen své zkoušky', 2500); return; }
   if(!confirm('Smazat zkoušku „'+(z.nazev||'')+'"?')) return;
   db.ref('zkousky/'+id).remove().then(function(){ showToast('🗑️ Smazáno', 1200); if(window.editingZkouskaId===id){ window.editingZkouskaId=null; _fillZkouskaForm({}); } }).catch(function(){ showToast('❌ Chyba', 2500); });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DOKUMENTY – úložiště PDF: KZP, TePř, protokoly zkoušek (nahraj z appky).
+// /dokumenty/{id} = {kat,nazev,so,soubor(cesta v EU Storage),uid,author,ts}
+// ══════════════════════════════════════════════════════════════════
+var dokumentyData = {};
+var DOK_KAT = { kzp:'📋 KZP', tepr:'📑 TePř', protokol:'🧪 Protokol zkoušky', ostatni:'📄 Ostatní' };
+window._dokFilter = 'all';
+function loadDokumenty(){
+  try { db.ref('dokumenty').on('value', function(snap){ dokumentyData = snap.val() || {}; var m=document.getElementById('dokumenty-modal'); if(m && m.style.display==='flex') renderDokumentyList(); }, function(e){ console.warn('loadDokumenty', e&&e.message); }); } catch(e){}
+}
+function openDokumentyPanel(){
+  if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty ti admin nepovolil', 3000); return; }
+  document.getElementById('dokumenty-modal').style.display='flex';
+  renderDokumentyList();
+}
+function closeDokumentyPanel(){ document.getElementById('dokumenty-modal').style.display='none'; }
+function setDokFilter(k){
+  window._dokFilter=k; renderDokumentyList();
+  document.querySelectorAll('.dok-fbtn').forEach(function(b){ var on=b.getAttribute('data-k')===k; b.style.background=on?'var(--accent)':'var(--panel2)'; b.style.color=on?'#fff':'var(--text)'; });
+}
+function renderDokumentyList(){
+  var box=document.getElementById('dokumenty-list'); if(!box) return;
+  var ids=Object.keys(dokumentyData).filter(function(id){ var d=dokumentyData[id]; return d && (window._dokFilter==='all' || d.kat===window._dokFilter); }).sort(function(a,b){ return (dokumentyData[b].ts||0)-(dokumentyData[a].ts||0); });
+  if(!ids.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:18px;font-size:13px;">Zatím žádné dokumenty. Nahraj PDF ve formuláři níže.</div>'; return; }
+  box.innerHTML=ids.map(function(id){
+    var d=dokumentyData[id]; var can=canDelete(d.uid);
+    return '<div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding:9px 2px;">'+
+      '<span style="font-size:16px;flex-shrink:0;">'+((DOK_KAT[d.kat]||'📄 ').split(' ')[0])+'</span>'+
+      '<div style="flex:1;min-width:0;cursor:pointer;" onclick="openDokument(\''+id+'\')">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(d.nazev||'Dokument')+'</div>'+
+        '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+[(DOK_KAT[d.kat]||''), d.so, d.author].filter(Boolean).map(escapeHtml).join(' · ')+'</div>'+
+      '</div>'+
+      '<button onclick="openDokument(\''+id+'\')" title="Otevřít" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:14px;cursor:pointer;min-width:38px;min-height:38px;flex-shrink:0;">👁️</button>'+
+      (can?('<button onclick="deleteDokument(\''+id+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:8px;color:#fff;padding:8px;font-size:14px;cursor:pointer;min-width:38px;min-height:38px;flex-shrink:0;">🗑</button>'):'')+
+    '</div>';
+  }).join('');
+}
+function openDokument(id){
+  var d=dokumentyData[id]; if(!d||!d.soubor) return;
+  showToast('⏳ Otevírám…', 1000);
+  resolveFileUrl(d.soubor).then(function(u){ window.open(u, '_blank', 'noopener'); }).catch(function(){ showToast('❌ Nepodařilo se otevřít', 2500); });
+}
+function deleteDokument(id){
+  var d=dokumentyData[id]; if(!d) return;
+  if(!canDelete(d.uid)){ showToast('Můžeš mazat jen své dokumenty', 2500); return; }
+  if(!confirm('Smazat dokument „'+(d.nazev||'')+'"?')) return;
+  db.ref('dokumenty/'+id).remove().then(function(){ showToast('🗑️ Smazáno', 1200); }).catch(function(){ showToast('❌ Chyba', 2500); });
+}
+function submitDokument(){
+  var user=(typeof fbAuth!=='undefined'&&fbAuth)?fbAuth.currentUser:null;
+  if(!user || !window.currentUser){ showToast('Přihlaš se', 2000); return; }
+  if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty ti admin nepovolil', 3000); return; }
+  var kat=document.getElementById('dok-kat').value||'ostatni';
+  var nazev=(document.getElementById('dok-nazev').value||'').trim();
+  var so=(document.getElementById('dok-so').value||'').trim();
+  var fi=document.getElementById('dok-file'); var file=fi.files&&fi.files[0];
+  if(!file){ showToast('Vyber PDF soubor', 2000); return; }
+  if(!/\.pdf$/i.test(file.name)){ showToast('Soubor musí být PDF', 2500); return; }
+  if(file.size>10*1024*1024){ showToast('PDF je větší než 10 MB', 2800); return; }
+  if(!nazev) nazev=file.name.replace(/\.pdf$/i,'');
+  var safe=file.name.replace(/\.pdf$/i,'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60)||'dok';
+  var path='pdf/dokumenty/'+kat+'/'+safe+'_'+Date.now()+'.pdf';
+  showSync('⏳ Nahrávám PDF…');
+  var r=new FileReader();
+  r.onload=function(){
+    var b64=String(r.result).replace(/^data:[^;]+;base64,/,'');
+    _privStorage().ref(path).putString(b64,'base64',{contentType:'application/pdf'}).then(function(){
+      try { delete _fileUrlCache[path]; } catch(e){}
+      return db.ref('dokumenty').push({ kat:kat, nazev:nazev, so:so, soubor:path, uid:user.uid, author:(window.currentUser.name||''), ts:Date.now() });
+    }).then(function(){
+      hideSync(); showToast('✅ Dokument nahrán', 1800);
+      document.getElementById('dok-file').value=''; document.getElementById('dok-nazev').value=''; document.getElementById('dok-so').value='';
+      renderDokumentyList();
+    }).catch(function(e){ hideSync(); showToast('❌ '+((e&&(e.code||e.message))||'chyba uploadu'), 3500); });
+  };
+  r.readAsDataURL(file);
 }
 // Vykreslí všechna uložená měření do vrstvy; právě upravované (geometrie) přeskočí.
 // Co se ukazuje ve štítku měření (volitelně skrýt pro screenshoty). Default vše ZAP, pamatuje se.
@@ -5165,21 +5284,28 @@ function setFotoMapaVisible(on){
   if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
   if(!on) return;
   showToast('⏳ Načítám fotky do mapy…', 1200);
+  // Jen poslední měsíc (výkon); starší se dají prohlížet v galerii přes filtry.
+  var _mc = new Date(); _mc.setMonth(_mc.getMonth() - 1); _mc.setHours(0,0,0,0);
+  var cutoff = _mc.getTime();
   db.ref('standalone_photos').once('value').then(function(snap){
-    fotoMapaLayer = L.layerGroup();
+    // Clustering, když je knihovna k dispozici; jinak prostá vrstva.
+    fotoMapaLayer = (typeof L.markerClusterGroup === 'function')
+      ? L.markerClusterGroup({ maxClusterRadius: 45, spiderfyOnMaxZoom: true, showCoverageOnHover: false })
+      : L.layerGroup();
     var n = 0;
     snap.forEach(function(ch){
       var v = ch.val(); if(!v) return;
       if(typeof v.lat !== 'number' || typeof v.lng !== 'number') return;
       v.fbKey = ch.key;
+      if(photoCreationDate(v).getTime() < cutoff) return;   // starší než měsíc přeskoč
       var html = '<div style="width:26px;height:26px;border-radius:50%;background:#0ea5e9;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:13px;">📷</div>';
       var icon = L.divIcon({ className:'', html:html, iconSize:[26,26], iconAnchor:[13,13] });
       var mk = L.marker([v.lat, v.lng], { icon:icon, interactive:true, zIndexOffset:150 });
       (function(it){ mk.on('click', function(e){ L.DomEvent.stopPropagation(e); openPhotoFs(it.url, it.fbKey||null, it); }); })(v);
-      mk.addTo(fotoMapaLayer); n++;
+      fotoMapaLayer.addLayer(mk); n++;
     });
     fotoMapaLayer.addTo(map);
-    showToast(n ? ('📍 Fotky v mapě: ' + n) : 'Žádné fotky s GPS polohou', 1800);
+    showToast(n ? ('📍 Fotky v mapě (poslední měsíc): ' + n) : 'Žádné fotky za poslední měsíc', 2200);
   }).catch(function(){ showToast('❌ Fotky se nepodařilo načíst', 2500); var c=document.getElementById('lyr-fotomapa'); if(c) c.checked=false; });
 }
 
@@ -7545,10 +7671,10 @@ function soLabel(id){
 // Multi-výběr SO pro fotku. cb dostane POLE id (může být prázdné = nepřiřazovat).
 // Tři sekce: blízké objekty (jako dřív) → „Všechny SO" (proklik) → „Ostatní/deponie" (proklik).
 var _soPick = null;
-function chooseSOForPhoto(kmStr, cb, preset){
+function chooseSOForPhoto(kmStr, cb, preset, onDiscard){
   var kmNum = parseKmStr(kmStr);
   var kand  = soKandidati(kmNum);           // blízké objekty (±50 m)
-  _soPick = { cb: cb, sel: (preset||[]).slice(), kand: kand, manual: kand.length === 0, view: 'main', sdilenoSub: false };
+  _soPick = { cb: cb, sel: (preset||[]).slice(), kand: kand, manual: kand.length === 0, view: 'main', sdilenoSub: false, onDiscard: onDiscard || null };
   var modal = document.getElementById('so-pick-modal');
   if(!modal){ cb([]); _soPick = null; return; }
   _renderSOPicker();
@@ -7596,9 +7722,29 @@ function _renderSOPicker(){
     SO_CATALOG.forEach(row);
   } else if(P.view === 'custom'){
     navBtn('‹ Zpět', function(){ P.view = 'main'; _renderSOPicker(); });
-    if(customSO.length) customSO.forEach(row);
+    if(customSO.length){
+      customSO.forEach(function(o){
+        // řádek = výběrové tlačítko + (admin) tužka pro přejmenování
+        var wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;';
+        var on = P.sel.indexOf(o.id) !== -1;
+        var b = document.createElement('button');
+        b.className = 'so-pick-btn' + (on ? ' so-pick-on' : ''); b.style.flex = '1';
+        b.innerHTML = '<span style="display:inline-block;width:24px;">' + (on ? '✅' : '⬜') + '</span>' + escapeHtml(o.id) + (o.short ? '  —  ' + escapeHtml(o.short) : '');
+        b.onclick = function(){ _soPickToggle(o.id); };
+        wrap.appendChild(b);
+        if(isAdmin() && o.key){
+          var ed = document.createElement('button');
+          ed.className = 'so-pick-btn'; ed.style.cssText = 'flex:0 0 auto;background:var(--panel2);font-weight:700;padding:0 12px;';
+          ed.textContent = '✏️';
+          (function(k, id){ ed.onclick = function(){ editCustomObject(k, id); }; })(o.key, o.id);
+          wrap.appendChild(ed);
+        }
+        body.appendChild(wrap);
+      });
+    }
     else { var c = document.createElement('div'); c.style.cssText = 'font-size:12px;color:var(--text2);padding:4px 2px 8px;'; c.textContent = 'Zatím žádné vlastní objekty.'; body.appendChild(c); }
     navBtn('✏️ Přidat nový objekt…', function(){ _soPickAddCustom(); });
+    if(isAdmin()){ var hint=document.createElement('div'); hint.style.cssText='font-size:11px;color:var(--text2);padding:4px 2px;'; hint.textContent='✏️ u objektu = přejmenovat (opraví i překlep u přiřazených fotek).'; body.appendChild(hint); }
   }
   // Patička: shrnutí výběru + Hotovo + Nepřiřazovat (vždy dole, ve všech sekcích)
   var foot = document.createElement('div');
@@ -7631,7 +7777,42 @@ function _renderSOPicker(){
   none.textContent = '⊘ Nepřiřazovat';
   none.onclick = function(){ var sh = !!P.sdilenoSub; _closeSOPicker(); P.cb([], sh); };
   foot.appendChild(none);
+  // Zahodit právě vyfocenou fotku (jen ve flow focení – když je předán onDiscard)
+  if(P.onDiscard){
+    var disc = document.createElement('button');
+    disc.className = 'so-pick-btn';
+    disc.style.cssText = 'background:#e94560;color:#fff;font-weight:700;text-align:center;justify-content:center;';
+    disc.textContent = '🗑️ Nepoužít / zahodit fotku';
+    disc.onclick = function(){ var d = P.onDiscard; _closeSOPicker(); if(d) d(); };
+    foot.appendChild(disc);
+  }
   body.appendChild(foot);
+}
+// Přejmenuje vlastní objekt (oprava překlepu) + přepíše SO u přiřazených fotek. Jen admin.
+function editCustomObject(key, oldId){
+  if(!isAdmin()){ showToast('Upravit objekt může jen administrátor', 2800); return; }
+  var nv = prompt('Přejmenovat objekt (opraví i u fotek):', oldId);
+  if(nv === null) return; nv = nv.trim();
+  if(!nv || nv === oldId) return;
+  showSync('✏️ Přejmenovávám…');
+  db.ref('so_custom/' + key + '/id').set(nv).then(function(){
+    return db.ref('standalone_photos').once('value');
+  }).then(function(snap){
+    var upd = {};
+    snap.forEach(function(ch){
+      var v = ch.val(); if(!v) return;
+      if(v.so === oldId) upd['standalone_photos/' + ch.key + '/so'] = nv;
+      if(Array.isArray(v.soList) && v.soList.indexOf(oldId) !== -1){
+        upd['standalone_photos/' + ch.key + '/soList'] = v.soList.map(function(s){ return s === oldId ? nv : s; });
+      }
+    });
+    return Object.keys(upd).length ? db.ref().update(upd) : null;
+  }).then(function(){
+    hideSync();
+    var o = customSO.filter(function(x){ return x.key === key; })[0]; if(o) o.id = nv;
+    if(_soPick){ _soPick.sel = _soPick.sel.map(function(s){ return s === oldId ? nv : s; }); _renderSOPicker(); }
+    showToast('✏️ Přejmenováno na „' + nv + '"', 2500);
+  }).catch(function(){ hideSync(); showToast('❌ Přejmenování selhalo', 2800); });
 }
 // Přidá vlastní objekt mimo PD, uloží sdíleně do /so_custom a rovnou ho zaškrtne.
 function _soPickAddCustom(){
@@ -7994,6 +8175,12 @@ function _processStandalonePhotoFile(file){
         window.photoSession.pendingMeta.so     = soArr[0] || '';
         window.photoSession.pendingMeta.sdilenoSub = !!sdilenoSub;
         ppAnswer(true);
+      }, null, function(){
+        // 🗑️ Zahodit – fotka se nenahraje, nabídneme vyfotit další
+        window.photoSession.pendingPhoto = null;
+        window.photoSession.pendingMeta  = null;
+        showToast('🗑️ Fotka zahozena', 1500);
+        _showContinuePrompt();
       });
     });
   };
@@ -8179,6 +8366,7 @@ function submitLibImport(){
 
 function openGallery() {
   if(!hasPerm('galerie')){ showToast('🖼️ Galerie ti admin nepovolil', 3000); return; }
+  window.galleryMonthsBack = 1;   // po otevření vždy jen poslední měsíc (výkon)
   document.getElementById('gallery-modal').classList.add('open');
   unlockViewport();
   applyGalleryCols();
@@ -8256,11 +8444,23 @@ function applyGalleryFilters(items){
   var anyActive = srch || onlyKom || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subEl && subEl.checked && !isSubOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
-  return items.filter(function(it){
+  // Měsíční okno: bez filtru (a v ploché mřížce) ukaž jen posledních N měsíců (výkon u tisíců fotek).
+  // Když filtruješ (SO/autor/hledání…), zobrazí se všechno odpovídající bez ohledu na měsíc.
+  var monthCutoff = null;
+  if(!anyActive && !galleryGrouped){
+    var _mc = new Date(); _mc.setMonth(_mc.getMonth() - (window.galleryMonthsBack||1)); _mc.setHours(0,0,0,0);
+    monthCutoff = _mc.getTime();
+  }
+  var _older = false;
+  var out = items.filter(function(it){
     if(onlySub){
       var isSubPhoto = (it.zdroj === 'SUB' || it.sub);
       var sharedToSub = isSubOnly() && it.sdilenoSub;   // subka vidí i fotky sdílené subce
       if(!(isSubPhoto || sharedToSub)) return false;
+    }
+    if(monthCutoff !== null){
+      var _pt = photoCreationDate(it).getTime();
+      if(_pt < monthCutoff){ _older = true; return false; }
     }
     var kom = _photoComment(it);
     if(onlyKom && !(kom && kom.text)) return false;
@@ -8289,6 +8489,9 @@ function applyGalleryFilters(items){
     }
     return true;
   });
+  window._galleryMonthActive = (monthCutoff !== null);
+  window._galleryHasOlder = _older;
+  return out;
 }
 
 function fillGalleryAuthorOptions(items){
@@ -8499,7 +8702,22 @@ function _paintGallery(filtered) {
     if(groupsEl) groupsEl.style.display = 'none';
     filtered.forEach(function(it){ grid.appendChild(_galleryItemEl(it)); });
   }
+  // „Zobrazit starší" – jen v ploché nezfiltrované mřížce a když existují starší fotky
+  var body = document.getElementById('gallery-body');
+  var oldBtn = document.getElementById('gallery-older-btn'); if(oldBtn) oldBtn.remove();
+  if(body && window._galleryMonthActive && window._galleryHasOlder && galleryTab === 0){
+    var ob = document.createElement('button'); ob.id = 'gallery-older-btn';
+    ob.textContent = '⬇️ Zobrazit starší fotky (o měsíc zpět)';
+    ob.onclick = loadOlderGallery;
+    ob.style.cssText = 'display:block;width:calc(100% - 20px);margin:12px 10px;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;';
+    body.appendChild(ob);
+  }
   _updateGallerySelectionUI();
+}
+function loadOlderGallery(){
+  window.galleryMonthsBack = (window.galleryMonthsBack || 1) + 1;
+  renderGallery();
+  showToast('Zobrazuji o měsíc starší fotky…', 1200);
 }
 
 function renderGallery() {
@@ -8675,6 +8893,7 @@ var FEATURES = [
   { key:'denik',      label:'Deník / sichtovka',  btns:['btn-denik'] },
   { key:'kvalita',    label:'Kvalita / KZP',      btns:['btn-kzp'] },
   { key:'zkousky',    label:'Zkoušky na stavbě',  btns:['btn-zkousky'] },
+  { key:'dokumenty',  label:'Dokumenty (KZP/TePř/protokoly)', btns:['btn-dokumenty'] },
   { key:'inzsite',    label:'Inženýrské sítě',    btns:['btn-is'] }
 ];
 // Allow-by-default: povoleno, dokud admin výslovně nenastaví perms[feature]===false. Admin má vždy vše.
