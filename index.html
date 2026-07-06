@@ -734,6 +734,8 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .gallery-item .gsel-check { position:absolute; top:4px; left:4px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.55); border:2px solid #fff; display:none; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:700; z-index:2; }
 .gallery-item.gallery-sub img { outline:3px solid #1565c0; outline-offset:-3px; border-radius:6px; }
 .gallery-sub-badge { position:absolute; top:4px; right:4px; background:#1565c0; color:#fff; font-size:9px; font-weight:800; letter-spacing:.5px; padding:2px 6px; border-radius:6px; z-index:3; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.gallery-item.gallery-shared img { outline:3px solid #10b981; outline-offset:-3px; border-radius:6px; }
+.gallery-shared-badge { position:absolute; top:4px; right:4px; background:#10b981; color:#fff; font-size:9px; font-weight:800; letter-spacing:.3px; padding:2px 6px; border-radius:6px; z-index:3; box-shadow:0 1px 3px rgba(0,0,0,.4); }
 .gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
 .gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
 .gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
@@ -1285,6 +1287,10 @@ document.addEventListener('touchend', function(e){
   <div class="layer-row">
     <label>🏷️ Razítko (km, datum, jméno)</label>
     <label class="toggle"><input type="checkbox" id="lyr-stamp" onchange="onStampToggle(this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div class="layer-row">
+    <label>📍 Fotky v mapě (kde vyfoceno)</label>
+    <label class="toggle"><input type="checkbox" id="lyr-fotomapa" onchange="setFotoMapaVisible(this.checked)"><span class="toggle-slider"></span></label>
   </div>
 </div>
 
@@ -5152,6 +5158,31 @@ function setVodaVisible(on){
   }).catch(function(){ showToast('❌ Voda/elektro se nepodařilo načíst', 2500); var c=document.getElementById('lyr-voda'); if(c) c.checked=false; });
 }
 
+// Fotky v mapě (à la Apple Fotky) – marker 📷 tam, kde byla fotka pořízena; klik = otevři fullscreen.
+var fotoMapaLayer = null;
+function setFotoMapaVisible(on){
+  var cb=document.getElementById('lyr-fotomapa'); if(cb) cb.checked=!!on;
+  if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
+  if(!on) return;
+  showToast('⏳ Načítám fotky do mapy…', 1200);
+  db.ref('standalone_photos').once('value').then(function(snap){
+    fotoMapaLayer = L.layerGroup();
+    var n = 0;
+    snap.forEach(function(ch){
+      var v = ch.val(); if(!v) return;
+      if(typeof v.lat !== 'number' || typeof v.lng !== 'number') return;
+      v.fbKey = ch.key;
+      var html = '<div style="width:26px;height:26px;border-radius:50%;background:#0ea5e9;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:13px;">📷</div>';
+      var icon = L.divIcon({ className:'', html:html, iconSize:[26,26], iconAnchor:[13,13] });
+      var mk = L.marker([v.lat, v.lng], { icon:icon, interactive:true, zIndexOffset:150 });
+      (function(it){ mk.on('click', function(e){ L.DomEvent.stopPropagation(e); openPhotoFs(it.url, it.fbKey||null, it); }); })(v);
+      mk.addTo(fotoMapaLayer); n++;
+    });
+    fotoMapaLayer.addTo(map);
+    showToast(n ? ('📍 Fotky v mapě: ' + n) : 'Žádné fotky s GPS polohou', 1800);
+  }).catch(function(){ showToast('❌ Fotky se nepodařilo načíst', 2500); var c=document.getElementById('lyr-fotomapa'); if(c) c.checked=false; });
+}
+
 // ── Preference razítka (km, datum, jméno) do fotek ──
 // Hodnota v localStorage: '1' = zapnuto, '0' = vypnuto. Default = '1' (zapnuto)
 function getStampPref() {
@@ -5542,6 +5573,29 @@ function _renderFsItem(url, firebaseKey, item) {
   _renderFsCommentBar();
   var cBtn = document.getElementById('photo-fs-comment-btn');
   if(cBtn) cBtn.style.display = (_photoFsKey && window.currentUser && !window.subMode) ? 'inline-block' : 'none';
+  _updateFsShareBtn();
+}
+// Sdílet/odsdílet PRÁVĚ OTEVŘENOU fotku subce (logičtější než přes „Přeřadit SO").
+function _updateFsShareBtn(){
+  var b = document.getElementById('photo-fs-share'); if(!b) return;
+  var show = _photoFsKey && window.currentUser && !isSubOnly() && !window.subMode;
+  b.style.display = show ? 'inline-block' : 'none';
+  if(show){
+    var on = !!(_photoFsItem && _photoFsItem.sdilenoSub);
+    b.textContent = on ? '✅ Sdíleno subce' : '📷 Pro SUB';
+    b.style.background = on ? '#10b981' : 'var(--panel2)';
+    b.style.color = on ? '#fff' : 'var(--text)';
+  }
+}
+function toggleFsShareSub(){
+  if(!_photoFsKey || !window.currentUser || isSubOnly()) return;
+  var val = !(_photoFsItem && _photoFsItem.sdilenoSub);
+  db.ref('standalone_photos/'+_photoFsKey+'/sdilenoSub').set(val ? true : null).then(function(){
+    if(_photoFsItem) _photoFsItem.sdilenoSub = val;
+    _updateFsShareBtn();
+    showToast(val ? '📷 Sdíleno subce' : 'Sdílení subce zrušeno', 1500);
+    if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+  }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
 }
 // VLÁKNO komentářů k fotce. Zpětná kompat.: starý `komentar` (string/objekt) = první komentář,
 // nové jdou do `komentare/{cid}`. Vrací pole {id?,text,author,uid,ts} seřazené podle času.
@@ -6208,6 +6262,28 @@ function deleteSelectedGalleryPhotos() {
 }
 
 // 🏗️ Hromadné přeřazení VYBRANÝCH fotek k objektu (SO) – jeden výběr SO se aplikuje na všechny.
+// Hromadně sdílet/odsdílet vybrané fotky subce (toggle: když jsou všechny sdílené → zruší).
+function shareSelectedWithSub() {
+  var items = Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
+  if(!items.length){ showToast('Vyber fotky z galerie (jen ty jdou sdílet)', 2600); return; }
+  if(!window.currentUser){ showToast('Přihlaš se', 2000); return; }
+  var allShared = items.every(function(it){ return !!it.sdilenoSub; });
+  var share = !allShared;
+  if(!confirm(share ? ('Sdílet ' + items.length + ' fotek subce?\nUvidí je ve své galerii.')
+                    : ('Zrušit sdílení subce u ' + items.length + ' fotek?'))) return;
+  showSync(share ? '📷 Sdílím subce…' : '📷 Ruším sdílení…');
+  var fail = 0;
+  var proms = items.map(function(it){
+    return db.ref('standalone_photos/' + it.fbKey + '/sdilenoSub').set(share ? true : null)
+      .then(function(){ it.sdilenoSub = share; })
+      .catch(function(){ fail++; });
+  });
+  Promise.all(proms).then(function(){
+    hideSync();
+    showToast((share ? '📷 Sdíleno subce: ' : 'Sdílení zrušeno: ') + (items.length - fail) + ' fotek' + (fail ? (' (' + fail + '× chyba)') : ''), 3200);
+    gallerySelectedKeys = {}; renderGallery();
+  });
+}
 function reassignSelectedGalleryPhotos() {
   var items = Object.values(gallerySelectedKeys);
   if(!items.length) { showToast('Vyber nejdřív fotky', 1800); return; }
@@ -8362,13 +8438,20 @@ function _galleryItemEl(item) {
     subB.className = 'gallery-sub-badge'; subB.textContent = 'SUB';
     div.appendChild(subB);
   }
-  var _kc = _photoComment(item);
-  if(_kc && _kc.text){
+  var _kn = _photoComments(item).length;
+  if(_kn){
     var kB = document.createElement('div');
-    kB.textContent = '💬';
-    kB.title = _kc.text + (_kc.author ? (' — ' + _kc.author) : '');
-    kB.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:1px 4px;border-radius:6px;z-index:3;';
+    kB.textContent = '💬 ' + _kn;
+    var _lc = _photoLatestComment(item);
+    kB.title = _lc ? (_lc.text + (_lc.author ? (' — ' + _lc.author) : '')) : '';
+    kB.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(0,0,0,.62);color:#fff;font-size:11px;font-weight:700;padding:1px 5px;border-radius:6px;z-index:3;';
     div.appendChild(kB);
+  }
+  if(item.sdilenoSub && !(item.zdroj === 'SUB' || item.sub)){
+    div.classList.add('gallery-shared');
+    var shB = document.createElement('div');
+    shB.className = 'gallery-shared-badge'; shB.textContent = '↗ SUB';
+    div.appendChild(shB);
   }
   var meta = document.createElement('div');
   meta.className = 'gallery-item-meta';
@@ -12645,9 +12728,10 @@ function copyDiaryExport(){
   <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
   <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
-  <div id="photo-fs-comment" onclick="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:56px;bottom:calc(56px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.65);color:#fff;font-size:13px;line-height:1.4;padding:8px 14px;max-height:38vh;overflow-y:auto;"></div>
+  <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:56px;bottom:calc(56px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.72);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:6;"></div>
   <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
     <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💬 Přidat komentář</button>
+    <button id="photo-fs-share" onclick="toggleFsShareSub()" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📷 Pro SUB</button>
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="background:var(--accent2);color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout s datem</button>
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">&#128247; Otevřít</a>
     <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;background:#f5a623;color:#0f3460;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🏗️ Přeřadit (SO)</button>
@@ -12783,6 +12867,7 @@ function copyDiaryExport(){
     <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
     <button onclick="reassignSelectedGalleryPhotos()" title="Přeřadit vybrané k objektu (SO)" style="background:#f5a623;color:#0f3460;">🏗️ Přeřadit</button>
+    <button onclick="shareSelectedWithSub()" title="Sdílet vybrané fotky subce (uvidí je ve své galerii)" style="background:#0ea5e9;color:#fff;">📷 Pro SUB</button>
     <button onclick="sendSelectedToTds()" title="Poslat vybrané do TDS aplikace (objednatel)" style="background:#1565c0;color:#fff;">📤 Do TDS</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
   </div>
