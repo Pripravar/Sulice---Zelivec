@@ -59,6 +59,16 @@ exports.sendTaskNotifications = functions
       (rec.prirazeno || []).forEach(p => { if(p.uid) recipientUids.push(p.uid); });
     }
 
+    // PRIORITA řídí, JESTLI a JAK se push pošle:
+    //   nizka  = tiše → u nového úkolu žádný push (jen v aplikaci)
+    //   normalni = běžné upozornění na telefon
+    //   vysoka = důraznější (heads-up, zůstane dokud ho nezavřeš)
+    const priorita = rec.priorita || 'normalni';
+    if(rec.typ === 'novy' && priorita === 'nizka') {
+      console.log('Nízká priorita – push se neposílá, jen v aplikaci.');
+      return snap.ref.remove();
+    }
+
     // Odstranit duplicity
     recipientUids = [...new Set(recipientUids)];
 
@@ -81,12 +91,26 @@ exports.sendTaskNotifications = functions
       return snap.ref.remove();
     }
 
-    // Připravit zprávu
+    // Připravit zprávu (vysoká priorita = důraznější doručení napříč platformami)
+    const isHigh = priorita === 'vysoka';
     const message = {
       notification: { title, body },
       data: {
-        taskId: rec.taskId || '',
-        typ:    rec.typ    || ''
+        taskId:   rec.taskId  || '',
+        typ:      rec.typ     || '',
+        priorita: priorita
+      },
+      android: {
+        priority: isHigh ? 'high' : 'normal',
+        notification: { priority: isHigh ? 'max' : 'default', defaultSound: true }
+      },
+      apns: {
+        headers: { 'apns-priority': isHigh ? '10' : '5' },
+        payload: { aps: { sound: 'default', 'interruption-level': isHigh ? 'time-sensitive' : 'active' } }
+      },
+      webpush: {
+        headers: { Urgency: isHigh ? 'high' : 'normal' },
+        notification: { requireInteraction: isHigh }   // vysoká zůstane, dokud ji nezavřeš
       },
       tokens: tokens
     };
@@ -570,4 +594,117 @@ exports.tagFoto = functions
       console.error('tagFoto výjimka:', err);
       res.status(500).json({ error: 'Tagování selhalo' });
     }
+  });
+
+/* ════════════════════════════════════════════════════════════════
+   checkReminders – naplánovaná (každých 15 min) kontrola připomínek úkolů.
+   Úkol může mít pripominka: {typ:'cas', at, rep} | {typ:'termin', before}.
+   Když je připomínka splatná, pošle push zadateli + přiřazeným. sentAt hlídá,
+   ať se nepošle dvakrát; u opakování posune 'at' na další den/týden.
+   (typ 'geo' se řeší v aplikaci na telefonu, ne tady.)
+   POŽADAVKY: Blaze + zapnuté Cloud Scheduler & Pub/Sub API (deploy nabídne).
+   ════════════════════════════════════════════════════════════════ */
+async function _sendPush(uids, title, body, high) {
+  uids = [...new Set((uids || []).filter(Boolean))];
+  if(!uids.length) return;
+  const usersSnap = await db.ref('/uzivatele').once('value');
+  const users = usersSnap.val() || {};
+  const tokens = [];
+  uids.forEach(uid => { const u = users[uid]; if(u && u.fcmToken) tokens.push(u.fcmToken); });
+  if(!tokens.length) return;
+  const isHigh = !!high;
+  try {
+    await admin.messaging().sendEachForMulticast({
+      notification: { title, body },
+      data: { typ: 'pripominka' },
+      android: { priority: isHigh ? 'high' : 'normal', notification: { priority: isHigh ? 'max' : 'default', defaultSound: true } },
+      apns: { headers: { 'apns-priority': isHigh ? '10' : '5' }, payload: { aps: { sound: 'default', 'interruption-level': isHigh ? 'time-sensitive' : 'active' } } },
+      webpush: { headers: { Urgency: isHigh ? 'high' : 'normal' }, notification: { requireInteraction: isHigh } },
+      tokens: tokens
+    });
+  } catch(e) { console.error('reminder push chyba:', e); }
+}
+
+exports.checkReminders = functions
+  .region('europe-west1')
+  .pubsub.schedule('every 15 minutes')
+  .timeZone('Europe/Prague')
+  .onRun(async () => {
+    const now = Date.now();
+    const DAY = 24 * 3600 * 1000;
+    const OFF = { '1h': 3600e3, '3h': 3 * 3600e3, '1d': DAY, '2d': 2 * DAY };
+    const snap = await db.ref('/ukoly').once('value');
+    const tasks = snap.val() || {};
+    const updates = {};
+    for(const id of Object.keys(tasks)) {
+      const t = tasks[id];
+      if(!t || t.stav === 'done' || !t.pripominka) continue;
+      const p = t.pripominka;
+      const recips = [t.zadalUid].concat((t.prirazeno || []).map(x => x && x.uid)).filter(Boolean);
+      const high = t.priorita === 'vysoka';
+      if(p.typ === 'cas') {
+        if(typeof p.at !== 'number') continue;
+        if(now >= p.at && (p.sentAt || 0) < p.at) {
+          await _sendPush(recips, '⏰ Připomínka úkolu', t.title || '', high);
+          if(p.rep === 'day')       { updates['ukoly/' + id + '/pripominka/at'] = p.at + DAY;     updates['ukoly/' + id + '/pripominka/sentAt'] = now; }
+          else if(p.rep === 'week') { updates['ukoly/' + id + '/pripominka/at'] = p.at + 7 * DAY; updates['ukoly/' + id + '/pripominka/sentAt'] = now; }
+          else                      { updates['ukoly/' + id + '/pripominka/sentAt'] = now; }
+        }
+      } else if(p.typ === 'termin') {
+        if(!t.termin) continue;
+        const terminTs = Date.parse(t.termin + 'T07:00:00');   // ráno v den termínu
+        if(isNaN(terminTs)) continue;
+        const remindAt = terminTs - (OFF[p.before] || DAY);
+        if(now >= remindAt && (p.sentAt || 0) < remindAt) {
+          await _sendPush(recips, '⏰ Blíží se termín úkolu', (t.title || '') + ' (termín ' + t.termin + ')', high);
+          updates['ukoly/' + id + '/pripominka/sentAt'] = now;
+        }
+      }
+    }
+    if(Object.keys(updates).length) await db.ref().update(updates);
+    return null;
+  });
+
+/* ════════════════════════════════════════════════════════════════
+   denikVytah – AI stručný denní zápis do (provizorního) stavebního deníku.
+   Klient pošle sestavený textový přehled dne (lidé/firmy/SO, stroje, záznamy,
+   materiály, počasí, závěr), funkce nechá Claude Haiku udělat věcný zápis.
+   Vrací {ok, vytah}. Secret ANTHROPIC_API_KEY (stejný jako tagFoto).
+   ════════════════════════════════════════════════════════════════ */
+const DENIK_PROMPT =
+  'Jsi zkušený stavbyvedoucí a píšeš zápis do stavebního deníku. Z níže uvedených podkladů z jednoho dne ' +
+  'udělej STRUČNÝ, věcný český zápis (bez omáčky, bez úvodních frází). Rozděl podle stavebních objektů (SO), ' +
+  'kde to jde. Uveď: kdo a kolik lidí / firem pracovalo a na čem, nasazené stroje, provedené činnosti, ' +
+  'materiály, počasí a závěr dne. Použij krátké odrážky. Max ~14 řádků. Nevymýšlej nic, co v podkladech není.';
+
+exports.denikVytah = functions
+  .region('europe-west1')
+  .runWith({ secrets: ['ANTHROPIC_API_KEY'] })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if(req.method !== 'POST')    { res.status(405).json({ error: 'Jen POST' }); return; }
+    try {
+      const b = req.body || {};
+      const text = String(b.text || '').trim().slice(0, 8000);
+      const date = String(b.date || '');
+      if(!text) { res.status(400).json({ error: 'Chybí podklady' }); return; }
+      const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5',
+          max_tokens: 700,
+          messages: [{ role: 'user', content: DENIK_PROMPT + '\n\nDatum: ' + date + '\n\nPODKLADY:\n' + text }]
+        })
+      });
+      if(!aiResp.ok) { const et = await aiResp.text(); console.error('Claude chyba', aiResp.status, et); res.status(502).json({ error: 'AI zápis selhal (' + aiResp.status + ')' }); return; }
+      const ai = await aiResp.json();
+      let vytah = '';
+      if(ai && Array.isArray(ai.content)) { const t = ai.content.find(c => c.type === 'text'); if(t) vytah = String(t.text || '').trim(); }
+      if(!vytah) { res.status(502).json({ error: 'AI vrátila prázdný zápis' }); return; }
+      res.status(200).json({ ok: true, vytah: vytah });
+    } catch(err) { console.error('denikVytah výjimka:', err); res.status(500).json({ error: 'Zápis selhal' }); }
   });
