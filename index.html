@@ -369,9 +369,9 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .note-edit-btn { flex:1; background:#1565c0; color:#fff; border:none; border-radius:8px; padding:9px; font-size:13px; font-weight:700; cursor:pointer; }
 
 /* Fullscreen foto */
-#photo-fs { position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:5000; display:none; align-items:center; justify-content:center; cursor:zoom-out; }
+#photo-fs { position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:5000; display:none; flex-direction:column; align-items:center; justify-content:center; cursor:zoom-out; }
 #photo-fs.open { display:flex; }
-#photo-fs img { max-width:100%; max-height:100%; object-fit:contain; }
+#photo-fs #photo-fs-img { flex:1 1 auto; min-height:0; max-width:100%; max-height:100%; object-fit:contain; }
 
 /* Sync indikátor */
 #sync-indicator {
@@ -1489,10 +1489,21 @@ document.addEventListener('touchend', function(e){
   <div style="background:var(--panel);border-radius:14px;max-width:560px;width:100%;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
       <div style="flex:1;font-size:15px;font-weight:700;color:#f5a623;">👥 Správa uživatelů</div>
+      <button onclick="openStats()" title="Statistiky využití" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;">📊 Statistiky</button>
       <button onclick="closeUserAdmin()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
     <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;line-height:1.4;flex-shrink:0;">Zaškrtnuté = povolené funkce (nový uživatel má vše). Odškrtnutím funkci odebereš, 🚫 účet zablokuješ.</div>
     <div id="user-admin-list" style="padding:6px 12px 12px;overflow-y:auto;"></div>
+  </div>
+</div>
+<div id="stats-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3650;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:#22d3ee;">📊 Co se v appce používá</div>
+      <button onclick="closeStats()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;line-height:1.4;flex-shrink:0;">Počet použití napříč všemi uživateli od zapnutí měření. Řazeno od nejpoužívanějšího. Jen pro admina.</div>
+    <div id="stats-list" style="padding:10px 14px 14px;overflow-y:auto;"></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -2538,6 +2549,7 @@ var _vykReplaceKey = null;   // klíč výkresu, který se aktualizací nahrazuj
 function openVykresUpload(realKm, preferSO){
   var user = (typeof fbAuth!=='undefined' && fbAuth) ? fbAuth.currentUser : null;
   if(!user){ showToast('Pro nahrání výkresu se přihlas (úkolníček → přihlášení)', 3500); return; }
+  trackEvent('vykresy');
   if(!hasPerm('vykresy')){ showToast('📄 Nahrávání výkresů ti admin nepovolil', 3000); return; }
   _vykUploadKm = (typeof realKm==='number') ? realKm : null;
   // Naplnit SO select
@@ -3264,6 +3276,7 @@ function _layerToggleEls(){
   return out;
 }
 function saveLayerDefaults(){
+  trackEvent('vychozi_vrstvy');
   var map = {};
   _layerToggleEls().forEach(function(cb){ map[cb.id] = cb.checked; });
   try { localStorage.setItem('layerDefaults', JSON.stringify(map)); showToast('💾 Uloženo – takhle se appka otevře příště', 2500); }
@@ -3277,12 +3290,15 @@ function _getLayerDefaults(){
 function applyLayerDefaults(){
   if(window.subMode || isSubOnly()) return;   // subka má vynucený omezený pohled
   var saved = _getLayerDefaults(); if(!saved) return;
-  _layerToggleEls().forEach(function(cb){
-    if(!(cb.id in saved)) return;
-    var want = !!saved[cb.id];
-    cb.checked = want;
-    cb.dispatchEvent(new Event('change'));
-  });
+  window._applyingDefaults = true;
+  try {
+    _layerToggleEls().forEach(function(cb){
+      if(!(cb.id in saved)) return;
+      var want = !!saved[cb.id];
+      cb.checked = want;
+      cb.dispatchEvent(new Event('change'));
+    });
+  } finally { window._applyingDefaults = false; }
 }
 // „Standardní" = zpět na výchozí stav z HTML (defaultChecked) + zapomenout uložené.
 function resetLayerDefaults(){
@@ -3819,6 +3835,7 @@ function positionPlaceCrosshair() {
   ch.style.top  = (r.top  + r.height / 2) + 'px';
 }
 function startPlacingMode() {
+  trackEvent('pin');
   placingMode = true;
   positionPlaceCrosshair();
   document.getElementById('place-crosshair').classList.add('open');
@@ -3922,6 +3939,7 @@ function positionMeasureCrosshair(){
 }
 function toggleMeasureMode(){
   if(measureMode){ stopMeasureMode(); return; }
+  trackEvent('mereni');
   if(placingMode) cancelPlacing();   // ať se křížky nepletou
   measureMode = true;
   measurePts = [];
@@ -4206,6 +4224,7 @@ function renderZkouskyMarkers(){
 }
 function openZkouskyPanel(){
   if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky ti admin nepovolil', 3000); return; }
+  trackEvent('zkousky');
   zkouskaFillSoOptions();
   document.getElementById('zkousky-modal').style.display='flex';
   renderZkouskyList();
@@ -4292,6 +4311,7 @@ function loadDokumenty(){
 }
 function openDokumentyPanel(){
   if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty ti admin nepovolil', 3000); return; }
+  trackEvent('dokumenty');
   document.getElementById('dokumenty-modal').style.display='flex';
   renderDokumentyList();
 }
@@ -5359,6 +5379,7 @@ function setFotoMapaVisible(on){
   _setLayerSub('sub-fotomapa', on);
   if(fotoMapaLayer && map.hasLayer(fotoMapaLayer)) map.removeLayer(fotoMapaLayer);
   if(!on) return;
+  trackEvent('fotky_v_mape');
   showToast('⏳ Načítám fotky do mapy…', 1200);
   db.ref('standalone_photos').once('value').then(function(snap){
     var arr = [];
@@ -5818,6 +5839,19 @@ function _renderFsItem(url, firebaseKey, item) {
   if(delBtn) delBtn.style.display = canEd ? 'inline-block' : 'none';
   var soBtn = document.getElementById('photo-fs-soedit');
   if(soBtn) soBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';   // přeřadit smí kdokoliv přihlášený
+  // Popiska „kdo/kde/kdy" (aby bylo vždy vidět autora i bez razítka)
+  var infoEl = document.getElementById('photo-fs-info');
+  if(infoEl){
+    var it = _photoFsItem || {};
+    var who = (it.author || it.autor || '').trim();
+    var line1 = [it.so, (it.km ? ('km ' + it.km) : '')].filter(Boolean).join('  ·  ');
+    var line2 = [it.date, who].filter(Boolean).join('  ·  ');
+    var parts = [];
+    if(line1) parts.push('<div style="font-weight:700;">' + escapeHtml(line1) + '</div>');
+    if(line2) parts.push('<div style="opacity:.85;">' + escapeHtml(line2) + '</div>');
+    infoEl.innerHTML = parts.join('');
+    infoEl.style.display = parts.length ? 'block' : 'none';
+  }
   // Komentář k fotce (#2) – text + autor + datum
   _renderFsCommentBar();
   var cBtn = document.getElementById('photo-fs-comment-btn');
@@ -5842,6 +5876,7 @@ function _updateFsShareBtn(){
 function toggleFsShareSub(){
   if(!_photoFsKey || !window.currentUser || isSubOnly()) return;
   var val = !(_photoFsItem && _photoFsItem.sdilenoSub);
+  if(val) trackEvent('sdileni_sub');
   db.ref('standalone_photos/'+_photoFsKey+'/sdilenoSub').set(val ? true : null).then(function(){
     if(_photoFsItem) _photoFsItem.sdilenoSub = val;
     _updateFsShareBtn();
@@ -5883,6 +5918,7 @@ function editPhotoComment(){
   var v = prompt('Napiš komentář k fotce:');
   if(v === null) return;
   v = v.trim(); if(!v) return;
+  trackEvent('foto_komentar');
   var prev = _photoComments(_photoFsItem);   // pro upozornění: kdo už komentoval (před přidáním)
   var cid = 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
   var c = { text: v, author: (window.currentUser.name||''), uid: window.currentUser.uid, ts: Date.now() };
@@ -5984,6 +6020,7 @@ function showPhotoOnMap(){
   var it = _photoFsItem;
   if(!it || typeof it.lat !== 'number' || typeof it.lng !== 'number'){ showToast('📍 Fotka nemá uloženou polohu', 2500); return; }
   var lat = it.lat, lng = it.lng;
+  trackEvent('foto_na_mape');
   var label = [it.so, (it.km?('km '+it.km):''), it.date].filter(Boolean).join(' · ') || 'Fotka';
   closeFsMenu();
   closePhotoFs();
@@ -6555,6 +6592,7 @@ function shareSelectedWithSub() {
   var items = Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
   if(!items.length){ showToast('Vyber fotky z galerie (jen ty jdou sdílet)', 2600); return; }
   if(!window.currentUser){ showToast('Přihlaš se', 2000); return; }
+  trackEvent('sdileni_sub');
   var allShared = items.every(function(it){ return !!it.sdilenoSub; });
   var share = !allShared;
   if(!confirm(share ? ('Sdílet ' + items.length + ' fotek subce?\nUvidí je ve své galerii.')
@@ -8059,6 +8097,7 @@ window.addEventListener('hashchange', function(){ window._quickPhotoDone = false
 
 function takeStandalonePhoto() {
   if(!hasPerm('foto')){ showToast('📷 Focení ti admin nepovolil', 3000); return; }
+  trackEvent('foto');
   if(!gpsActive || !gpsMarker) {
     showToast('⚠️ Zapni si GPS!', 3000);
     return;
@@ -8535,6 +8574,7 @@ function submitLibImport(){
 
 function openGallery() {
   if(!hasPerm('galerie')){ showToast('🖼️ Galerie ti admin nepovolil', 3000); return; }
+  trackEvent('galerie');
   window.galleryMonthsBack = 1;   // po otevření vždy jen poslední měsíc (výkon)
   document.getElementById('gallery-modal').classList.add('open');
   unlockViewport();
@@ -9211,6 +9251,69 @@ function openUserAdmin(){
   document.getElementById('user-admin-modal').style.display = 'flex';
 }
 function closeUserAdmin(){ document.getElementById('user-admin-modal').style.display = 'none'; }
+
+// ── Statistiky využití funkcí (jen admin) ─────────────────────────────
+// Lehké počítadlo: každá akce zvedne /statistiky/{key}.n a zapíše .last (atomicky, fire-and-forget).
+// Spadá pod existující zápisové pravidlo pro přihlášené ($other) → bez změny pravidel.
+var STAT_EVENTS = [
+  {key:'foto',          emoji:'📷', label:'Focení'},
+  {key:'galerie',       emoji:'🖼️', label:'Galerie fotek'},
+  {key:'foto_komentar', emoji:'💬', label:'Komentář k fotce'},
+  {key:'sdileni_sub',   emoji:'📤', label:'Sdílení fotky subce'},
+  {key:'foto_na_mape',  emoji:'🗺️', label:'Fotka → ukázat v mapě'},
+  {key:'fotky_v_mape',  emoji:'📍', label:'Vrstva „Fotky v mapě“'},
+  {key:'ukoly',         emoji:'✅', label:'Úkolníček'},
+  {key:'pin',           emoji:'➕', label:'Vkládání poznámky/úkolu'},
+  {key:'mereni',        emoji:'📏', label:'Měření'},
+  {key:'vykresy',       emoji:'📐', label:'Nahrání výkresu'},
+  {key:'denik',         emoji:'📒', label:'Stavební deník'},
+  {key:'zkousky',       emoji:'🔬', label:'Zkoušky na stavbě'},
+  {key:'dokumenty',     emoji:'📋', label:'Dokumenty (KZP/TePř)'},
+  {key:'vychozi_vrstvy',emoji:'⚙️', label:'Uložení výchozích vrstev'}
+];
+function trackEvent(key){
+  try{
+    if(window._applyingDefaults) return;   // nepočítat automaticky aplikované výchozí vrstvy
+    if(!window.db || !key || typeof firebase === 'undefined') return;
+    db.ref('statistiky/'+key).update({
+      n: firebase.database.ServerValue.increment(1),
+      last: firebase.database.ServerValue.TIMESTAMP
+    }).catch(function(){});
+  }catch(e){}
+}
+function openStats(){
+  if(!isAdmin()){ showToast('Jen pro administrátora', 2500); return; }
+  document.getElementById('stats-modal').style.display = 'flex';
+  var box = document.getElementById('stats-list');
+  box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:24px;">Načítám…</div>';
+  db.ref('statistiky').once('value').then(function(snap){
+    var data = snap.val() || {};
+    var rows = STAT_EVENTS.map(function(e){ var d = data[e.key] || {}; return { e:e, n:(d.n||0), last:(d.last||0) }; });
+    rows.sort(function(a,b){ return b.n - a.n; });
+    var max = rows.reduce(function(m,r){ return Math.max(m, r.n); }, 0) || 1;
+    var total = rows.reduce(function(s,r){ return s + r.n; }, 0);
+    var used = rows.filter(function(r){ return r.n > 0; });
+    var top = used.length ? (used[0].e.emoji + ' ' + used[0].e.label) : '—';
+    var html = '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+      '<div style="flex:1;background:var(--panel2);border-radius:10px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);">Celkem akcí</div><div style="font-size:18px;font-weight:800;color:var(--text);">'+total+'</div></div>'+
+      '<div style="flex:2;background:var(--panel2);border-radius:10px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);">Nejvíc frčí</div><div style="font-size:14px;font-weight:800;color:#22d3ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(top)+'</div></div>'+
+    '</div>';
+    rows.forEach(function(r){
+      var pct = Math.round(r.n / max * 100);
+      var dim = r.n === 0;
+      html += '<div style="padding:8px 0;border-bottom:1px solid var(--border);'+(dim?'opacity:.55;':'')+'">'+
+        '<div style="display:flex;align-items:center;gap:8px;font-size:13px;">'+
+          '<span style="flex:1;color:var(--text);">'+r.e.emoji+' '+escapeHtml(r.e.label)+'</span>'+
+          '<span style="font-weight:800;color:var(--text);min-width:38px;text-align:right;">'+r.n+'×</span>'+
+        '</div>'+
+        '<div style="height:7px;background:var(--panel2);border-radius:5px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+(dim?'#555':'#22d3ee')+';border-radius:5px;"></div></div>'+
+        '<div style="font-size:10px;color:var(--text2);margin-top:3px;">'+(r.n===0 ? '⚠️ zatím nikdy nepoužito' : ('naposledy '+_relTime(r.last)))+'</div>'+
+      '</div>';
+    });
+    box.innerHTML = html;
+  }).catch(function(){ box.innerHTML = '<div style="color:#e94560;padding:24px;text-align:center;">Statistiky se nepodařilo načíst.</div>'; });
+}
+function closeStats(){ document.getElementById('stats-modal').style.display = 'none'; }
 
 function _renderUserAdmin(){
   var box = document.getElementById('user-admin-list');
@@ -9968,6 +10071,7 @@ function updateTaskBadge() {
 function openTasksPanel() {
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
   if(!hasPerm('ukoly')){ showToast('✅ Úkolníček ti admin nepovolil', 3000); return; }
+  trackEvent('ukoly');
   document.getElementById('tasks-panel').classList.add('open');
   renderTasksList();
 }
@@ -10971,6 +11075,7 @@ function svatekFor(d){
 function openDiaryPanel(){
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
   if(!hasPerm('denik')){ showToast('📒 Deník ti admin nepovolil', 3000); return; }
+  trackEvent('denik');
   document.getElementById('diary-panel').classList.add('open');
   if(!window.diaryCurrentDate) diaryDateToday();
   else loadDiaryDay(window.diaryCurrentDate);
@@ -13120,8 +13225,9 @@ function copyDiaryExport(){
 
 <!-- Fullscreen foto -->
 <div id="photo-fs" ontouchstart="_fsTouchStart(event)" ontouchend="_fsTouchEnd(event)" onclick="_fsBackdropClick(event)">
-  <img id="photo-fs-img" src="" style="max-width:100%;max-height:calc(100% - 60px);object-fit:contain;">
-  <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;"></div>
+  <img id="photo-fs-img" src="">
+  <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;z-index:7;"></div>
+  <div id="photo-fs-info" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;max-width:66%;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;line-height:1.35;padding:6px 12px;border-radius:12px;z-index:7;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
   <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
   <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:60px;bottom:calc(60px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.95);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:32vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:6;border-top:1px solid rgba(255,255,255,0.12);"></div>
@@ -13135,7 +13241,7 @@ function copyDiaryExport(){
     <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🏗️ Přeřadit (SO)</button>
     <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;text-align:left;background:rgba(233,69,96,0.15);color:#e94560;border:1px solid #e94560;padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">&#128465; Smazat</button>
   </div>
-  <div id="photo-fs-bar" style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.6);" onclick="event.stopPropagation()">
+  <div id="photo-fs-bar" style="flex-shrink:0;width:100%;box-sizing:border-box;display:flex;gap:10px;justify-content:center;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.6);" onclick="event.stopPropagation()">
     <button id="photo-fs-menu-btn" onclick="toggleFsMenu()" style="flex:1;max-width:240px;background:var(--accent2);color:#0f3460;border:none;padding:13px 14px;border-radius:11px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">⋯ Možnosti</button>
     <button onclick="closePhotoFs()" style="flex:1;max-width:150px;background:#333;color:#fff;border:none;padding:13px 14px;border-radius:11px;font-size:15px;cursor:pointer;min-height:48px;">✕ Zavřít</button>
   </div>
