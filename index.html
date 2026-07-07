@@ -123,10 +123,10 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #btn-place.active { background:var(--accent2); color:#0f3460; }
 #place-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#fff; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #place-crosshair.open { display:block; }
-#place-bar { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:1600; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px 12px; align-items:center; gap:10px; max-width:94vw; box-shadow:0 4px 16px rgba(0,0,0,.5); }
-#place-bar.open { display:flex; }
-#place-bar #place-hint { font-size:13px; color:var(--text); }
-#place-bar button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
+#place-bar, #task-loc-bar { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:4900; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px 12px; align-items:center; gap:10px; max-width:94vw; box-shadow:0 4px 16px rgba(0,0,0,.5); }
+#place-bar.open, #task-loc-bar.open { display:flex; }
+#place-bar #place-hint, #task-loc-bar span { font-size:13px; color:var(--text); }
+#place-bar button, #task-loc-bar button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
 
 /* ── Měření vzdálenosti a plochy (obecný nástroj, nezávislý na drone) ── */
 #btn-measure { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
@@ -1347,6 +1347,11 @@ document.addEventListener('touchend', function(e){
   <span id="place-hint">Najeď křížkem na místo</span>
   <button onclick="confirmPlacing()" style="background:var(--accent2);color:#0f3460;">✓ Sem</button>
   <button onclick="cancelPlacing()" style="background:var(--panel2);color:var(--text);">✕ Zrušit</button>
+</div>
+<div id="task-loc-bar">
+  <span>Najeď křížkem na místo úkolu</span>
+  <button onclick="_taskLocConfirm()" style="background:var(--accent2);color:#0f3460;">✓ Sem</button>
+  <button onclick="_taskLocCancel()" style="background:var(--panel2);color:var(--text);">✕ Zrušit</button>
 </div>
 <div id="measure-crosshair">✛</div>
 <div id="measure-hud">
@@ -10334,6 +10339,7 @@ function openNewTaskModal(lat, lng, km) {
   document.getElementById('tnm-priority').value = 'normalni'; _updatePrioHint();
   var rt=document.getElementById('tnm-remind-typ'); if(rt){ rt.value=''; } var ra=document.getElementById('tnm-remind-at'); if(ra) ra.value=''; _updateRemindUI();
   document.getElementById('tnm-prof').value = '';
+  var soEl0=document.getElementById('tnm-so'); if(soEl0) soEl0.value=''; _fillTaskSoDatalist();
   renderTnmPhotos();
   document.getElementById('tnm-lat').value = (lat !== null && lat !== undefined) ? lat : '';
   document.getElementById('tnm-lng').value = (lng !== null && lng !== undefined) ? lng : '';
@@ -10354,6 +10360,52 @@ function openNewTaskModal(lat, lng, km) {
 
 function closeNewTaskModal() {
   document.getElementById('task-new-modal').classList.remove('open');
+}
+// Naplní nabídku SO objektů pro úkol (z projektu).
+function _fillTaskSoDatalist(){
+  var dl = document.getElementById('tnm-so-list'); if(!dl) return;
+  var sos = (typeof getAllProjectSOs === 'function') ? getAllProjectSOs() : [];
+  dl.innerHTML = sos.map(function(so){ return '<option value="'+escapeHtml(so)+'">'; }).join('');
+}
+// Aktualizuje popisek lokace v modalu úkolu podle skrytých polí.
+function _refreshTaskLocInfo(){
+  var latV = parseFloat(document.getElementById('tnm-lat').value);
+  var lngV = parseFloat(document.getElementById('tnm-lng').value);
+  var kmV  = parseFloat(document.getElementById('tnm-km').value);
+  var locInfo = document.getElementById('tnm-loc-info'), locLbl = document.getElementById('tnm-loc-label');
+  if(!isNaN(latV) && !isNaN(lngV)){
+    locLbl.style.display='block'; locInfo.style.display='block';
+    locInfo.textContent = !isNaN(kmV) ? ('km ' + (typeof fmtKm==='function'?fmtKm(kmV):kmV.toFixed(3))) : (latV.toFixed(5)+', '+lngV.toFixed(5));
+  } else { locLbl.style.display='none'; locInfo.style.display='none'; }
+}
+// Výběr / změna místa úkolu na mapě (křížek uprostřed). Modal úkolu se dočasně schová, hodnoty zůstanou.
+function pickTaskLocationOnMap(){
+  document.getElementById('task-new-modal').classList.remove('open');
+  // Skrýt i celoobrazovkový panel úkolů (kdyby byl otevřený), ať je vidět mapa.
+  var tp = document.getElementById('tasks-panel');
+  window._taskLocPanelWasOpen = tp && tp.classList.contains('open');
+  if(window._taskLocPanelWasOpen) tp.classList.remove('open');
+  positionPlaceCrosshair();
+  document.getElementById('place-crosshair').classList.add('open');
+  document.getElementById('task-loc-bar').classList.add('open');
+  window.addEventListener('resize', positionPlaceCrosshair);
+}
+function _taskLocConfirm(){
+  var c = map.getCenter();
+  document.getElementById('tnm-lat').value = c.lat;
+  document.getElementById('tnm-lng').value = c.lng;
+  var km = null;
+  try { if(typeof gpsToKm==='function'){ km = gpsToKm(c.lat, c.lng); } } catch(e){}
+  document.getElementById('tnm-km').value = (km!==null && km!==undefined) ? km : '';
+  _refreshTaskLocInfo();
+  _taskLocCancel();   // schová křížek + bar, vrátí modal
+}
+function _taskLocCancel(){
+  document.getElementById('place-crosshair').classList.remove('open');
+  document.getElementById('task-loc-bar').classList.remove('open');
+  window.removeEventListener('resize', positionPlaceCrosshair);
+  if(window._taskLocPanelWasOpen){ document.getElementById('tasks-panel').classList.add('open'); window._taskLocPanelWasOpen = false; }
+  document.getElementById('task-new-modal').classList.add('open');
 }
 
 // ── Fotky úkolu ─────────────────────────────────────────────────────
@@ -10407,7 +10459,7 @@ function openTaskAppGalleryPicker(){
   var ov = document.getElementById('task-appgal-modal');
   if(!ov){
     ov = document.createElement('div'); ov.id='task-appgal-modal';
-    ov.style.cssText='position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px;';
+    ov.style.cssText='position:fixed;inset:0;z-index:4800;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px;';
     ov.innerHTML='<div style="background:var(--panel);border-radius:14px;max-width:660px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">'
       +'<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;"><div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🗂️ Vyber fotku z galerie</div><button onclick="document.getElementById(\'task-appgal-modal\').style.display=\'none\'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button></div>'
       +'<div id="task-appgal-list" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:12px;overflow-y:auto;"></div></div>';
@@ -10543,6 +10595,7 @@ function saveTaskFromForm() {
   var deadline = document.getElementById('tnm-deadline').value || '';
   var priority = document.getElementById('tnm-priority').value || 'normalni';
   var profese = document.getElementById('tnm-prof').value.trim();
+  var soVal = (document.getElementById('tnm-so').value || '').trim();
   var lat = parseFloat(document.getElementById('tnm-lat').value);
   var lng = parseFloat(document.getElementById('tnm-lng').value);
   var km  = parseFloat(document.getElementById('tnm-km').value);
@@ -10570,6 +10623,7 @@ function saveTaskFromForm() {
       termin:     deadline,
       priorita:   priority,
       profese:    profese,
+      so:         soVal || null,
       stav:       existing ? existing.stav : 'open',
       vytvoreno:  existing ? existing.vytvoreno : Date.now(),
       upraveno:   Date.now(),
@@ -10631,7 +10685,7 @@ function renderTaskDetail(t) {
     '<div><b>Zadal:</b> ' + escapeHtml(t.zadalName || '') + ' (' + vytvoreno + ')</div>'
   + '<div><b>Přiřazeno:</b> ' + escapeHtml(prirazeno) + '</div>'
   + '<div><b>Termín:</b> ' + termin + ' &nbsp;&nbsp; <b>Priorita:</b> ' + prio + '</div>'
-  + '<div><b>Profese:</b> ' + escapeHtml(profese) + (km ? (' &nbsp;&nbsp; <b>📍</b> ' + km) : '') + '</div>';
+  + '<div><b>Profese:</b> ' + escapeHtml(profese) + (t.so ? (' &nbsp;&nbsp; <b>🏗️ SO:</b> ' + escapeHtml(t.so)) : '') + (km ? (' &nbsp;&nbsp; <b>📍</b> ' + km) : '') + '</div>';
 
   document.getElementById('td-text').textContent = t.text || '(bez detailu)';
 
@@ -10727,6 +10781,7 @@ function editTask() {
   document.getElementById('tnm-priority').value = t.priorita || 'normalni'; _updatePrioHint();
   _fillPripominka(t.pripominka);
   document.getElementById('tnm-prof').value = t.profese || '';
+  _fillTaskSoDatalist(); var soElE=document.getElementById('tnm-so'); if(soElE) soElE.value = t.so || '';
   document.getElementById('tnm-lat').value = (t.lat !== undefined && t.lat !== null) ? t.lat : '';
   document.getElementById('tnm-lng').value = (t.lng !== undefined && t.lng !== null) ? t.lng : '';
   document.getElementById('tnm-km').value  = (t.km  !== undefined && t.km  !== null) ? t.km  : '';
@@ -13828,8 +13883,13 @@ function copyDiaryExport(){
       <option value="">+ Vyber osobu…</option>
     </select>
 
+    <label>🏗️ SO objekt (nepovinné)</label>
+    <input class="task-field" id="tnm-so" list="tnm-so-list" placeholder="např. SO 101 – vyber nebo napiš" autocomplete="off">
+    <datalist id="tnm-so-list"></datalist>
+
     <label id="tnm-loc-label" style="display:none;">📍 Lokace</label>
     <div id="tnm-loc-info" style="font-size:12px;color:var(--accent2);display:none;"></div>
+    <button type="button" class="btn-secondary" style="width:100%;font-size:13px;padding:9px;cursor:pointer;border-radius:8px;margin-top:2px;" onclick="pickTaskLocationOnMap()">📍 Vybrat / změnit místo na mapě</button>
 
     <div class="tm-buttons">
       <button class="btn-primary" onclick="saveTaskFromForm()">💾 Uložit</button>
