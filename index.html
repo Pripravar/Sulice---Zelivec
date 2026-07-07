@@ -5605,7 +5605,8 @@ function burnInMetadata(dataUrl, km, author, callback, so) {
     canvas.width = img.width; canvas.height = img.height;
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
-    var dnes = new Date().toLocaleDateString('cs-CZ');
+    var _now = new Date();
+    var dnes = _now.toLocaleDateString('cs-CZ') + ' ' + _now.toLocaleTimeString('cs-CZ', {hour:'2-digit', minute:'2-digit'});
     var soLbl = _soStampLabel(so);
     var lines = [];
     if(soLbl) lines.push({ t: soLbl, bold: true });
@@ -6153,7 +6154,12 @@ function photoFilename(item, idx, fields) {
   var d = photoCreationDate(item);
   var parts = ['sulice'];
   if(fields.so){ var so = _photoSoForName(item); if(so) parts.push(so); }
-  if(fields.datum) parts.push(d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()));
+  var wantCas = (fields.cas !== false);   // čas v názvu (default ano, pokud není výslovně vypnutý)
+  if(fields.datum || wantCas){
+    var dateP = fields.datum ? (d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate())) : '';
+    var timeP = wantCas ? (pad2(d.getHours()) + '-' + pad2(d.getMinutes())) : '';
+    parts.push([dateP, timeP].filter(Boolean).join('_'));
+  }
   if(fields.km && item && item.km) parts.push('km' + String(item.km).replace(/\s+/g,'').replace(/[^\w+\-.]/g,''));
   if(fields.jmeno && item && item.author){ var ini = _authorInitials(item.author); if(ini) parts.push(ini); }
   if(parts.length === 1) parts.push(d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()));  // nic nezaškrtnuto → aspoň čas kvůli kolizím
@@ -6275,12 +6281,14 @@ function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so, fiel
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     var dStr = dateObj.toLocaleDateString('cs-CZ');
+    var tStr = dateObj.toLocaleTimeString('cs-CZ', {hour:'2-digit', minute:'2-digit'});
+    var dtStr = (fields.datum && fields.cas) ? (dStr + ' ' + tStr) : (fields.datum ? dStr : (fields.cas ? tStr : ''));
     var _kmlbl = (km && /\d/.test(km)) ? ('km ' + km) : (km || '');   // text (ZS…) bez „km"
     var lines = [];
     if(fields.so){ var soLbl = _soStampLabel(so); if(soLbl) lines.push({ t: soLbl, bold: true }); }
     var mid = [];
     if(fields.km && _kmlbl) mid.push(_kmlbl);
-    if(fields.datum)        mid.push(dStr);
+    if(dtStr)               mid.push(dtStr);
     if(mid.length) lines.push({ t: mid.join('   •   '), bold: true });
     if(fields.jmeno && author) lines.push({ t: author, bold: false });
     if(lines.length) _drawStampBox(ctx, img, lines);   // nic vybráno → bez razítka
@@ -6317,7 +6325,7 @@ function _resolveStampChoice(mode) {
   var choice;
   // Zaškrtnutá pole řídí razítko I NÁZEV SOUBORU (i u „bez razítka" – jen se pak nevypálí do obrázku).
   var fields = { so: _dlsmChk('dlsm-f-so'), km: _dlsmChk('dlsm-f-km'),
-                 datum: _dlsmChk('dlsm-f-datum'), jmeno: _dlsmChk('dlsm-f-jmeno') };
+                 datum: _dlsmChk('dlsm-f-datum'), cas: _dlsmChk('dlsm-f-cas'), jmeno: _dlsmChk('dlsm-f-jmeno') };
   if(mode === null || mode === 'cancel') choice = null;
   else if(mode === 'plain' || mode === false) choice = { stamp: false, fields: fields };
   else choice = { stamp: true, fields: fields };
@@ -13955,6 +13963,7 @@ function copyDiaryExport(){
       <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-so" checked style="width:20px;height:20px;"> SO / objekt</label>
       <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-km" checked style="width:20px;height:20px;"> Staničení (km)</label>
       <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-datum" checked style="width:20px;height:20px;"> Datum</label>
+      <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-cas" checked style="width:20px;height:20px;"> Čas (hodina:minuta)</label>
       <label style="display:flex;align-items:center;gap:10px;padding:9px 6px;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" id="dlsm-f-jmeno" checked style="width:20px;height:20px;"> Jméno</label>
     </div>
     <div id="dlsm-warning" style="display:none;font-size:11px;color:var(--accent2);text-align:center;background:rgba(245,166,35,0.1);padding:6px 8px;border-radius:6px;line-height:1.35;">
