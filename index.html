@@ -1564,6 +1564,9 @@ document.addEventListener('touchend', function(e){
     <input id="drone-opacity" type="range" min="20" max="100" value="70" oninput="setDroneEditOpacity(this.value)" style="flex:1;max-width:160px;">
   </div>
   <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
+    <button onclick="droneSetExactBounds()" title="Položit přesně podle georeference (WebODM / KMZ)" style="background:#22d3ee;color:#0f3460;border:none;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;">📐 Přesné hranice (georef.)</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
     <button onclick="saveDroneOverlay()" style="background:var(--green);color:#0f3460;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">💾 Uložit pro tým</button>
     <button onclick="cancelDroneOverlay()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">✕ Zrušit</button>
   </div>
@@ -4869,6 +4872,27 @@ function droneSyncHandles(){
   if(droneRotateMarker) droneRotateMarker.setLatLng(droneTopHandlePos(cs));
 }
 // proporční zvětšení/zmenšení celé fotky kolem středu
+// Položí snímek PŘESNĚ na georeferencované hranice (WebODM/KMZ) – žádné ruční tahání.
+// Vstup: 4 čísla sever, jih, východ, západ (zeměpisná šířka/délka, WGS84), oddělená čárkou/mezerou.
+function droneSetExactBounds(){
+  if(!droneEditOverlay){ showToast('Nejdřív vlož snímek', 2500); return; }
+  var raw = prompt('Zadej georeferencované hranice v pořadí:\nSEVER, JIH, VÝCHOD, ZÁPAD\n(zeměpisná šířka/délka, WGS84 – z WebODM / KMZ)\n\nnapř.: 49.933835, 49.929820, 14.564862, 14.559330');
+  if(raw === null) return;
+  var n = (raw.match(/-?\d+(\.\d+)?/g) || []).map(Number);
+  if(n.length < 4){ showToast('Zadej 4 čísla: sever, jih, východ, západ', 3200); return; }
+  var N=n[0], S=n[1], E=n[2], W=n[3];
+  if(!(N>S && E>W) || Math.abs(N)>90 || Math.abs(S)>90 || Math.abs(E)>180 || Math.abs(W)>180){
+    showToast('Hranice nedávají smysl (sever>jih, východ>západ, WGS84)', 3500); return;
+  }
+  // pořadí rohů jako droneInitialCorners: NW, NE, SW, SE
+  droneEditOverlay._corners[0] = L.latLng(N, W);
+  droneEditOverlay._corners[1] = L.latLng(N, E);
+  droneEditOverlay._corners[2] = L.latLng(S, W);
+  droneEditOverlay._corners[3] = L.latLng(S, E);
+  droneRerender(droneEditOverlay); droneSyncHandles();
+  try { map.fitBounds(L.latLngBounds([[S,W],[N,E]]), {padding:[30,30]}); } catch(e){}
+  showToast('📐 Položeno přesně podle georeference – rovnou ulož 💾', 3000);
+}
 function scaleDroneEdit(f){
   if(!droneEditOverlay) return;
   var cs = droneEditOverlay.getCorners(), c = droneCentroid(cs);
@@ -6471,7 +6495,7 @@ function _doDownloadCurrentFsPhoto(item, applyStamp) {
     .then(function(blob){
       hideSync();
       var d = photoCreationDate(item);
-      var name = photoFilename(item, undefined, applyStamp && applyStamp.fields);
+      var name = photoFilename(item, undefined, {so:true,km:true,datum:true,cas:true,jmeno:true});
       var file;
       try { file = new File([blob], name, { type:'image/jpeg', lastModified:d.getTime() }); }
       catch(e) { file = null; }
@@ -6586,7 +6610,7 @@ function _prepareSelectedPhotosAsFiles(applyStamp) {
       done++;
       showSync('⏳ Připravuji ' + done + '/' + total + '...');
       var d = photoCreationDate(it);
-      var name = photoFilename(it, total > 1 ? idx : undefined, applyStamp && applyStamp.fields);
+      var name = photoFilename(it, total > 1 ? idx : undefined, {so:true,km:true,datum:true,cas:true,jmeno:true});
       try {
         return new File([blob], name, { type: 'image/jpeg', lastModified: d.getTime() });
       } catch(e) {
