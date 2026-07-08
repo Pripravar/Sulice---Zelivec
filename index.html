@@ -9724,6 +9724,13 @@ function _renderUserAdmin(){
   });
   if(!keys.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px 10px;font-size:14px;">Zatím se nikdo nepřihlásil.</div>'; return; }
   var me = window.currentUser ? window.currentUser.uid : '';
+  // Duplicity: telefonní (anonymní) přihlášení zakládá NOVÝ účet na každé zařízení →
+  // stejné jméno se může objevit víckrát. Označíme, ať admin pozná, co jde smazat.
+  var _nameCount = {};
+  keys.forEach(function(k){
+    var n = ((users[k].name||'').trim().toLowerCase().replace(/\s+/g,' '));
+    if(n) _nameCount[n] = (_nameCount[n]||0) + 1;
+  });
   var html = '';
   keys.forEach(function(uid){
     var u = users[uid] || {};
@@ -9732,6 +9739,9 @@ function _renderUserAdmin(){
     var blk = !!u.blocked;
     var pending = !adm && u.approved !== true;   // nový, čeká na schválení
     var online = (Date.now() - (u.lastSeen||0)) < 5*60*1000;
+    var _nkey = ((u.name||'').trim().toLowerCase().replace(/\s+/g,' '));
+    var dupN = _nkey ? (_nameCount[_nkey]||1) : 1;   // >1 = stejné jméno u víc účtů
+    var loginTyp = u.email ? '📧 Google' : (u.phone ? '📱 telefon' : '');
     var av = (u.photo && /^https?:\/\//.test(u.photo))
       ? '<img src="'+escapeHtml(u.photo)+'" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
       : '<div style="width:38px;height:38px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">👤</div>';
@@ -9744,8 +9754,9 @@ function _renderUserAdmin(){
             (adm?' <span style="background:#f5a623;color:#0f3460;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;">ADMIN</span>':'')+
             (pending?' <span style="background:#f5a623;color:#0f3460;font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;">⏳ ČEKÁ</span>':'')+
             (blk?' <span style="background:#e57373;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;">BLOKOVÁN</span>':'')+
+            (dupN>1?' <span title="Stejné jméno má '+dupN+' účtů – nejspíš přihlášení z víc zařízení přes telefon. Nech ten aktivní, ostatní smaž 🗑" style="background:#f5a623;color:#0f3460;font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;">⚠️ '+dupN+'× stejné jméno</span>':'')+
           '</div>'+
-          '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(u.email||u.phone||'')+'</div>'+
+          '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(u.email||u.phone||'')+(loginTyp?(' <span style="opacity:.75;">· '+loginTyp+'</span>'):'')+'</div>'+
           '<div style="font-size:11px;color:'+(online?'#48bb78':'var(--text2)')+';">'+(online?'● online':('naposledy '+_relTime(u.lastSeen)))+(self?' · to jsi ty':'')+'</div>'+
         '</div>'+
         // Schválit (jen u čekajících) + blokace (sebe nelze)
