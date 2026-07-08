@@ -1127,6 +1127,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-mereni-evidence" onclick="openMereniEvidence()" title="Evidence měření" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📐</button>
   <button id="btn-is" onclick="openInzenyrskeSite()" title="Inženýrské sítě (vyjádření správců)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔌</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
+  <button id="btn-help" onclick="openHelp()" title="Nápověda – co appka umí a jak se ovládá" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">❓</button>
   <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span></div>
   <button id="btn-layers" onclick="toggleLayers()">☰ Vrstvy</button>
 </div>
@@ -3304,6 +3305,22 @@ function _syncMereniShowCheckboxes(){
   if(d) d.checked = !!mereniShow.datum;
 }
 function closeLayersPanel(){document.getElementById('layers-panel').classList.remove('open');}
+
+// ── Nápověda / návod k aplikaci (dostupná všem, bez práv) ──────────────
+function openHelp(){
+  var m = document.getElementById('help-modal'); if(!m) return;
+  closeLayersPanel();
+  m.style.display = 'flex';
+  var b = document.getElementById('help-body'); if(b) b.scrollTop = 0;
+}
+function closeHelp(){ var m = document.getElementById('help-modal'); if(m) m.style.display = 'none'; }
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){ var m = document.getElementById('help-modal'); if(m && m.style.display === 'flex') closeHelp(); }
+});
+window.addEventListener('load', function(){
+  var m = document.getElementById('help-modal');
+  if(m) m.addEventListener('click', function(e){ if(e.target === m) closeHelp(); });   // klik mimo okno = zavřít
+});
 
 // ── Výchozí zobrazení vrstev (per zařízení, localStorage) ──────────────
 // Snímá všechny přepínače vrstev (id „lyr-…", mimo razítka, které má vlastní ukládání).
@@ -14218,6 +14235,163 @@ function copyDiaryExport(){
 </div>
 
 <!-- Modal: volba razítka při stažení - z-index vyšší než galerie (4800) i fullscreen foto (5000) -->
+<!-- ═══════════════ NÁPOVĚDA / NÁVOD K APLIKACI ═══════════════ -->
+<div id="help-modal" style="display:none;position:fixed;inset:0;z-index:5100;background:rgba(0,0,0,.65);align-items:center;justify-content:center;padding:12px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:640px;width:100%;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:16px;font-weight:800;color:var(--accent2);">❓ Návod k aplikaci</div>
+      <button onclick="closeHelp()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="help-body" style="padding:12px 16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--text);">
+
+      <p style="margin:0 0 10px;color:var(--text2);">Mapa stavby <b style="color:var(--text);">II/603 Sulice – Želivec</b> v telefonu: výkresy podle staničení, fotky s razítkem, úkoly, deník, měření. Funguje i venku bez signálu (co se stihne, dojede později).</p>
+
+      <!-- Plánek obrazovky -->
+      <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px;margin:10px 0;">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Kde co je</div>
+        <svg viewBox="0 0 360 210" style="width:100%;height:auto;display:block;">
+          <rect x="4" y="4" width="352" height="202" rx="10" fill="none" stroke="var(--border)"/>
+          <rect x="10" y="10" width="340" height="26" rx="6" fill="var(--panel)" stroke="var(--border)"/>
+          <text x="18" y="27" font-size="9" fill="var(--text2)">km 1+240</text>
+          <g fill="var(--panel2)" stroke="var(--border)">
+            <rect x="70" y="14" width="17" height="17" rx="3"/><rect x="90" y="14" width="17" height="17" rx="3"/>
+            <rect x="110" y="14" width="17" height="17" rx="3"/><rect x="130" y="14" width="17" height="17" rx="3"/>
+            <rect x="150" y="14" width="17" height="17" rx="3"/><rect x="170" y="14" width="17" height="17" rx="3"/>
+            <rect x="190" y="14" width="17" height="17" rx="3"/><rect x="210" y="14" width="17" height="17" rx="3"/>
+          </g>
+          <rect x="290" y="13" width="56" height="19" rx="5" fill="var(--accent)" opacity="0.85"/>
+          <text x="299" y="26" font-size="9" fill="#fff">☰ Vrstvy</text>
+          <text x="70" y="48" font-size="8.5" fill="var(--text2)">ikony funkcí (✅ 📓 🔬 📋 📷 🖼️ 🛰️ …)</text>
+          <rect x="20" y="58" width="320" height="140" rx="8" fill="var(--panel2)" opacity="0.45" stroke="var(--border)" stroke-dasharray="3 3"/>
+          <text x="150" y="130" font-size="11" fill="var(--text2)">MAPA</text>
+          <circle cx="322" cy="180" r="13" fill="var(--panel)" stroke="var(--border)"/><text x="316" y="184" font-size="10">📍</text>
+          <circle cx="322" cy="148" r="13" fill="var(--panel)" stroke="var(--border)"/><text x="316" y="152" font-size="10">➕</text>
+          <circle cx="322" cy="116" r="13" fill="var(--panel)" stroke="var(--border)"/><text x="316" y="120" font-size="10">📏</text>
+          <text x="196" y="184" font-size="8.5" fill="var(--text2)">GPS · vložit · měřit →</text>
+        </svg>
+      </div>
+
+      <!-- Rychlý start -->
+      <div style="background:rgba(34,211,238,0.08);border:1px solid #22d3ee;border-radius:10px;padding:10px 12px;margin:10px 0;">
+        <div style="font-weight:800;color:#22d3ee;margin-bottom:4px;">🚀 Rychlý start (3 kroky)</div>
+        <div><b>1.</b> Přihlas se (Google nebo telefon). Administrátor Tě schválí.</div>
+        <div><b>2.</b> Zapni <b>📍 GPS</b> (kulaté tlačítko vpravo dole). Nahoře uvidíš svoje <b>staničení (km)</b>.</div>
+        <div><b>3.</b> Foť <b>📷</b> — appka sama doplní km, datum, čas a jméno.</div>
+      </div>
+
+      <div style="font-weight:800;color:var(--accent);margin:14px 0 4px;">🔘 Tlačítka v horní liště</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 8px;">
+        <b>✅</b><span>Úkoly – zadání, přiřazení lidem, termíny, připomínky</span>
+        <b>📓</b><span>Stavební deník – šichtovka, stroje, záznamy dne, materiály</span>
+        <b>🧪</b><span>Kvalita / KZP – kontrolní zkušební plány</span>
+        <b>🔬</b><span>Zkoušky na stavbě – laboratorní průvodka + fotky</span>
+        <b>📋</b><span>Dokumenty – KZP, TePř, protokoly zkoušek (PDF)</span>
+        <b>📷</b><span>Vyfotit – fotka se uloží s razítkem a polohou</span>
+        <b>🖼️</b><span>Fotogalerie – filtry, hledání, komentáře, stahování</span>
+        <b>🛰️</b><span>Dron – vložit letecký snímek / ortofoto na mapu</span>
+        <b>📝</b><span>Evidence poznámek</span>
+        <b>📐</b><span>Evidence měření (složky, přejmenování, přesouvání)</span>
+        <b>🔌</b><span>Inženýrské sítě – vyjádření správců</span>
+        <b>⌂</b><span>Reset pohledu mapy</span>
+        <b>☰</b><span>Vrstvy – co se na mapě zobrazuje</span>
+        <b>👤</b><span>Účet – odhlášení; admin má i správu uživatelů</span>
+      </div>
+
+      <div style="font-weight:800;color:var(--accent);margin:14px 0 4px;">⭕ Tři kulatá tlačítka vpravo dole</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 8px;">
+        <b>📍</b><span>GPS zapnout/vypnout a vycentrovat na sebe</span>
+        <b>➕</b><span>Vložit poznámku nebo úkol na místo (najeď křížkem, ✓ Sem)</span>
+        <b>📏</b><span>Měřit – bod, vzdálenost, obvod, plocha</span>
+      </div>
+
+      <div style="font-weight:800;color:var(--accent);margin:16px 0 6px;">📖 Podrobně po funkcích</div>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">📷 Focení</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Bez zapnuté GPS to fotit nepustí (fotka by neměla polohu).<br>
+          Po vyfocení vybereš <b>objekt SO</b> (nabídne ty, co jsou v tvém staničení). Můžeš přepnout <b>„📷 Sdílet subce"</b> nebo <b>„🟣 Sdílet investorovi"</b>. Nepovedenou fotku hned <b>🗑️ zahodíš</b>.<br>
+          Do fotky se vypálí <b>razítko</b>: SO · km · datum a čas · jméno. Razítko se dá vypnout ve <b>☰ Vrstvy → 📷 Fotky</b>.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🖼️ Galerie fotek</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Ukazuje <b>poslední měsíc</b>; starší přes <b>„⬇️ Zobrazit starší"</b>. Filtry: km od–do, datum, autor, SO, jen s komentářem, SUB/investor fotky. Řazení a přepínač <b>„📁 Po objektech"</b>.<br>
+          Ťukni na fotku → celá obrazovka. Dole <b>⋯ Možnosti</b>: komentovat, sdílet subce/investorovi, stáhnout, <b>🗺️ ukázat v mapě</b>, přeřadit k SO, smazat.<br>
+          <b>Stahování:</b> vybereš, co se má vypálit do fotky. <b>Název souboru je vždy plný</b> (SO · datum · čas · km · jméno), i když stahuješ bez razítka.<br>
+          Rámečky: <span style="color:#1565c0;">modrý</span> = od SUB · <span style="color:#10b981;">zelený</span> = sdíleno subce · <span style="color:#8b5cf6;">fialový</span> = sdíleno investorovi.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">✅ Úkoly</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Název, detail, termín, profese, <b>SO objekt</b>, <b>📍 místo na mapě</b> a fotky (vyfotit / z telefonu / z galerie appky).<br>
+          <b>Priorita = jak se upozorní:</b> 🔕 nízká (jen v appce) · 🔔 střední (push na telefon) · 🚨 vysoká (důrazné).<br>
+          <b>⏰ Připomínka:</b> v určitý čas, před termínem, nebo <b>až budeš na stavbě</b> (geo).<br>
+          Komentáře k úkolu chodí přiřazeným jako upozornění.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">📏 Měření</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Vyber režim (bod / vzdálenost / obvod / plocha), najeď křížkem a přidávej body (<b>➕ Bod</b>). Výsledek v m, m², a, ha.<br>
+          <b>💾 Uložit pro tým</b> → měření uvidí ostatní ve vrstvě i v evidenci <b>📐</b>. Tam jdou měření <b>seskupit do složek</b>, složku <b>✏️ přejmenovat</b> a měření <b>📁 přesouvat</b>.<br>
+          ⚠️ Orientační, ne geodetické zaměření.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">☰ Vrstvy a mapa</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Podklady (Outdoor / Basic / Letecká / OSM), <b>katastr</b>, trasa, staničení po 100 a 20 m, SO objekty, propustky, poznámky, úkoly, měření, zkoušky, <b>fotky v mapě</b>.<br>
+          Podkategorie (např. u poznámek) se rozbalí až po zapnutí hlavní vrstvy.<br>
+          <b>⚙️ Zobrazení při spuštění:</b> naklikej si vrstvy a dej <b>„💾 Uložit toto jako výchozí"</b> — takhle se Ti appka otevře příště.<br>
+          <b>Výkresy:</b> ťukni na značku staničení → PDF panel se záložkami (situace, řezy, profily…).
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">📓 Deník stavby</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Den po dni: počasí, <b>šichtovka</b> (lidé + hodiny + SO), <b>stroje</b> a motohodiny, <b>záznamy během dne</b> (text + fotky ze 3 zdrojů), <b>materiály</b> (název + SO + fotky dodáků — další dodák přidáš k existujícímu přes ➕📷) a závěr dne.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🔬 Zkoušky · 📋 Dokumenty · 🧪 KZP · 🔌 Sítě</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          <b>🔬 Zkoušky:</b> název, materiál, vrstva, km (📍 z GPS), SO, technik, laboratoř + <b>fotky</b>. Dokud chybí výsledek/protokol, svítí ⚠️ a na mapě je vykřičník.<br>
+          <b>📋 Dokumenty:</b> úložiště PDF — KZP, TePř, protokoly zkoušek.<br>
+          <b>🧪 KZP:</b> kontrolní zkušební plány. <b>🔌 Sítě:</b> vyjádření správců inženýrských sítí.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🛰️ Dron / ortofoto</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Vlož letecký snímek na mapu. Máš-li <b>georeferencované ortofoto</b> (např. z WebODM), použij <b>📐 Přesné hranice</b> a vlož 4 čísla (sever, jih, východ, západ) — položí se přesně, bez tahání rohů.<br>
+          Snímky se řadí do <b>vrstev podle data</b>. Datum jde kdykoli opravit tlačítkem <b>📅</b> (bez znovupasování).<br>
+          ⚠️ Orientační podklad, ne geodetické zaměření.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">👤 Účet, práva a kategorie</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          Každého nového uživatele musí <b>administrátor schválit</b> a přidělit mu práva. Proto nevidíš nutně všechny ikony výše — <b>co nemáš povolené, se Ti nezobrazí</b>.<br>
+          Kategorie: <b>M-SILNICE</b> (náš tým, vidí vše) · <b>SUB</b> (subdodavatel) · <b>Investor</b> — SUB a investor vidí jen to, co jim admin povolí, a v galerii jen svoje / jim sdílené fotky.
+        </div>
+      </details>
+
+      <details style="padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">💡 Tipy a řešení potíží</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          <b>Přidej si appku na plochu</b> (Sdílet ⤴ → Přidat na plochu) — chodí pak notifikace a startuje rychleji.<br>
+          <b>Nejde GPS na iPhonu?</b> Nastavení → Soukromí → Polohové služby → zapnout, u Safari povolit „Při používání" + <b>Přesná poloha</b>. Pak appku obnov.<br>
+          <b>Nevidíš novou funkci?</b> Zavři a znovu otevři appku (stáhne si novou verzi), nebo Ti ji admin nepovolil.<br>
+          <b>Rukavice:</b> všechna tlačítka jsou schválně velká; při focení a měření se dá vše ovládat palcem.<br>
+          <b>Bez signálu:</b> mapa i appka jedou; fotky a záznamy se odešlou, až chytneš signál.
+        </div>
+      </details>
+
+    </div>
+  </div>
+</div>
+
 <!-- Přidat fotku ke stávajícímu materiálu -->
 <div id="mat-addphoto-modal" style="display:none;position:fixed;inset:0;z-index:4800;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--panel);border-radius:14px;padding:20px 18px;width:min(92vw,340px);display:flex;flex-direction:column;gap:8px;border:1px solid var(--border);">
