@@ -835,6 +835,9 @@ body.submode #user-badge, body.submode #btn-layers, body.submode #btn-standalone
 .task-modal { display:none; position:fixed; top:0; right:0; bottom:0; left:0; z-index:4500; background:rgba(0,0,0,.7); align-items:center; justify-content:center; padding:14px; }
 .task-modal.open { display:flex; }
 .task-modal .tm-box { background:var(--panel); border-radius:14px; padding:18px; width:min(96vw,440px); max-height:92vh; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+/* Přímé děti nesmí smršťovat – jinak se na vysokém obsahu (iOS) selecty stlačí (text → tečky)
+   a náhled fotek se sbalí, takže miniatura přeteče přes tlačítka. Místo toho se okno roluje. */
+.task-modal .tm-box > * { flex-shrink:0; }
 .task-modal h3 { font-size:15px; color:var(--accent2); margin-bottom:4px; }
 .task-modal label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; }
 .task-field { width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 10px; font-size:14px; font-family:inherit; }
