@@ -6452,7 +6452,8 @@ function _resolveStampChoice(mode) {
   var modal = document.getElementById('dl-stamp-modal');
   if(modal) modal.style.display = 'none';
   var choice;
-  // Zaškrtnutá pole řídí razítko I NÁZEV SOUBORU (i u „bez razítka" – jen se pak nevypálí do obrázku).
+  // Zaškrtnutá pole řídí JEN vypálené razítko. Název souboru je vždy plný/informativní
+  // (SO · datum · čas · km · jméno) nezávisle na tom, co se vypálí – ať se soubory dají rozlišit.
   var fields = { so: _dlsmChk('dlsm-f-so'), km: _dlsmChk('dlsm-f-km'),
                  datum: _dlsmChk('dlsm-f-datum'), cas: _dlsmChk('dlsm-f-cas'), jmeno: _dlsmChk('dlsm-f-jmeno') };
   if(mode === null || mode === 'cancel') choice = null;
