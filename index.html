@@ -9404,6 +9404,8 @@ function hasPerm(feature){
   var me = window.currentUser && window.currentUser.uid;
   if(!me) return false;
   if(isBlocked(me)) return false;
+  // Účet smazaný adminem (nebo záznam chybí) → NIC. Jinak by `userCategory` spadlo na 'silnice' = vše.
+  if(window._usersLoaded && !window.allUsers[me]) return false;
   var u = window.allUsers[me] || {};
   // Individuální doplněk/odebrání práva (má přednost před kategorií)
   if(u.perms && u.perms[feature] === true) return true;
@@ -9749,7 +9751,8 @@ function _renderUserAdmin(){
         // Schválit (jen u čekajících) + blokace (sebe nelze)
         (self?'' :
           (pending ? '<button onclick="toggleUserApprove(\''+uid+'\')" title="Schválit přístup" style="background:#48bb78;border:none;border-radius:8px;color:#fff;padding:8px 12px;font-size:13px;font-weight:800;cursor:pointer;min-height:40px;flex-shrink:0;white-space:nowrap;">✅ Schválit</button>' : '')+
-          '<button onclick="toggleUserBlocked(\''+uid+'\')" title="'+(blk?'Odblokovat':'Zablokovat')+'" style="background:'+(blk?'#48bb78':'#e57373')+';border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">'+(blk?'✅':'🚫')+'</button>')+
+          '<button onclick="toggleUserBlocked(\''+uid+'\')" title="'+(blk?'Odblokovat':'Zablokovat')+'" style="background:'+(blk?'#48bb78':'#e57373')+';border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">'+(blk?'✅':'🚫')+'</button>'+
+          '<button onclick="deleteUserAccount(\''+uid+'\')" title="Smazat uživatele ze seznamu (např. duplicitní přihlášení)" style="background:var(--panel2);border:1px solid #e57373;border-radius:8px;color:#e57373;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">🗑</button>')+
       '</div>'+
       // Per-funkce práva (admin má vždy vše → u admina skryj)
       (adm ? '' : '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 2px 48px;">'+
@@ -9801,6 +9804,27 @@ function _userPermEffective(uid, key){
   if(u.perms && u.perms[key] === true) return true;
   if(u.perms && u.perms[key] === false) return false;
   return categoryAllows(userCategory(uid), key);
+}
+// Smazat uživatele ze seznamu (typicky duplicitní/omylem založený účet).
+// POZOR: maže JEN záznam v /uzivatele. Firebase Auth účet zůstává – když se dotyčný
+// přihlásí znovu, objeví se jako NOVÝ nechválený (pending). Trvalé odepření = 🚫 Blokovat.
+function deleteUserAccount(uid){
+  if(!isAdmin()){ showToast('Jen pro administrátora', 2500); return; }
+  if(uid === (window.currentUser && window.currentUser.uid)){ showToast('Sebe smazat nemůžeš', 2500); return; }
+  var u = (window.allUsers||{})[uid] || {};
+  var jmeno = u.name || '(bez jména)';
+  var kontakt = u.email || u.phone || '';
+  if(isAdmin(uid) && !confirm('⚠️ '+jmeno+' je ADMINISTRÁTOR.\nOpravdu ho chceš smazat?')) return;
+  var msg = 'Smazat uživatele „'+jmeno+'"'+(kontakt?(' ('+kontakt+')'):'')+' ze seznamu?\n\n'+
+    '• Zmizí ze správy uživatelů i z přiřazování úkolů.\n'+
+    '• Jeho fotky, úkoly a záznamy ZŮSTANOU (jsou podepsané jménem).\n'+
+    '• Je-li právě přihlášený, bude okamžitě odhlášen.\n\n'+
+    'POZOR: pokud se přihlásí znovu stejným účtem, objeví se jako NOVÝ a bude čekat na schválení.\n'+
+    'Chceš-li mu přístup trvale odepřít, použij místo mazání 🚫 Blokovat.';
+  if(!confirm(msg)) return;
+  db.ref('uzivatele/'+uid).remove()
+    .then(function(){ showToast('🗑 Uživatel „'+jmeno+'" smazán', 2400); _renderUserAdmin(); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba mazání'), 3200); });
 }
 function toggleUserPerm(uid, key, checked){
   if(!isAdmin()) return;
@@ -10236,10 +10260,18 @@ function savePhoneUserName() {
 function loadAllUsers() {
   db.ref('uzivatele').on('value', function(snap) {
     window.allUsers = snap.val() || {};
+    window._usersLoaded = snap.exists();   // až teď smí hasPerm brát chybějící záznam jako zákaz
     rebuildAssigneePicker();
     // Živá blokace: když admin zablokuje právě přihlášeného, vyhoď ho hned.
     if(window.currentUser && isBlocked(window.currentUser.uid)){
       showToast('⛔ Tvůj přístup byl zablokován administrátorem.', 4000);
+      setTimeout(function(){ if(fbAuth) fbAuth.signOut().then(function(){ location.reload(); }); else location.reload(); }, 1500);
+      return;
+    }
+    // Živé smazání účtu: admin smazal záznam právě přihlášeného → okamžitě ho odhlas.
+    // (Jinak by mu `userCategory` spadlo na 'silnice' a dostal by plná práva.)
+    if(window.currentUser && !window.subMode && snap.exists() && !window.allUsers[window.currentUser.uid]){
+      showToast('⛔ Tvůj účet byl odstraněn administrátorem.', 4000);
       setTimeout(function(){ if(fbAuth) fbAuth.signOut().then(function(){ location.reload(); }); else location.reload(); }, 1500);
       return;
     }
