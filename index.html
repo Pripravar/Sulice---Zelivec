@@ -5279,6 +5279,7 @@ function renderSavedDrone(key, r){
     '<br><span style="font-size:10px;color:#f5a623;">orientační podklad, ne geodetické zaměření</span>';
   if(canDelete(r.ownerUid)){
     html += '<br><button onclick="editExistingDrone(\''+key+'\')" style="margin-top:6px;background:#f5a623;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Upravit</button>'+
+            '<button onclick="changeDroneDate(\''+key+'\')" title="Změnit datum bez pasování" style="margin-top:6px;margin-left:6px;background:#22d3ee;color:#0f3460;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">📅 Datum</button>'+
             '<button onclick="deleteDroneOverlay(\''+key+'\')" style="margin-top:6px;margin-left:6px;background:#e57373;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">🗑 Odebrat</button>';
   }
   html += '</div>';
@@ -5311,6 +5312,23 @@ function deleteDroneOverlay(key){
   db.ref('drone_overlays/'+key).remove().then(function(){
     showToast('Dron odebrán', 1500);
   }).catch(function(e){ showToast('Chyba mazání: '+(e && e.message||''), 3000); });
+}
+// Změnit JEN datum uloženého snímku (bez znovupasování) – zařadí ho do správné vrstvy.
+function changeDroneDate(key){
+  var r = droneOverlaysData[key]; if(!r) return;
+  if(!canDelete(r.ownerUid)){ showToast('Datum smí měnit jen autor nebo koordinátor', 2800); return; }
+  var cur = r.datum || new Date().toISOString().slice(0,10);
+  var nn = prompt('Datum pořízení snímku (RRRR-MM-DD):', cur);
+  if(nn === null) return; nn = nn.trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nn)){ showToast('Zadej datum ve tvaru 2026-06-22', 3200); return; }
+  db.ref('drone_overlays/'+key+'/datum').set(nn).then(function(){
+    if(droneOverlaysData[key]) droneOverlaysData[key].datum = nn;
+    droneActiveDate = nn;
+    rebuildDroneDateButtons();
+    renderActiveDroneDate(false);
+    if(document.getElementById('drone-evidence-modal').style.display === 'flex') renderDroneEvidence();
+    showToast('📅 Datum změněno na '+droneFmtDatum(nn), 2400);
+  }).catch(function(){ showToast('❌ Nepodařilo se změnit datum', 2800); });
 }
 // ── Evidence / mazání dron snímků ──
 function openDroneEvidence(){
@@ -5360,6 +5378,11 @@ function renderDroneEvidence(){
       '<div style="font-size:11px;color:var(--text2);">'+escapeHtml(r.author||'')+'</div>';
     row.appendChild(info);
     if(canDelete(r.ownerUid)){
+      var dbtn = document.createElement('button');
+      dbtn.textContent = '📅'; dbtn.title = 'Změnit datum (bez pasování)';
+      dbtn.style.cssText = 'background:none;border:none;color:#22d3ee;font-size:17px;cursor:pointer;min-width:38px;min-height:40px;';
+      dbtn.onclick = (function(key){ return function(){ changeDroneDate(key); }; })(k);
+      row.appendChild(dbtn);
       var del = document.createElement('button');
       del.textContent = '🗑'; del.title = 'Smazat snímek';
       del.style.cssText = 'background:none;border:none;color:#e57373;font-size:18px;cursor:pointer;min-width:40px;min-height:40px;';
