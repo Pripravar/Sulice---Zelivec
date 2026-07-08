@@ -713,3 +713,28 @@ exports.denikVytah = functions
       res.status(200).json({ ok: true, vytah: vytah });
     } catch(err) { console.error('denikVytah výjimka:', err); res.status(500).json({ error: 'Zápis selhal' }); }
   });
+
+// ── DENNÍ ZÁLOHA celé Realtime Database do privátního Storage ──────────
+// Jednou denně uloží celou RTDB jako JSON do bucketu (zalohy/db-YYYY-MM-DD.json + db-latest.json).
+// Kryje TEXTOVÁ data: úkoly, poznámky, deník, KZP, podpisy, práva/kategorie, metadata+vazby fotek.
+// Samotné SOUBORY fotek/PDF nekryje – ty chrání Object Versioning na bucketu (zapni v konzoli).
+// Obnova: Console → Storage → zalohy/ → stáhnout JSON → Realtime Database → ⋮ → Import JSON (přepíše!).
+exports.backupDatabase = functions
+  .region('europe-west1')
+  .pubsub.schedule('every 24 hours')
+  .timeZone('Europe/Prague')
+  .onRun(async () => {
+    try {
+      const data = (await db.ref('/').once('value')).val() || {};
+      const json = JSON.stringify(data);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const bucket = admin.storage().bucket(SUB_BUCKET);
+      const opts = { contentType: 'application/json', resumable: false };
+      await bucket.file('zalohy/db-' + stamp + '.json').save(json, opts);
+      await bucket.file('zalohy/db-latest.json').save(json, opts);
+      console.log('Záloha DB OK: ' + stamp + ' (' + json.length + ' B)');
+    } catch (err) {
+      console.error('Záloha DB selhala:', err);
+    }
+    return null;
+  });

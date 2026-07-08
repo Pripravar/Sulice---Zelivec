@@ -5942,8 +5942,8 @@ function _photoComments(it){
   var out = [];
   var legacy = it && it.komentar;
   if(legacy){
-    if(typeof legacy === 'string') out.push({ text: legacy, author:'', uid:'', ts:0 });
-    else if(legacy.text) out.push({ text: legacy.text, author: legacy.author||'', uid: legacy.uid||'', ts: legacy.ts||0 });
+    if(typeof legacy === 'string') out.push({ id:'__legacy__', text: legacy, author:'', uid:'', ts:0 });
+    else if(legacy.text) out.push({ id:'__legacy__', text: legacy.text, author: legacy.author||'', uid: legacy.uid||'', ts: legacy.ts||0 });
   }
   var kk = it && it.komentare;
   if(kk) Object.keys(kk).forEach(function(cid){ var c=kk[cid]; if(c && c.text) out.push({ id:cid, text:c.text, author:c.author||'', uid:c.uid||'', ts:c.ts||0 }); });
@@ -5958,11 +5958,48 @@ function _renderFsCommentBar(){
   if(!cEl) return;
   var arr = _photoComments(_photoFsItem);
   if(!arr.length){ cEl.style.display='none'; cEl.innerHTML=''; return; }
+  var canMod = function(c){ return isAdmin() || (window.currentUser && c.uid && c.uid === window.currentUser.uid); };
   cEl.innerHTML = arr.map(function(c){
     var meta = [c.author, c.ts ? new Date(c.ts).toLocaleDateString('cs-CZ') : ''].filter(Boolean).join(' · ');
-    return '<div style="padding:2px 0;">💬 '+escapeHtml(c.text)+(meta?(' <span style="opacity:.7;">— '+escapeHtml(meta)+'</span>'):'')+'</div>';
+    var ctrl = canMod(c) ? (' <span onclick="editOnePhotoComment(\''+c.id+'\')" style="cursor:pointer;opacity:.75;margin-left:4px;">✏️</span>'
+                          + '<span onclick="deleteOnePhotoComment(\''+c.id+'\')" style="cursor:pointer;opacity:.75;margin-left:2px;">🗑️</span>') : '';
+    return '<div style="padding:3px 0;">💬 '+escapeHtml(c.text)+(meta?(' <span style="opacity:.7;">— '+escapeHtml(meta)+'</span>'):'')+ctrl+'</div>';
   }).join('');
   cEl.style.display='block';
+}
+// Editace / smazání jednoho komentáře fotky (admin nebo autor komentáře).
+function _photoCommentById(cid){ return _photoComments(_photoFsItem).filter(function(c){ return c.id===cid; })[0]; }
+function editOnePhotoComment(cid){
+  if(!_photoFsKey) return;
+  var c = _photoCommentById(cid); if(!c) return;
+  if(!(isAdmin() || (window.currentUser && c.uid===window.currentUser.uid))){ showToast('Upravit smí jen autor nebo admin', 2500); return; }
+  var v = prompt('Uprav komentář:', c.text); if(v===null) return; v = v.trim(); if(!v){ deleteOnePhotoComment(cid); return; }
+  if(cid==='__legacy__'){
+    db.ref('standalone_photos/'+_photoFsKey+'/komentar').set({ text:v, author:c.author||'', uid:c.uid||'', ts:c.ts||Date.now() })
+      .then(function(){ _photoFsItem.komentar={ text:v, author:c.author||'', uid:c.uid||'', ts:c.ts||Date.now() }; _afterCommentChange('✏️ Komentář upraven'); })
+      .catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
+  } else {
+    db.ref('standalone_photos/'+_photoFsKey+'/komentare/'+cid+'/text').set(v)
+      .then(function(){ if(_photoFsItem.komentare&&_photoFsItem.komentare[cid]) _photoFsItem.komentare[cid].text=v; _afterCommentChange('✏️ Komentář upraven'); })
+      .catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
+  }
+}
+function deleteOnePhotoComment(cid){
+  if(!_photoFsKey) return;
+  var c = _photoCommentById(cid); if(!c) return;
+  if(!(isAdmin() || (window.currentUser && c.uid===window.currentUser.uid))){ showToast('Smazat smí jen autor nebo admin', 2500); return; }
+  if(!confirm('Smazat tento komentář?')) return;
+  var ref = (cid==='__legacy__') ? 'standalone_photos/'+_photoFsKey+'/komentar' : 'standalone_photos/'+_photoFsKey+'/komentare/'+cid;
+  db.ref(ref).set(null).then(function(){
+    if(cid==='__legacy__'){ delete _photoFsItem.komentar; }
+    else if(_photoFsItem.komentare){ delete _photoFsItem.komentare[cid]; }
+    _afterCommentChange('🗑️ Komentář smazán');
+  }).catch(function(){ showToast('❌ Nepodařilo se smazat', 2500); });
+}
+function _afterCommentChange(msg){
+  _renderFsCommentBar();
+  if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+  showToast(msg, 1500);
 }
 // Přidá komentář do vlákna fotky + pošle upozornění (autorovi fotky + dřívějším komentujícím).
 function editPhotoComment(){
