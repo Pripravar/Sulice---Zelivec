@@ -7649,23 +7649,31 @@ function openPropPanel(prop) {
   currentPropSrc = propPages[0].soubor;
   propPageIdx = 0;
 
-  // Zapamatuj km + SO objektu pro tlačítko ➕ (nahrání výkresu k tomuto SO)
+  // Zapamatuj km + SO objektu pro tlačítko ➕ (nahrání výkresu k tomuto SO).
+  // SO odvodíme z cesty statického výkresu (SO_443/…) NEBO z id objektu ('SO 443' → 'SO_443').
   window._propPanelKm = (typeof prop.km==='number') ? prop.km : null;
   var _soM = String((propPages[0] && propPages[0].soubor) || prop.soubor || '').match(/(SO_[0-9]+)\//);
-  window._propPanelSO = _soM ? _soM[1] : null;
+  var _soFromId = String(prop.id||'').trim().replace(/\s+/g,'_');   // 'SO 443' → 'SO_443'
+  window._propPanelSO = _soM ? _soM[1] : (/^SO_\d+/i.test(_soFromId) ? _soFromId : null);
 
-  // Připojit UŽIVATELSKÉ výkresy nahrané k tomuto objektu (dle SO nebo km). Bez toho by se výkres
-  // přidaný přes ➕ v panelu objektu nikde nezobrazil – prop-panel jinak čte jen statické prop.vykresy.
+  // Připojit UŽIVATELSKÉ výkresy nahrané PŘÍMO k tomuto objektu. Bez toho by se výkres přidaný přes ➕
+  // v panelu objektu nikde nezobrazil – prop-panel jinak čte jen statické prop.vykresy.
+  // Vazba: má-li objekt SO → párujeme JEN podle SO (přesné, neprosakuje do sousedních objektů na stejném km).
+  //        nemá-li SO → fallback podle km objektu.
   try {
     var _seenSb = {};
     propPages.forEach(function(pp){ if(pp && pp.soubor) _seenSb[pp.soubor] = true; });
     (vykresyData || []).forEach(function(d){
       if(!d || d.neplatny || !d.soubor || _seenSb[d.soubor]) return;
-      var soMatch = window._propPanelSO && d.so === window._propPanelSO;
-      var od = parseFloat(d.kmOd), doKm = parseFloat(d.kmDo);
-      var kmMatch = (window._propPanelKm != null && !isNaN(od) && !isNaN(doKm)
-                     && window._propPanelKm >= od && window._propPanelKm <= doKm);
-      if(soMatch || kmMatch){
+      var match;
+      if(window._propPanelSO){
+        match = (d.so === window._propPanelSO);
+      } else {
+        var od = parseFloat(d.kmOd), doKm = parseFloat(d.kmDo);
+        match = (window._propPanelKm != null && !isNaN(od) && !isNaN(doKm)
+                 && window._propPanelKm >= od && window._propPanelKm <= doKm);
+      }
+      if(match){
         propPages.push({ soubor:d.soubor, nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres') });
         _seenSb[d.soubor] = true;
       }
