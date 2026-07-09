@@ -2790,6 +2790,9 @@ function submitVykresUpload(){
         document.getElementById('vyk-file').value='';
         document.getElementById('vyk-nazev').value='';
         renderVykresList();
+        // Obnov panely pod modalem, ať se nový výkres objeví hned (bez znovuotevření objektu)
+        try { if(typeof rebuildPropPanel==='function') rebuildPropPanel(); } catch(e){}
+        try { if(typeof rebuildDocPanel==='function') rebuildDocPanel(); } catch(e){}
       }).catch(function(e){
         status.textContent='⚠️ Nahráno do Storage, ale zápis odkazu selhal: '+(e&&e.message||'');
         btn.disabled=false; btn.style.opacity='1';
@@ -2920,6 +2923,11 @@ function openStaniceniPanel(realKm) {
 function rebuildDocPanel(){
   var panel = document.getElementById('pdf-panel');
   if(window._docPanelKm != null && panel && panel.classList.contains('open')) openStaniceniPanel(window._docPanelKm);
+}
+// Překresli otevřený panel objektu/propustku (po nahrání či změně platnosti výkresu)
+function rebuildPropPanel(){
+  var panel = document.getElementById('prop-panel');
+  if(panel && panel.classList.contains('open') && window._currentProp) openPropPanel(window._currentProp);
 }
 // Tlačítko 🗄️/♻️ v panelu – zneplatní/obnoví PRÁVĚ ZOBRAZENÝ výkres (statický i nahraný)
 function toggleInvalidateCurrentDoc(){
@@ -3653,6 +3661,7 @@ function openNoteModalManual(){
   newNoteCat = 0;
   document.getElementById('note-nazev').value = '';
   var stEl = document.getElementById('note-stanic'); if(stEl) stEl.value = '';
+  var soEl = document.getElementById('note-so'); if(soEl) soEl.value = ''; _fillNoteSoDatalist();
   document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || (window.currentUser ? window.currentUser.name : '');
   document.getElementById('note-text').value = '';
   document.getElementById('note-photos-preview').innerHTML = '';
@@ -3661,6 +3670,12 @@ function openNoteModalManual(){
   selectCat(0);
   document.getElementById('note-modal').classList.add('open');
   if(stEl) setTimeout(function(){ stEl.focus(); }, 100);
+}
+// Naplní nabídku SO objektů pro poznámku (stejný zdroj jako úkol).
+function _fillNoteSoDatalist(){
+  var dl = document.getElementById('note-so-list'); if(!dl) return;
+  var sos = (typeof getAllProjectSOs === 'function') ? getAllProjectSOs() : [];
+  dl.innerHTML = sos.map(function(so){ return '<option value="'+escapeHtml(so)+'">'; }).join('');
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -3880,6 +3895,7 @@ function lpChoose(kind) {
     document.getElementById('note-author').value = localStorage.getItem('noteAuthor') || (window.currentUser ? window.currentUser.name : '');
     document.getElementById('note-text').value = '';
     var stEl = document.getElementById('note-stanic'); if(stEl) stEl.value = '';
+    var soEl = document.getElementById('note-so'); if(soEl) soEl.value = ''; _fillNoteSoDatalist();
     document.getElementById('note-photos-preview').innerHTML = '';
     var stampToggle = document.getElementById('note-stamp-toggle');
     if(stampToggle) stampToggle.checked = getStampPref();
@@ -5842,6 +5858,7 @@ function saveNote() {
   if(!author) { showToast('Zadejte jméno!', 2000); return; }
   localStorage.setItem('noteAuthor', author);
   var nazev = document.getElementById('note-nazev').value.trim();
+  var soEl2 = document.getElementById('note-so'); var noteSo = soEl2 ? (soEl2.value || '').trim() : '';
   // Staničení → pokud vyplněno, určí pozici na mapě (přepíše bod z mapy / umožní založit bez mapy)
   var stanicEl = document.getElementById('note-stanic');
   var stanicStr = stanicEl ? (stanicEl.value || '').trim() : '';
@@ -5860,7 +5877,7 @@ function saveNote() {
   var keepUrls = newNotePhotos.filter(function(p){ var s=p.dataUrl||p; return !s.startsWith('data:'); }).map(function(p){ return p.dataUrl||p; });
   function finish(uploadedUrls) {
     var note = { id:noteId, lat:newNoteLat, lng:newNoteLng, cat:newNoteCat,
-      author:author, authorUid:(window.currentUser ? window.currentUser.uid : ''), nazev:nazev, text:text,
+      author:author, authorUid:(window.currentUser ? window.currentUser.uid : ''), nazev:nazev, text:text, so:noteSo||null,
       photos:keepUrls.concat(uploadedUrls), time:new Date().toLocaleString('cs-CZ') };
     saveNote_toFirebase(note, null);
   }
@@ -5879,7 +5896,7 @@ function saveNote() {
     uploadPhotosToGitHub(toUpload,
       function(done,total){ showSync('⏳ Nahrávám fotky (' + done + '/' + total + ')...'); },
       function(urls){ finish(urls); },
-      useStamp ? {km: metaKm, author: author} : null);
+      useStamp ? {km: metaKm, author: author, so: noteSo} : null);
   }
 }
 
@@ -5905,7 +5922,8 @@ function openNoteDetail(id) {
   if(nazevEl2) nazevEl2.textContent = note.nazev || '';
   var kmStr = '';
   if(note._km) kmStr = '   📍 ' + note._km;
-  document.getElementById('note-detail-meta').textContent = '👤 ' + note.author + '   🕐 ' + note.time + kmStr;
+  var soStr = note.so ? ('   🏗️ ' + _soStampLabel(note.so)) : '';
+  document.getElementById('note-detail-meta').textContent = '👤 ' + note.author + '   🕐 ' + note.time + kmStr + soStr;
   document.getElementById('note-detail-text').textContent = note.text || '(bez textu)';
 
   // Fotky
@@ -7612,6 +7630,7 @@ function openPropPanel(prop) {
   if(!hasPerm('pdf')){ showToast('📄 Prohlížení výkresů Ti admin nepovolil', 3000); return; }
   var pPos = realKmToLatLng(prop.km); if(pPos) showSelectionRing(L.latLng(pPos[0],pPos[1]));
   currentPropId = prop.id;
+  window._currentProp = prop;   // pro rebuildPropPanel() po nahrání výkresu
   // Sulice: každý propustek má pole 'vykresy' s kompletní sadou (situace, PP, vzor.řezy, ...)
   // Fallback (Votice-style): pokud je definován jen 'soubor' + 'tz', sestav minimální pole
   if(prop.vykresy && prop.vykresy.length) {
@@ -7634,6 +7653,24 @@ function openPropPanel(prop) {
   window._propPanelKm = (typeof prop.km==='number') ? prop.km : null;
   var _soM = String((propPages[0] && propPages[0].soubor) || prop.soubor || '').match(/(SO_[0-9]+)\//);
   window._propPanelSO = _soM ? _soM[1] : null;
+
+  // Připojit UŽIVATELSKÉ výkresy nahrané k tomuto objektu (dle SO nebo km). Bez toho by se výkres
+  // přidaný přes ➕ v panelu objektu nikde nezobrazil – prop-panel jinak čte jen statické prop.vykresy.
+  try {
+    var _seenSb = {};
+    propPages.forEach(function(pp){ if(pp && pp.soubor) _seenSb[pp.soubor] = true; });
+    (vykresyData || []).forEach(function(d){
+      if(!d || d.neplatny || !d.soubor || _seenSb[d.soubor]) return;
+      var soMatch = window._propPanelSO && d.so === window._propPanelSO;
+      var od = parseFloat(d.kmOd), doKm = parseFloat(d.kmDo);
+      var kmMatch = (window._propPanelKm != null && !isNaN(od) && !isNaN(doKm)
+                     && window._propPanelKm >= od && window._propPanelKm <= doKm);
+      if(soMatch || kmMatch){
+        propPages.push({ soubor:d.soubor, nazev:(d.nazev||'Výkres'), typ:(d.kat||'📎 Výkres') });
+        _seenSb[d.soubor] = true;
+      }
+    });
+  } catch(e){ console.warn('prop user výkresy:', e); }
 
   var panel = document.getElementById('prop-panel');
   var title = document.getElementById('prop-title');
@@ -10634,6 +10671,7 @@ function openNewTaskModal(lat, lng, km) {
   var rt=document.getElementById('tnm-remind-typ'); if(rt){ rt.value=''; } var ra=document.getElementById('tnm-remind-at'); if(ra) ra.value=''; _updateRemindUI();
   document.getElementById('tnm-prof').value = '';
   var soEl0=document.getElementById('tnm-so'); if(soEl0) soEl0.value=''; _fillTaskSoDatalist();
+  var tStamp0=document.getElementById('tnm-stamp-toggle'); if(tStamp0) tStamp0.checked = getStampPref();
   renderTnmPhotos();
   document.getElementById('tnm-lat').value = (lat !== null && lat !== undefined) ? lat : '';
   document.getElementById('tnm-lng').value = (lng !== null && lng !== undefined) ? lng : '';
@@ -11018,6 +11056,14 @@ function saveTaskFromForm() {
     return;
   }
 
+  // Razítko do fotky (SO · km · datum · čas · jméno). Týká se jen NOVĚ pořízených fotek;
+  // fotky z galerie appky (existingUrls) už orazítkované jsou, znovu se nerazítkují.
+  var tStampT = document.getElementById('tnm-stamp-toggle');
+  var tUseStamp = tStampT ? tStampT.checked : true;
+  if(typeof setStampPref==='function') setStampPref(tUseStamp);
+  var tKmDisp = !isNaN(km) ? (typeof fmtKm==='function' ? fmtKm(km) : String(km)) : null;
+  var tStampMeta = tUseStamp ? { km: tKmDisp, author: (window.currentUser && window.currentUser.name) || '', so: soVal || '' } : null;
+
   // Upload nových fotek na GitHub, pak teprve uložit úkol
   showSync('⏳ Nahrávám fotky 0/' + pendingItems.length + '…');
   uploadPhotosToGitHub(
@@ -11027,7 +11073,7 @@ function saveTaskFromForm() {
       hideSync();
       buildAndSaveTask(existingUrls.concat(uploadedUrls));
     },
-    null // bez razítka pro úkoly
+    tStampMeta
   );
 }
 
@@ -11155,6 +11201,7 @@ function editTask() {
   _fillPripominka(t.pripominka);
   document.getElementById('tnm-prof').value = t.profese || '';
   _fillTaskSoDatalist(); var soElE=document.getElementById('tnm-so'); if(soElE) soElE.value = t.so || '';
+  var tStampE=document.getElementById('tnm-stamp-toggle'); if(tStampE) tStampE.checked = getStampPref();
   document.getElementById('tnm-lat').value = (t.lat !== undefined && t.lat !== null) ? t.lat : '';
   document.getElementById('tnm-lng').value = (t.lng !== undefined && t.lng !== null) ? t.lng : '';
   document.getElementById('tnm-km').value  = (t.km  !== undefined && t.km  !== null) ? t.km  : '';
@@ -13896,6 +13943,8 @@ function copyDiaryExport(){
     </div>
     <input id="note-nazev" class="note-field" type="text" placeholder="📛 Název (nepovinný)" maxlength="60" style="font-weight:600;">
     <input id="note-stanic" class="note-field" type="text" placeholder="📍 Staničení (např. 1+250) – umístí na mapu" maxlength="12" inputmode="text">
+    <input id="note-so" class="note-field" type="text" list="note-so-list" placeholder="🏗️ SO objekt (nepovinné) – do razítka" maxlength="40" autocomplete="off">
+    <datalist id="note-so-list"></datalist>
     <input id="note-author" class="note-field" type="text" placeholder="Vaše jméno *" maxlength="40">
     <textarea id="note-text" class="note-field" placeholder="Text poznámky..."></textarea>
     <div id="note-photos-preview" class="note-photos-preview"></div>
@@ -13904,7 +13953,7 @@ function copyDiaryExport(){
     <input type="file" id="note-gallery-input" accept="image/*" multiple style="display:none">
     <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:6px 0;cursor:pointer;">
       <input type="checkbox" id="note-stamp-toggle" checked style="width:18px;height:18px;cursor:pointer;">
-      <span>🏷️ Razítko do fotky (km, datum, jméno)</span>
+      <span>🏷️ Razítko do fotky (SO, km, datum, čas, jméno)</span>
     </label>
     <div class="note-btns">
       <button class="note-btn note-btn-cancel" onclick="closeNoteModal()">Zrušit</button>
@@ -14307,6 +14356,10 @@ function copyDiaryExport(){
     </div>
     <input type="file" id="tnm-photo-cam" accept="image/*" capture="environment" multiple style="display:none" onchange="addTaskPhotos(this)">
     <input type="file" id="tnm-photo-lib" accept="image/*" multiple style="display:none" onchange="addTaskPhotos(this)">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:6px 0;cursor:pointer;">
+      <input type="checkbox" id="tnm-stamp-toggle" checked style="width:18px;height:18px;cursor:pointer;">
+      <span>🏷️ Razítko do fotky (SO, km, datum, čas, jméno)</span>
+    </label>
 
     <label>Přiřadit (1+ osob)</label>
     <div id="assignee-list"></div>
