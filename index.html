@@ -5806,8 +5806,27 @@ function renderNewPhotoPreviews() {
   newNotePhotos.forEach(function(p, i) {
     var div = document.createElement('div');
     div.className = 'note-thumb';
-    div.innerHTML = '<img src="'+p.dataUrl+'"><button class="note-thumb-del" onclick="removeNewPhoto('+i+')">✕</button>';
+    var img = document.createElement('img');
+    setImgResolved(img, p.dataUrl);   // data:URL vrátí rovnou, cestu z appky přeloží na Storage URL
+    var btn = document.createElement('button');
+    btn.className = 'note-thumb-del'; btn.textContent = '✕';
+    btn.onclick = (function(idx){ return function(){ removeNewPhoto(idx); }; })(i);
+    div.appendChild(img); div.appendChild(btn);
     el.appendChild(div);
+  });
+}
+
+// 🗂️ Výběr fotky, která už je v aplikaci (galerie /standalone_photos) → do nové poznámky.
+// Uloží CESTU (ne data:URL) → v saveNote spadne do keepUrls = neuploaduje se znovu a NErazítkuje se
+// (fotka z appky už orazítkovaná je). Picker respektuje canViewPhoto → subka/investor cizí fotky nevidí.
+function noteAddFromAppGallery(){
+  openAppGalleryPick(function(it){
+    var ref = it.urlStamped || it.url;
+    if(!ref){ showToast('Fotka nemá URL', 2000); return; }
+    if(newNotePhotos.some(function(p){ return (p.dataUrl||p) === ref; })){ showToast('Fotka už je přidaná', 1500); return; }
+    newNotePhotos.push({ dataUrl: ref, name: 'app_foto.jpg', fromApp: true });
+    renderNewPhotoPreviews();
+    showToast('✅ Fotka přidána', 1200);
   });
 }
 
@@ -10745,6 +10764,7 @@ function openTaskAppGalleryPicker(){
   box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">⏳ Načítám…</div>';
   db.ref('standalone_photos').orderByChild('ts').once('value').then(function(snap){
     var items=[]; snap.forEach(function(ch){ var v=ch.val(); v.fbKey=ch.key; items.push(v); }); items.reverse();
+    items = items.filter(canViewPhoto);   // subka/investor přes picker cizí fotky nevybere
     if(!items.length){ box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">Zatím žádné fotky v galerii.</div>'; return; }
     box.innerHTML='';
     items.slice(0,300).forEach(function(it){
@@ -10831,6 +10851,7 @@ function openAppGalleryPick(cb){
   box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">⏳ Načítám…</div>';
   db.ref('standalone_photos').orderByChild('ts').once('value').then(function(snap){
     var items=[]; snap.forEach(function(ch){ var v=ch.val(); v.fbKey=ch.key; items.push(v); }); items.reverse();
+    items = items.filter(canViewPhoto);   // subka/investor přes picker cizí fotky nevybere
     if(!items.length){ box.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:30px;">Zatím žádné fotky v galerii.</div>'; return; }
     box.innerHTML='';
     items.slice(0,300).forEach(function(it){
@@ -13888,7 +13909,8 @@ function copyDiaryExport(){
     <div class="note-btns">
       <button class="note-btn note-btn-cancel" onclick="closeNoteModal()">Zrušit</button>
       <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-photo-input').click()" title="Vyfotit (po pořízení rovnou další - ukončit Zrušit v kameře)">📷</button>
-      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-gallery-input').click()" title="Vybrat z galerie">🖼️</button>
+      <button class="note-btn note-btn-addphoto" onclick="document.getElementById('note-gallery-input').click()" title="Vybrat z galerie telefonu">🖼️</button>
+      <button class="note-btn note-btn-addphoto" onclick="noteAddFromAppGallery()" title="Vybrat fotku, která už je v aplikaci">🗂️</button>
       <button class="note-btn note-btn-save" onclick="saveNote()">Uložit</button>
     </div>
   </div>
