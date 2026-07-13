@@ -1120,6 +1120,16 @@ document.addEventListener('touchend', function(e){
   </div>
 </div>
 
+<!-- Geo připomínka: úkol tady na místě (výrazný modal, ne toast) -->
+<div id="geo-remind-modal" style="display:none;position:fixed;inset:0;z-index:5300;background:rgba(15,20,40,.75);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border-radius:16px;max-width:420px;width:100%;padding:20px;border:2px solid #f5a623;box-shadow:0 8px 40px rgba(0,0,0,.55);">
+    <div style="font-size:19px;font-weight:800;color:#f5a623;margin-bottom:4px;">📍 Úkol tady na místě</div>
+    <p style="font-size:13px;color:var(--text2);margin:0 0 12px;">Jsi u stavby a máš tu rozdělaný úkol s připomínkou:</p>
+    <div id="geo-remind-list" style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto;"></div>
+    <button onclick="closeGeoRemind()" style="width:100%;margin-top:14px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;min-height:46px;">Zavřít</button>
+  </div>
+</div>
+
 <!-- iPhone instalační hint -->
 <div id="ios-install-hint">
   <span class="close" onclick="dismissIosHint()">✕</span>
@@ -4394,13 +4404,36 @@ function saveZkouska(){
   photoBufUpload('zkouska', function(urls){
     if(urls && urls.length) z.photos = urls;
     showSync('⏳ Ukládám zkoušku…');
-    db.ref('zkousky/'+id).set(z).then(function(){ hideSync(); showToast('✅ Zkouška uložena', 1500); window.editingZkouskaId=null; _fillZkouskaForm({}); renderZkouskyList(); }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2500); });
+    db.ref('zkousky/'+id).set(z).then(function(){ hideSync(); showToast('✅ Zkouška uložena', 1500); _mirrorZkouskaToGallery(z, urls); window.editingZkouskaId=null; _fillZkouskaForm({}); renderZkouskyList(); }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2500); });
+  });
+}
+// Zrcadlí fotky zkoušky do galerie (/standalone_photos) s SO/km zkoušky + tagem `kategorie:'zkousky'`,
+// aby byly vidět v galerii (grupované po SO) i u objektů. Deterministický klíč z cesty = idempotentní
+// (re-uložení zkoušky NEnaduplikuje). Fotky zdědí SO/km/datum zkoušky – „SO navíc, jinak klasika".
+function _mirrorZkouskaToGallery(z, urls){
+  if(!urls || !urls.length || !z) return;
+  var soL = z.so ? [z.so] : [];
+  urls.forEach(function(u){
+    if(!u) return;
+    var key = 'zk_' + String(u).replace(/[^a-z0-9]/gi,'_').slice(0,120);
+    var entry = {
+      url: u, stamped: false, so: z.so || '', soList: soL,
+      km: (z.km!=null ? z.km : null), author: z.technik || z.author || '',
+      uid: z.uid || (window.currentUser && window.currentUser.uid) || '',
+      date: z.datum || '', time: (z.datum||'') + (z.cas ? (' '+z.cas) : ''),
+      ts: z.ts || Date.now(), kategorie: 'zkousky', zkouskaId: z.id, zkouskaNazev: z.nazev || ''
+    };
+    if(z.lat!=null) entry.lat = z.lat;
+    if(z.lng!=null) entry.lng = z.lng;
+    db.ref('standalone_photos/'+key).update(entry).catch(function(){});
   });
 }
 function deleteZkouska(id){
   var z=zkouskyData[id]; if(!z) return;
   if(!canDelete(z.uid)){ showToast('Můžeš mazat jen své zkoušky', 2500); return; }
   if(!confirm('Smazat zkoušku „'+(z.nazev||'')+'"?')) return;
+  // Uklidit i zrcadlené fotky v galerii (deterministické klíče z cesty).
+  (z.photos||[]).forEach(function(u){ if(!u) return; var key='zk_'+String(u).replace(/[^a-z0-9]/gi,'_').slice(0,120); db.ref('standalone_photos/'+key).remove().catch(function(){}); });
   db.ref('zkousky/'+id).remove().then(function(){ showToast('🗑️ Smazáno', 1200); if(window.editingZkouskaId===id){ window.editingZkouskaId=null; _fillZkouskaForm({}); } }).catch(function(){ showToast('❌ Chyba', 2500); });
 }
 
@@ -8252,7 +8285,11 @@ function _renderSOPicker(){
     b.textContent = txt; b.onclick = fn; body.appendChild(b);
   }
   if(P.view === 'main'){
-    if(P.kand.length){ P.kand.forEach(row); }
+    // Zobraz GPS-kandidáty + předvybrané SO, které mezi kandidáty nejsou (#1 série: ať je vidíš a můžeš odškrtnout).
+    var shown = P.kand.slice();
+    var kandIds = {}; P.kand.forEach(function(o){ kandIds[o.id] = true; });
+    P.sel.forEach(function(id){ if(!kandIds[id]) shown.push({ id: id }); });
+    if(shown.length){ shown.forEach(row); }
     else { var n = document.createElement('div'); n.style.cssText = 'font-size:12px;color:var(--text2);padding:4px 2px 8px;'; n.textContent = 'U tohoto staničení žádný objekt – vyber ze seznamu níže.'; body.appendChild(n); }
     navBtn('📋 Všechny SO ze seznamu…', function(){ P.view = 'all'; _renderSOPicker(); });
     navBtn('📦 Ostatní / deponie / místa…', function(){ P.view = 'custom'; _renderSOPicker(); });
@@ -8444,6 +8481,7 @@ function takeStandalonePhoto() {
   }
   // Reset série a otevři foťák
   window.photoSession.count = 0;
+  window._lastSeriesSO = [];   // #1 nová série = zapomeň dřívější výběr SO
   document.getElementById('standalone-photo-input').click();
 }
 
@@ -8722,12 +8760,13 @@ function _processStandalonePhotoFile(file){
       chooseSOForPhoto(km, function(soArr, shareOpt){
         soArr = soArr || [];
         shareOpt = shareOpt || {};
+        window._lastSeriesSO = soArr.slice();   // #1 zapamatuj pro další fotku v sérii
         window.photoSession.pendingMeta.soList = soArr;
         window.photoSession.pendingMeta.so     = soArr[0] || '';
         window.photoSession.pendingMeta.sdilenoSub = !!shareOpt.sub;
         window.photoSession.pendingMeta.sdilenoInvestor = !!shareOpt.investor;
         ppAnswer(true);
-      }, null, function(){
+      }, (window._lastSeriesSO || []), function(){   // #1 preset = SO z předchozí fotky v sérii
         // 🗑️ Zahodit – fotka se nenahraje, nabídneme vyfotit další
         window.photoSession.pendingPhoto = null;
         window.photoSession.pendingMeta  = null;
@@ -8995,9 +9034,11 @@ function applyGalleryFilters(items){
   var srchWords = srch ? srch.split(/[\s,]+/).filter(Boolean) : [];
   var komEl = document.getElementById('gfilt-komentar');
   var onlyKom = komEl ? komEl.checked : false;
+  var zkEl = document.getElementById('gfilt-zkousky');
+  var onlyZk = zkEl ? zkEl.checked : false;
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = srch || onlyKom || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subKind && !isSubOnly() && !isInvestorOnly());
+  var anyActive = srch || onlyKom || onlyZk || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subKind && !isSubOnly() && !isInvestorOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   // Měsíční okno: bez filtru (a v ploché mřížce) ukaž jen posledních N měsíců (výkon u tisíců fotek).
@@ -9031,6 +9072,7 @@ function applyGalleryFilters(items){
     }
     var kom = _photoComment(it);
     if(onlyKom && !(kom && kom.text)) return false;
+    if(onlyZk && it.kategorie !== 'zkousky') return false;
     if(srchWords.length){
       // Hledá v AI popisu (tags) + SO + km + autor + datum + komentář (text i autor). AND.
       var hay = [it.tags, it.so, (it.soList||[]).join(' '), it.km, it.author, it.date, (kom?kom.text:''), (kom?kom.author:'')].filter(Boolean).join(' ').toLowerCase();
@@ -9167,6 +9209,7 @@ function clearGalleryFilters(){
   var subEl = document.getElementById('gfilt-sub'); if(subEl && !isSubOnly() && !isInvestorOnly()) subEl.value = '';
   var srchEl = document.getElementById('gfilt-search'); if(srchEl) srchEl.value = '';
   var komEl = document.getElementById('gfilt-komentar'); if(komEl) komEl.checked = false;
+  var zkEl2 = document.getElementById('gfilt-zkousky'); if(zkEl2) zkEl2.checked = false;
   renderGallery();
 }
 
@@ -9207,6 +9250,13 @@ function _galleryItemEl(item) {
     var subB = document.createElement('div');
     subB.className = 'gallery-sub-badge'; subB.textContent = 'SUB';
     div.appendChild(subB);
+  }
+  if(item.kategorie === 'zkousky'){
+    var zkB = document.createElement('div');
+    zkB.textContent = '🔬';
+    zkB.title = 'Fotka ke zkoušce' + (item.zkouskaNazev ? (': ' + item.zkouskaNazev) : '');
+    zkB.style.cssText = 'position:absolute;bottom:4px;right:4px;background:#0d9488;color:#fff;font-size:12px;font-weight:800;padding:1px 5px;border-radius:6px;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+    div.appendChild(zkB);
   }
   var _kn = _photoComments(item).length;
   if(_kn){
@@ -10186,7 +10236,8 @@ function _enterApp(displayName){
   // pak znovu, až se dotáhnou vrstvy z Firebase (poznámky/úkoly/SO/měření…).
   setTimeout(applyLayerDefaults, 1000);
   setTimeout(applyLayerDefaults, 3000);
-  setTimeout(_checkGeoReminders, 8000);   // #4 geo připomínky po fixaci GPS
+  // #4 geo připomínky – několik včasných pokusů (GPS fix může přijít pozdě), pak pravidelně.
+  [3000, 8000, 16000, 30000].forEach(function(ms){ setTimeout(_checkGeoReminders, ms); });
   if(!window._geoRemTimer) window._geoRemTimer = setInterval(_checkGeoReminders, 90000);
 }
 // Popup „za jakou firmu jsi?" po Gmail loginu (povinné, bez firmy nevpustí). Po uložení pokračuje do appky.
@@ -10579,7 +10630,7 @@ function deleteTaskFromFirebase(taskId, cb) {
   });
 }
 
-function sendTaskNotificationRequest(task, typ) {
+function sendTaskNotificationRequest(task, typ, extra) {
   // Cloud Function (viz cloud-function/) sleduje uzel /notifikace_fronta
   // a pošle FCM zprávu příslušným uživatelům. Pokud Cloud Function neexistuje,
   // notifikace prostě nepřijdou - úkolníček ale funguje normálně.
@@ -10595,6 +10646,8 @@ function sendTaskNotificationRequest(task, typ) {
     priorita:   task.priorita || 'normalni',   // řídí, jestli/jak se pošle push
     time:       Date.now()
   };
+  // @zmínky: seznam uid zmíněných v komentáři → CF jim pošle push i když nejsou přiřazení.
+  if(extra && extra.mentions && extra.mentions.length){ rec.mentions = extra.mentions; rec.mentionBy = extra.mentionBy || ''; rec.mentionText = extra.mentionText || ''; }
   db.ref('notifikace_fronta/' + rec.id).set(rec).catch(function(e){
     console.warn('Notifikace nemohly být zařazeny:', e);
   });
@@ -11056,18 +11109,39 @@ function _checkGeoReminders(){
   if(!window.currentUser || !gpsActive || !gpsMarker || !Array.isArray(window.allTasks)) return;
   var me = window.currentUser.uid;
   var here = gpsMarker.getLatLng();
-  var today = new Date().toISOString().slice(0,10);
+  var hit = [];
   window.allTasks.forEach(function(t){
     if(!t.pripominka || t.pripominka.typ !== 'geo' || t.stav === 'done') return;
     if(typeof t.lat !== 'number' || typeof t.lng !== 'number') return;
     var mine = t.zadalUid === me || (t.prirazeno||[]).some(function(p){ return p.uid === me; });
     if(!mine) return;
-    if(t._geoNudged === today) return;
+    if(t._geoNudged) return;                                        // už připomenuto v této relaci (= tomto otevření appky)
     if(haversine(here.lat, here.lng, t.lat, t.lng) > 400) return;   // do 400 m od úkolu
-    t._geoNudged = today;
-    showToast('📍 Připomínka na místě: ' + (t.title || 'úkol'), 5000);
+    t._geoNudged = true;
+    hit.push(t);
   });
+  if(hit.length) _showGeoRemindModal(hit);
 }
+// Výrazný modal místo přehlédnutelného toastu – zůstane, dokud ho uživatel nezavře.
+function _showGeoRemindModal(tasks){
+  var box = document.getElementById('geo-remind-list');
+  var modal = document.getElementById('geo-remind-modal');
+  if(!box || !modal) return;
+  box.innerHTML = '';
+  tasks.forEach(function(t){
+    var b = document.createElement('button');
+    var prio = (t.priorita==='vysoka'?'🚨 ':(t.priorita==='nizka'?'':'🔔 '));
+    b.style.cssText = 'text-align:left;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;cursor:pointer;color:var(--text);';
+    b.innerHTML = '<div style="font-weight:700;font-size:14px;">'+prio+escapeHtml(t.title||'úkol')+'</div>'+
+      (t.so?'<div style="font-size:11px;color:var(--accent2);margin-top:2px;">🏗️ '+escapeHtml(String(t.so))+'</div>':'')+
+      (t.text?'<div style="font-size:12px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(t.text)+'</div>':'');
+    b.onclick = (function(id){ return function(){ closeGeoRemind(); if(typeof openTaskDetail==='function') openTaskDetail(id); }; })(t.id);
+    box.appendChild(b);
+  });
+  modal.style.display = 'flex';
+  try { if(navigator.vibrate) navigator.vibrate([60,40,60]); } catch(e){}
+}
+function closeGeoRemind(){ var m=document.getElementById('geo-remind-modal'); if(m) m.style.display='none'; }
 function _updatePrioHint(){
   var el = document.getElementById('tnm-prio-hint'); if(!el) return;
   var v = (document.getElementById('tnm-priority')||{}).value || 'normalni';
@@ -11320,10 +11394,72 @@ function renderComments(t) {
   }
   box.innerHTML = arr.map(function(c){
     var dt = c.time ? new Date(c.time).toLocaleString('cs-CZ') : '';
-    return '<div class="td-comment"><div class="cmt-head"><b>' + escapeHtml(c.name) + '</b> · ' + dt + '</div><div>' + escapeHtml(c.text) + '</div></div>';
+    var txt = escapeHtml(c.text);
+    // Zvýrazni @zmínky (podle uložených jmen v komentáři).
+    (c.mentions||[]).forEach(function(mn){
+      if(!mn || !mn.name) return;
+      var esc = escapeHtml('@'+mn.name);
+      txt = txt.split(esc).join('<span style="color:var(--accent2);font-weight:700;">'+esc+'</span>');
+    });
+    return '<div class="td-comment"><div class="cmt-head"><b>' + escapeHtml(c.name) + '</b> · ' + dt + '</div><div>' + txt + '</div></div>';
   }).join('');
   // Scroll dolů
   box.scrollTop = box.scrollHeight;
+}
+
+// ── @ZMÍNKY v komentáři úkolu (WhatsApp styl: @ → vyber osobu) ──────────────
+window._mentionPicks = {};   // "@Celé Jméno" → uid (co uživatel vybral přes picker)
+function _hideMentionPop(){ var p=document.getElementById('mention-pop'); if(p) p.style.display='none'; }
+function _mentionCandidates(q){
+  q = (q||'').toLowerCase();
+  var users = window.allUsers || {}, out = [];
+  Object.keys(users).forEach(function(uid){
+    var u = users[uid]; if(!u || !u.name || u.blocked) return;
+    if(q && u.name.toLowerCase().indexOf(q) === -1) return;
+    out.push({ uid: uid, name: u.name, firma: u.firma||'' });
+  });
+  out.sort(function(a,b){ return a.name.localeCompare(b.name, undefined, {sensitivity:'base'}); });
+  return out.slice(0, 8);
+}
+function _onCommentInput(inp){
+  var val = inp.value, pos = inp.selectionStart || val.length;
+  var before = val.slice(0, pos);
+  var m = before.match(/@([\p{L}\w]*)$/u);   // @ + slovo těsně před kurzorem
+  if(!m){ _hideMentionPop(); return; }
+  var cands = _mentionCandidates(m[1]);
+  if(!cands.length){ _hideMentionPop(); return; }
+  var pop = document.getElementById('mention-pop');
+  if(!pop){ pop = document.createElement('div'); pop.id='mention-pop'; pop.style.cssText='position:fixed;z-index:5400;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-height:230px;overflow-y:auto;'; document.body.appendChild(pop); }
+  pop.innerHTML='';
+  cands.forEach(function(c){
+    var b=document.createElement('button');
+    b.style.cssText='display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:10px 12px;font-size:13px;cursor:pointer;min-height:42px;';
+    b.innerHTML='<b>@'+escapeHtml(c.name)+'</b>'+(c.firma?(' <span style="color:var(--text2);font-size:11px;">· '+escapeHtml(c.firma)+'</span>'):'');
+    b.onmousedown=function(e){ e.preventDefault(); _insertMention(inp, m.index, pos, c); };
+    pop.appendChild(b);
+  });
+  var r = inp.getBoundingClientRect();
+  pop.style.left = r.left+'px'; pop.style.width = r.width+'px'; pop.style.display='block';
+  pop.style.top = Math.max(6, r.top - pop.offsetHeight - 4) + 'px';   // nad inputem
+}
+function _insertMention(inp, atIdx, cursorPos, c){
+  var val = inp.value, tag = '@'+c.name+' ';
+  inp.value = val.slice(0, atIdx) + tag + val.slice(cursorPos);
+  window._mentionPicks['@'+c.name] = c.uid;
+  var np = atIdx + tag.length;
+  try { inp.setSelectionRange(np, np); } catch(e){}
+  inp.focus(); _hideMentionPop();
+}
+// Z textu vytáhne skutečně zmíněné osoby (které picker vybral a v textu zůstaly).
+function _extractMentions(text){
+  var out = [], seen = {};
+  Object.keys(window._mentionPicks||{}).forEach(function(tag){
+    if(text.indexOf(tag) !== -1){
+      var uid = window._mentionPicks[tag];
+      if(uid && !seen[uid]){ seen[uid]=1; out.push({ uid: uid, name: tag.slice(1) }); }
+    }
+  });
+  return out;
 }
 
 function addComment() {
@@ -11332,6 +11468,7 @@ function addComment() {
   if(!txt) return;
   var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
   if(!t || !window.currentUser) return;
+  var mentions = _extractMentions(txt);
   var cid = 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
   var cmt = {
     id:   cid,
@@ -11340,9 +11477,13 @@ function addComment() {
     text: txt,
     time: Date.now()
   };
+  if(mentions.length) cmt.mentions = mentions;
   db.ref('ukoly/' + t.id + '/komentare/' + cid).set(cmt).then(function(){
     input.value = '';
-    sendTaskNotificationRequest(t, 'komentar');
+    window._mentionPicks = {};   // reset po odeslání
+    _hideMentionPop();
+    // Zmíněným pošli push navíc (Cloud Function zpracuje rec.mentions).
+    sendTaskNotificationRequest(t, 'komentar', mentions.length ? { mentions: mentions.map(function(m){return m.uid;}), mentionBy: window.currentUser.name, mentionText: txt } : null);
   });
 }
 
@@ -14210,6 +14351,9 @@ function copyDiaryExport(){
     <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--text);cursor:pointer;">
       <input type="checkbox" id="gfilt-komentar" onchange="renderGallery()" style="width:18px;height:18px;"> 💬 Jen fotky s komentářem
     </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--text);cursor:pointer;">
+      <input type="checkbox" id="gfilt-zkousky" onchange="renderGallery()" style="width:18px;height:18px;"> 🔬 Jen fotky ke zkouškám
+    </label>
     <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
       <button onclick="generateMissingThumbs()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">🖼️ Zrychlit galerii (dogenerovat náhledy)</button>
       <div style="font-size:10px;color:var(--text2);margin-top:4px;">Jednorázově pro starší fotky – pak se galerie načítá rychleji. Běží na pozadí.</div>
@@ -14476,7 +14620,7 @@ function copyDiaryExport(){
     <label style="margin-top:6px;">Komentáře</label>
     <div id="td-comments"></div>
     <div style="display:flex;gap:6px;">
-      <input type="text" class="task-field" id="td-cmt-input" placeholder="Napsat komentář…" onkeydown="if(event.key==='Enter')addComment()">
+      <input type="text" class="task-field" id="td-cmt-input" placeholder="Napsat komentář… (@ = označit osobu)" autocomplete="off" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)" onkeydown="if(event.key==='Enter')addComment()">
       <button class="btn-primary" style="flex:0 0 auto;padding:0 14px;" onclick="addComment()">Odeslat</button>
     </div>
 

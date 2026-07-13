@@ -53,10 +53,14 @@ exports.sendTaskNotifications = functions
       if(rec.zadalUid) recipientUids.push(rec.zadalUid);
     } else if(rec.typ === 'komentar') {
       title = '💬 Nový komentář';
-      body = 'Komentář k úkolu "' + (rec.title || '') + '"';
-      // Posíláme zadavateli i všem přiřazeným
+      // Když je v komentáři @zmínka, ukaž rovnou text komentáře (kdo a co); jinak obecné.
+      body = rec.mentionText
+        ? ((rec.mentionBy ? (rec.mentionBy + ': ') : '') + rec.mentionText)
+        : ('Komentář k úkolu "' + (rec.title || '') + '"');
+      // Posíláme zadavateli, všem přiřazeným a navíc @zmíněným (i když přiřazení nejsou).
       if(rec.zadalUid) recipientUids.push(rec.zadalUid);
       (rec.prirazeno || []).forEach(p => { if(p.uid) recipientUids.push(p.uid); });
+      if(Array.isArray(rec.mentions)) rec.mentions.forEach(uid => { if(uid) recipientUids.push(uid); });
     } else if(rec.typ === 'foto_komentar') {
       title = '💬 Komentář k fotce';
       body = (rec.zadalName || 'Někdo') + ': ' + (rec.komentText || '') + (rec.label ? (' (' + rec.label + ')') : '');
