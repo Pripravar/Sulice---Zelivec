@@ -1095,14 +1095,28 @@ document.addEventListener('touchend', function(e){
     <div id="auth-view-name" style="display:none;">
       <p style="text-align:left;">Jak se jmenuješ?</p>
       <input type="text" id="name-input" class="auth-input" placeholder="Jméno a příjmení" autocapitalize="words" autocomplete="name">
+      <input type="text" id="firma-input" class="auth-input" list="firma-list" placeholder="🏢 Firma / zaměstnavatel" autocapitalize="words">
       <div class="auth-note auth-note-warn" style="text-align:left;">
-        ⚠️ <b>Napiš CELÉ jméno a příjmení.</b> Žádné přezdívky ani zkratky!<br>
-        Podle jména Tě administrátor pozná a schválí. <b>Bez plného jména může být přístup odmítnut.</b>
+        ⚠️ <b>Napiš CELÉ jméno a příjmení + firmu.</b> Žádné přezdívky ani zkratky!<br>
+        Podle jména a firmy Tě administrátor pozná a schválí. <b>Bez plného jména může být přístup odmítnut.</b>
       </div>
       <button class="auth-google" onclick="savePhoneUserName()">Pokračovat →</button>
     </div>
+    <datalist id="firma-list"></datalist>
 
     <div id="auth-error"></div>
+  </div>
+</div>
+
+<!-- Doplnění firmy (Gmail login – povinné, blokující) -->
+<div id="firma-modal" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(15,20,40,.94);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--panel);border-radius:16px;max-width:400px;width:100%;padding:20px;border:1px solid var(--border);box-shadow:0 8px 40px rgba(0,0,0,.5);">
+    <div style="font-size:18px;font-weight:800;color:var(--accent2);margin-bottom:6px;">🏢 Za jakou firmu jsi?</div>
+    <p style="font-size:13px;color:var(--text2);margin:0 0 12px;line-height:1.4;">Napiš svého zaměstnavatele / firmu. Podle toho Tě administrátor zařadí. <b>Bez firmy nelze pokračovat.</b></p>
+    <input type="text" id="firma-modal-input" list="firma-list" placeholder="🏢 Firma / zaměstnavatel" autocapitalize="words" style="width:100%;padding:12px;font-size:15px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);box-sizing:border-box;">
+    <div id="firma-modal-err" style="color:#e94560;font-size:12px;min-height:14px;margin:6px 0;"></div>
+    <button onclick="saveFirmaModal()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">Uložit a pokračovat →</button>
+    <button onclick="signOutUser()" style="width:100%;background:none;border:none;color:var(--text2);font-size:12px;padding:10px;margin-top:4px;cursor:pointer;">Odhlásit</button>
   </div>
 </div>
 
@@ -9687,6 +9701,7 @@ function showUserMenu() {
 // ── Admin panel: Správa uživatelů (jen admin) ───────────────────────
 function openUserAdmin(){
   if(!isAdmin()){ showToast('Jen pro administrátora', 2500); return; }
+  _fillFirmaList();
   _renderUserAdmin();
   document.getElementById('user-admin-modal').style.display = 'flex';
 }
@@ -9906,6 +9921,11 @@ function _renderUserAdmin(){
           '<button onclick="toggleUserBlocked(\''+uid+'\')" title="'+(blk?'Odblokovat':'Zablokovat')+'" style="background:'+(blk?'#48bb78':'#e57373')+';border:none;border-radius:8px;color:#fff;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">'+(blk?'✅':'🚫')+'</button>'+
           '<button onclick="deleteUserAccount(\''+uid+'\')" title="Smazat uživatele ze seznamu (např. duplicitní přihlášení)" style="background:var(--panel2);border:1px solid #e57373;border-radius:8px;color:#e57373;padding:8px;font-size:15px;cursor:pointer;min-width:40px;min-height:40px;flex-shrink:0;">🗑</button>')+
       '</div>'+
+      // Firma (u KAŽDÉHO – řídí seskupení v šichtovce). Prázdná = oranžový rámeček, ať admin pozná chybějící.
+      '<div style="margin:8px 0 0 48px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
+        '<span style="font-size:12px;color:var(--text2);">🏢 Firma:</span>'+
+        '<input type="text" list="firma-list" value="'+escapeHtml(u.firma||'')+'" placeholder="(nevyplněno)" onchange="setUserFirma(\''+uid+'\',this.value)" style="font-size:12px;flex:1;min-width:120px;background:var(--panel2);color:var(--text);border:1px solid '+((u.firma||'').trim()?'var(--border)':'#f5a623')+';border-radius:6px;padding:5px 8px;">'+
+      '</div>'+
       // Per-funkce práva (admin má vždy vše → u admina skryj)
       (adm ? '' : '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 2px 48px;">'+
         FEATURES.map(function(f){
@@ -9996,6 +10016,13 @@ function setUserCategory(uid, cat){
     .then(function(){ showToast('👤 '+(u.name||'Uživatel')+' → '+lbl, 2200); })
     .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
+function setUserFirma(uid, val){
+  if(!isAdmin()) return;
+  var firma = (val || '').trim().replace(/\s+/g, ' ');
+  db.ref('uzivatele/'+uid+'/firma').set(firma || null)
+    .then(function(){ showToast('🏢 Firma uložena', 1600); _fillFirmaList(); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
+}
 function toggleUserAdmin(uid, makeAdmin){
   if(!isAdmin()) return;
   if(uid === (window.currentUser&&window.currentUser.uid)){ showToast('Sebe měnit nemůžeš', 2500); return; }
@@ -10046,7 +10073,20 @@ function _setAuthView(name) {
 function showMainView()  { _setAuthView('main'); }
 function showPhoneView() { _setAuthView('phone'); }
 function showCodeView()  { _setAuthView('code'); }
-function showNameView()  { _setAuthView('name'); }
+function showNameView()  { _setAuthView('name'); _fillFirmaList(); }
+// Naplní <datalist id="firma-list"> firmami, které už jsou u uživatelů (našeptávač – proti překlepům,
+// ať seskupení „po firmách" v šichtovce sedí). Před vstupem do appky čte /uzivatele jednorázově.
+function _fillFirmaList(){
+  var dl = document.getElementById('firma-list'); if(!dl) return;
+  function build(obj){
+    var set = {};
+    Object.keys(obj||{}).forEach(function(k){ var f=((obj[k]&&obj[k].firma)||'').trim(); if(f) set[f]=true; });
+    dl.innerHTML = Object.keys(set).sort(function(a,b){return a.localeCompare(b,undefined,{sensitivity:'base'});})
+      .map(function(f){ return '<option value="'+escapeHtml(f)+'">'; }).join('');
+  }
+  if(window.allUsers && Object.keys(window.allUsers).length){ build(window.allUsers); }
+  else { try { db.ref('uzivatele').once('value').then(function(s){ build(s.val()||{}); }).catch(function(){}); } catch(e){} }
+}
 
 // ── Dokončit přihlášení (společné pro Google i telefon) ─────────────
 function completeLogin(user, nameOverride, phoneOverride) {
@@ -10077,6 +10117,7 @@ function completeLogin(user, nameOverride, phoneOverride) {
   // BLOKACE + SCHVÁLENÍ: zablokovaného nepustíme; nového (neschváleného) necháme čekat na admina.
   db.ref('uzivatele/' + user.uid).once('value').then(function(snap){
     var u = snap.val() || {};
+    if(window.currentUser) window.currentUser.firma = u.firma || '';   // pro firma-gate v _enterApp
     if(u.blocked === true){
       window.currentUser = null;
       _setAuthView('main');
@@ -10122,6 +10163,11 @@ function _showPendingApproval(uid, displayName){
 }
 // Vpuštění do aplikace (po ověření, že uživatel není zablokovaný).
 function _enterApp(displayName){
+  // POVINNÁ FIRMA: kdo ještě nemá firmu (typicky Gmail login, případně starý účet) → blokující popup.
+  // Telefon ji vyplní už u jména, takže se sem nedostane. subMode (bezloginové focení) přeskoč.
+  if(!window.subMode && window.currentUser && !((window.currentUser.firma||'').trim())){
+    _showFirmaModal(displayName); return;   // saveFirmaModal po uložení zavolá _enterApp znovu
+  }
   document.getElementById('user-photo').src = (window.currentUser && window.currentUser.photo) || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%23a0aec0%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M12 14c-4 0-8 2-8 6v2h16v-2c0-4-4-6-8-6z%22/></svg>';
   document.getElementById('user-name').textContent = displayName.split(' ')[0];
   localStorage.setItem('noteAuthor', displayName);
@@ -10142,6 +10188,29 @@ function _enterApp(displayName){
   setTimeout(applyLayerDefaults, 3000);
   setTimeout(_checkGeoReminders, 8000);   // #4 geo připomínky po fixaci GPS
   if(!window._geoRemTimer) window._geoRemTimer = setInterval(_checkGeoReminders, 90000);
+}
+// Popup „za jakou firmu jsi?" po Gmail loginu (povinné, bez firmy nevpustí). Po uložení pokračuje do appky.
+function _showFirmaModal(displayName){
+  window._firmaGateName = displayName || (window.currentUser && window.currentUser.name) || '';
+  _fillFirmaList();
+  var m = document.getElementById('firma-modal'); if(!m) return;
+  var inp = document.getElementById('firma-modal-input'); if(inp) inp.value = (window.currentUser && window.currentUser.firma) || '';
+  var err = document.getElementById('firma-modal-err'); if(err) err.textContent = '';
+  m.style.display = 'flex';
+  setTimeout(function(){ if(inp) inp.focus(); }, 150);
+}
+function saveFirmaModal(){
+  var inp = document.getElementById('firma-modal-input');
+  var err = document.getElementById('firma-modal-err');
+  var firma = (inp && inp.value || '').trim().replace(/\s+/g, ' ');
+  if(!firma){ if(err) err.textContent = '❗ Napiš firmu / zaměstnavatele.'; return; }
+  var u = window.currentUser; if(!u){ return; }
+  if(err) err.textContent = '⏳ Ukládám…';
+  db.ref('uzivatele/' + u.uid + '/firma').set(firma).then(function(){
+    window.currentUser.firma = firma;
+    document.getElementById('firma-modal').style.display = 'none';
+    _enterApp(window._firmaGateName);   // firma je vyplněná → gate propustí
+  }).catch(function(e){ if(err) err.textContent = 'Chyba uložení: ' + ((e&&(e.code||e.message))||''); });
 }
 
 // ── SUB / firma režim: bez přihlášení, jen jméno, JEN focení (přes Cloud Function) ──
@@ -10383,6 +10452,8 @@ function savePhoneUserName() {
     showAuthError('❗ Zadej CELÉ jméno i příjmení (ne přezdívku ani zkratku) — jinak Tě admin nemusí schválit.');
     return;
   }
+  var firma = (document.getElementById('firma-input').value || '').trim().replace(/\s+/g, ' ');
+  if(!firma) { showAuthError('❗ Vyplň i firmu / zaměstnavatele.'); return; }
   var u = fbAuth.currentUser;
   if(!u) { showAuthError('Chyba: nejsi přihlášen.'); return; }
   var phone = window._pendingPhone || u.phoneNumber || '';
@@ -10392,6 +10463,7 @@ function savePhoneUserName() {
       return db.ref('uzivatele/' + u.uid).update({
         uid: u.uid,
         name: name,
+        firma: firma,
         email: u.email || '',
         phone: phone,
         photo: u.photoURL || '',
