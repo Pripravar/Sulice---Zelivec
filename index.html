@@ -1473,6 +1473,10 @@ document.addEventListener('touchend', function(e){
           <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Objekt (SO)</label><select id="zk-so" class="task-field"><option value="">— SO —</option></select></div>
         </div>
         <div style="display:flex;gap:8px;">
+          <div style="flex:0 0 128px;"><label style="font-size:11px;color:var(--text2);">Druh zkoušky</label><select id="zk-druh" class="task-field"><option value="radna">Řádná</option><option value="opravna">Opravná</option></select></div>
+          <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">📍 Poznámka ke staničení</label><input id="zk-poznamka" class="task-field" type="text" placeholder="pravá strana, levý pruh…"></div>
+        </div>
+        <div style="display:flex;gap:8px;">
           <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Datum</label><input id="zk-datum" class="task-field" type="date"></div>
           <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Čas</label><input id="zk-cas" class="task-field" type="time"></div>
         </div>
@@ -1483,9 +1487,10 @@ document.addEventListener('touchend', function(e){
         <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;">
           <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Doplní se, až přijde protokol (do té doby ⚠️):</div>
           <div style="display:flex;gap:8px;">
-            <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Výsledek</label><input id="zk-vysledek" class="task-field" type="text" placeholder="vyhověl / 98,5 %…"></div>
-            <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Číslo protokolu</label><input id="zk-protokol" class="task-field" type="text" placeholder="č. protokolu"></div>
+            <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Hodnocení</label><select id="zk-verdikt" class="task-field"><option value="">— zatím —</option><option value="vyhovel">✅ Vyhovující</option><option value="nevyhovel">❌ Nevyhovující</option></select></div>
+            <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Výsledek (text)</label><input id="zk-vysledek" class="task-field" type="text" placeholder="98,5 % / hodnota…"></div>
           </div>
+          <div style="margin-top:6px;"><label style="font-size:11px;color:var(--text2);">Číslo protokolu</label><input id="zk-protokol" class="task-field" type="text" placeholder="č. protokolu"></div>
         </div>
         <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;">
           <label style="font-size:11px;color:var(--text2);">Fotky (vzorek, dodák, protokol…)</label>
@@ -4347,24 +4352,40 @@ function renderZkouskyList(){
   if(!ids.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:20px;font-size:13px;">Zatím žádné zkoušky. Přidej první ve formuláři níže.</div>'; return; }
   box.innerHTML=ids.map(function(id){
     var z=zkouskyData[id]; var done=_zkouskaComplete(z); var can=canDelete(z.uid);
+    var vIcon = z.verdikt==='vyhovel' ? '✅ ' : (z.verdikt==='nevyhovel' ? '❌ ' : '');
+    var lead = vIcon ? vIcon : (done?'🔬':'⚠️');
+    var opravna = (z.druh==='opravna') ? '<span style="background:#f59e0b;color:#0f3460;font-size:9px;font-weight:800;padding:1px 5px;border-radius:6px;margin-left:4px;">OPRAVNÁ</span>' : '';
+    var metaArr = [z.so, (z.km!=null?('km '+fmtKm(z.km)):''), z.poznamka, z.vrstva, z.datum, z.technik, z.firma].filter(Boolean).map(escapeHtml);
+    var stavTxt = z.verdikt==='vyhovel' ? ('✅ Vyhovující'+(z.vysledek?(' · '+escapeHtml(z.vysledek)):'')+(z.protokol?(' · protokol '+escapeHtml(z.protokol)):''))
+                : z.verdikt==='nevyhovel' ? ('❌ Nevyhovující'+(z.vysledek?(' · '+escapeHtml(z.vysledek)):'')+(z.protokol?(' · protokol '+escapeHtml(z.protokol)):''))
+                : (done?('✓ '+escapeHtml(z.vysledek)+' · protokol '+escapeHtml(z.protokol)):'⚠️ čeká na výsledek / číslo protokolu');
+    var stavColor = z.verdikt==='nevyhovel' ? '#ef4444' : (done||z.verdikt==='vyhovel' ? '#22c55e' : '#f59e0b');
     return '<div style="border-bottom:1px solid var(--border);padding:9px 2px;display:flex;align-items:center;gap:8px;">'+
-      '<span style="font-size:16px;flex-shrink:0;">'+(done?'🔬':'⚠️')+'</span>'+
+      '<span style="font-size:16px;flex-shrink:0;">'+lead+'</span>'+
       '<div style="flex:1;min-width:0;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(z.nazev||'Zkouška')+(z.material?(' · '+escapeHtml(z.material)):'')+'</div>'+
-        '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+[z.so, (z.km!=null?('km '+fmtKm(z.km)):''), z.vrstva, z.datum, z.technik, z.firma].filter(Boolean).map(escapeHtml).join(' · ')+((z.photos&&z.photos.length)?(' · 📷 '+z.photos.length):'')+'</div>'+
-        '<div style="font-size:11px;color:'+(done?'#22c55e':'#f59e0b')+';">'+(done?('✓ '+escapeHtml(z.vysledek)+' · protokol '+escapeHtml(z.protokol)):'⚠️ čeká na výsledek / číslo protokolu')+'</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(z.nazev||'Zkouška')+(z.material?(' · '+escapeHtml(z.material)):'')+opravna+'</div>'+
+        '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+metaArr.join(' · ')+((z.photos&&z.photos.length)?(' · 📷 '+z.photos.length):'')+'</div>'+
+        '<div style="font-size:11px;color:'+stavColor+';">'+stavTxt+'</div>'+
       '</div>'+
+      '<button onclick="copyZkouska(\''+id+'\')" title="Kopírovat jako novou zkoušku" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:14px;cursor:pointer;min-width:38px;min-height:38px;flex-shrink:0;">📋</button>'+
       '<button onclick="editZkouska(\''+id+'\')" title="Upravit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-size:14px;cursor:pointer;min-width:38px;min-height:38px;flex-shrink:0;">✏️</button>'+
       (can?('<button onclick="deleteZkouska(\''+id+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:8px;color:#fff;padding:8px;font-size:14px;cursor:pointer;min-width:38px;min-height:38px;flex-shrink:0;">🗑</button>'):'')+
     '</div>';
   }).join('');
 }
 function _zf(id){ return document.getElementById('zk-'+id); }
-function zkouskaFillSoOptions(){
+function zkouskaFillSoOptions(keepVal){
   var so=_zf('so'); if(!so) return;
-  var cur=so.value, opts=['<option value="">— SO (volitelně) —</option>'];
-  if(typeof STAVEBNI_OBJEKTY!=='undefined') STAVEBNI_OBJEKTY.forEach(function(s){ opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id)+'</option>'); });
-  if(typeof DOPLNKY_SO!=='undefined') DOPLNKY_SO.forEach(function(s){ opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id)+'</option>'); });
+  var cur=(keepVal!=null)?keepVal:so.value, opts=['<option value="">— SO (volitelně) —</option>'], seen={};
+  // Sjednoceno s výběrem SO u FOTEK: stejný katalog i popisky (SO_CATALOG + vlastní objekty).
+  // Dřív to bralo z STAVEBNI_OBJEKTY (jen id) → matoucí, nesedělo to s fotkami.
+  var pools = [ (typeof SO_CATALOG!=='undefined'?SO_CATALOG:[]), (typeof customSO!=='undefined'?customSO:[]) ];
+  pools.forEach(function(arr){ (arr||[]).forEach(function(s){
+    if(!s || !s.id || seen[s.id]) return; seen[s.id]=true;
+    opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id + (s.short?(' – '+s.short):''))+'</option>');
+  }); });
+  // Kdyby uložená zkouška měla SO mimo katalog (starší data), přidej ho, ať se v selectu ukáže.
+  if(cur && !seen[cur]) opts.push('<option value="'+escapeHtml(cur)+'">'+escapeHtml(cur)+'</option>');
   so.innerHTML=opts.join(''); so.value=cur;
 }
 function _fillZkouskaForm(z){
@@ -4373,11 +4394,30 @@ function _fillZkouskaForm(z){
   _zf('km').value=(z.km!=null?z.km:''); _zf('technik').value=z.technik||''; _zf('firma').value=z.firma||'';
   _zf('datum').value=z.datum||_ymdToday(); _zf('cas').value=z.cas||'';
   _zf('vysledek').value=z.vysledek||''; _zf('protokol').value=z.protokol||'';
-  zkouskaFillSoOptions(); var so=_zf('so'); if(so) so.value=z.so||'';
+  if(_zf('druh')) _zf('druh').value=z.druh||'radna';
+  if(_zf('poznamka')) _zf('poznamka').value=z.poznamka||'';
+  if(_zf('verdikt')) _zf('verdikt').value=z.verdikt||'';
+  zkouskaFillSoOptions(z.so||'');
   setPhotoBuf('zkouska', (z.photos||[]).map(function(u){ return {url:u}; })); renderPhotoBuf('zkouska','zk-photos-preview');
   var tit=document.getElementById('zk-form-title'); if(tit) tit.textContent = window.editingZkouskaId ? '✏️ Upravit zkoušku' : '➕ Nová zkouška';
 }
 function newZkouska(){ window.editingZkouskaId=null; _fillZkouskaForm({}); showToast('Nová zkouška – vyplň formulář', 1500); }
+// Kopie předešlé zkoušky jako NOVÁ – zkopíruje společné údaje, vyprázdní to, co se liší
+// (foto/hodnocení/výsledek/protokol/čas). Šetří opakované vyplňování stejných zkoušek.
+function copyZkouska(id){
+  if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky Ti admin nepovolil', 3000); return; }
+  var src=zkouskyData[id]; if(!src) return;
+  window.editingZkouskaId=null;   // uloží se jako NOVÁ zkouška
+  _fillZkouskaForm({
+    nazev:src.nazev||'', material:src.material||'', vrstva:src.vrstva||'',
+    km:(src.km!=null?src.km:null), so:src.so||'', druh:src.druh||'radna', poznamka:src.poznamka||'',
+    datum:_ymdToday(), cas:'', technik:src.technik||'', firma:src.firma||'',
+    verdikt:'', vysledek:'', protokol:'', photos:[]
+  });
+  var tit=document.getElementById('zk-form-title'); if(tit) tit.textContent='➕ Nová zkouška (kopie)';
+  showToast('📋 Zkopírováno – uprav staničení/foto/výsledek a ulož', 2800);
+  var f=document.getElementById('zk-form-title'); if(f) f.scrollIntoView({behavior:'smooth', block:'start'});
+}
 function editZkouska(id){ if(!hasPerm('zkousky')){ showToast('🔬 Zkoušky Ti admin nepovolil', 3000); return; } window.editingZkouskaId=id; document.getElementById('zkousky-modal').style.display='flex'; renderZkouskyList(); _fillZkouskaForm(zkouskyData[id]||{}); }
 function zkouskaFillKmFromGps(){
   if(!gpsActive || !gpsMarker){ showToast('⚠️ Zapni GPS', 2500); return; }
@@ -4395,7 +4435,9 @@ function saveZkouska(){
   var z={
     id:id, nazev:nazev, material:(_zf('material').value||'').trim(), vrstva:(_zf('vrstva').value||'').trim(),
     km:(!isNaN(kmv)?kmv:null), so:(_zf('so').value||''), datum:_zf('datum').value||'', cas:_zf('cas').value||'',
+    druh:(_zf('druh')?_zf('druh').value:'radna')||'radna', poznamka:(_zf('poznamka')?(_zf('poznamka').value||'').trim():''),
     technik:(_zf('technik').value||'').trim(), firma:(_zf('firma').value||'').trim(),
+    verdikt:(_zf('verdikt')?_zf('verdikt').value:'')||'',
     vysledek:(_zf('vysledek').value||'').trim(), protokol:(_zf('protokol').value||'').trim(),
     uid: ex.uid || window.currentUser.uid, author: ex.author || window.currentUser.name,
     ts: ex.ts || Date.now(), upraveno: Date.now()
@@ -8557,11 +8599,11 @@ function _denikAssembleText(){
   if(d.pocasi) lines.push('Počasí: ' + d.pocasi);
   var sicht = d.sichtovka || {}, pozn = d.sichtovka_pozn || {};
   var workers = (typeof getAllWorkers==='function') ? getAllWorkers() : [], wl = [];
-  workers.forEach(function(w){ var h=sicht[w.id]; if(h){ var so=effectiveSOForId(w.id,dt,'osoby'); wl.push(w.name+(w.firma?(' ['+w.firma+']'):'')+' – '+h+' h'+(so?(' · SO '+so):'')+(pozn[w.id]?(' ('+pozn[w.id]+')'):'')); } });
+  workers.forEach(function(w){ var h=sicht[w.id]; if(h){ var so=effectiveSOForId(w.id,dt,'osoby'); wl.push(w.name+(w.firma?(' ['+w.firma+']'):'')+' – '+h+' h'+(so?(' · '+so):'')+(pozn[w.id]?(' ('+pozn[w.id]+')'):'')); } });
   if(wl.length) lines.push('Lidé:\n' + wl.join('\n'));
   var strojH = d.stroje || {}, strojP = d.stroje_pozn || {};
   var stroje = (typeof getAllStroje==='function') ? getAllStroje() : [], sl = [];
-  stroje.forEach(function(s){ var h=strojH[s.id]; if(h){ var so=effectiveSOForId(s.id,dt,'stroje'); sl.push((s.nazev||'stroj')+' – '+h+' h'+(so?(' · SO '+so):'')+(strojP[s.id]?(' ('+strojP[s.id]+')'):'')); } });
+  stroje.forEach(function(s){ var h=strojH[s.id]; if(h){ var so=effectiveSOForId(s.id,dt,'stroje'); sl.push((s.nazev||'stroj')+' – '+h+' h'+(so?(' · '+so):'')+(strojP[s.id]?(' ('+strojP[s.id]+')'):'')); } });
   if(sl.length) lines.push('Stroje:\n' + sl.join('\n'));
   var zaz = d.zaznamy || {};
   var zl = Object.keys(zaz).map(function(k){ return zaz[k]; }).sort(function(a,b){ return (a.time||0)-(b.time||0); }).map(function(z){ var t=z.time?new Date(z.time):null; var hh=t?(String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')):''; return (hh?hh+' ':'')+(z.text||''); }).filter(function(s){ return s.trim(); });
@@ -11739,32 +11781,50 @@ function changeSOForDay(id, kind, val){
   else renderSichtovka();
 }
 
+// #7 – SO v šichtovce nově jako VÍCE objektů (čárkou oddělený seznam „SO 101, SO 103").
+// Tlačítko zobrazí aktuální výběr a otevře multi-select popup.
 function _soSelectHtml(id, kind, currentValue){
-  var sos = getAllProjectSOs();
-  if(currentValue && sos.indexOf(currentValue) === -1) sos.unshift(currentValue);
-  // První volba: explicitní "Bez SO" (value = "" → uloží prázdný string jako override)
-  // Pokud currentValue je '', tato volba bude vybraná.
-  var isNone = (currentValue === '' || currentValue == null);
-  var opts = '<option value=""' + (isNone ? ' selected' : '') + '>⊘ Bez SO</option>';
-  sos.forEach(function(so){
-    opts += '<option value="' + escapeHtml(so) + '"' + (so === currentValue ? ' selected' : '') + '>' + escapeHtml(so) + '</option>';
-  });
-  opts += '<option value="__custom__">+ jiné…</option>';
-  opts += '<option value="__reset__">↺ Vymazat denní volbu</option>';
-  return '<select class="sht-so-sel" data-id="' + id + '" data-kind="' + kind + '" onchange="handleSOSelectChange(this)" onclick="event.stopPropagation()" title="SO platí od tohohle dne dál">' + opts + '</select>';
+  var lbl = (currentValue && currentValue.trim()) ? currentValue.trim() : '⊘ Bez SO';
+  return '<button type="button" class="sht-so-sel" data-id="'+id+'" data-kind="'+kind+'" onclick="event.stopPropagation();openSichtSoPicker(\''+id+'\',\''+kind+'\')" title="SO platí od tohohle dne dál – můžeš vybrat víc objektů" style="text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🏗️ '+escapeHtml(lbl)+'</button>';
 }
-
-function handleSOSelectChange(sel){
-  var id   = sel.getAttribute('data-id');
-  var kind = sel.getAttribute('data-kind');
-  var v = sel.value;
-  if(v === '__custom__') {
-    var current = effectiveSOForId(id, window.diaryCurrentDate, kind);
-    var custom = prompt('Zadej nové SO (např. SO 108 nebo "DZ 101"):', current || '');
-    if(custom === null) { sel.value = current || ''; return; }
-    v = (custom || '').trim();
+function openSichtSoPicker(id, kind){
+  var current = effectiveSOForId(id, window.diaryCurrentDate, kind) || '';
+  var selSet = {};
+  current.split(',').map(function(s){return s.trim();}).filter(Boolean).forEach(function(s){ selSet[s]=true; });
+  window._sichtSoCtx = { id:id, kind:kind, selSet:selSet };
+  var ov = document.getElementById('sicht-so-modal');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='sicht-so-modal';
+    ov.style.cssText='position:fixed;inset:0;z-index:4600;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;';
+    ov.innerHTML='<div style="background:var(--panel);border-radius:14px;max-width:440px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;"><div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🏗️ Objekty (můžeš vybrat víc)</div><button onclick="document.getElementById(\'sicht-so-modal\').style.display=\'none\'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button></div>'
+      +'<div id="sicht-so-list" style="padding:10px 14px;overflow-y:auto;flex:1;"></div>'
+      +'<div style="display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--border);"><input id="sicht-so-custom" type="text" placeholder="+ jiné SO (např. SO 108)" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);"><button onclick="_sichtSoAddCustom()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0 12px;cursor:pointer;min-height:40px;">Přidat</button></div>'
+      +'<div style="display:flex;gap:6px;padding:0 14px 14px;"><button onclick="_sichtSoClear()" style="flex:0 0 auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:11px 12px;cursor:pointer;">⊘ Bez SO</button><button onclick="_sichtSoSave()" style="flex:1;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:11px;font-weight:700;cursor:pointer;">Uložit</button></div></div>';
+    document.body.appendChild(ov);
   }
-  changeSOForDay(id, kind, v);
+  ov.style.display='flex';
+  _renderSichtSoList();
+}
+function _renderSichtSoList(){
+  var box=document.getElementById('sicht-so-list'); if(!box||!window._sichtSoCtx) return;
+  var selSet=window._sichtSoCtx.selSet;
+  var sos=getAllProjectSOs();
+  Object.keys(selSet).forEach(function(s){ if(sos.indexOf(s)===-1) sos.unshift(s); });   // i vybrané mimo seznam
+  if(!sos.length){ box.innerHTML='<div style="color:var(--text2);font-size:12px;padding:10px 2px;">Zatím žádné SO – přidej přes pole níže.</div>'; return; }
+  box.innerHTML=sos.map(function(so){
+    var on=!!selSet[so];
+    return '<button type="button" onclick="_sichtSoToggle(this.getAttribute(\'data-so\'))" data-so="'+escapeHtml(so)+'" style="display:block;width:100%;text-align:left;background:'+(on?'rgba(34,211,238,.15)':'var(--panel2)')+';border:1px solid '+(on?'#22d3ee':'var(--border)')+';border-radius:8px;color:var(--text);padding:11px 12px;margin-bottom:6px;font-size:13px;cursor:pointer;">'+(on?'✅ ':'⬜ ')+escapeHtml(so)+'</button>';
+  }).join('');
+}
+function _sichtSoToggle(so){ var s=window._sichtSoCtx.selSet; if(s[so]) delete s[so]; else s[so]=true; _renderSichtSoList(); }
+function _sichtSoAddCustom(){ var inp=document.getElementById('sicht-so-custom'); var v=(inp.value||'').trim(); if(!v||!window._sichtSoCtx) return; window._sichtSoCtx.selSet[v]=true; inp.value=''; _renderSichtSoList(); }
+function _sichtSoClear(){ if(window._sichtSoCtx){ window._sichtSoCtx.selSet={}; } _sichtSoSave(); }
+function _sichtSoSave(){
+  var ctx=window._sichtSoCtx; if(!ctx) return;
+  var joined=Object.keys(ctx.selSet).join(', ');
+  var m=document.getElementById('sicht-so-modal'); if(m) m.style.display='none';
+  changeSOForDay(ctx.id, ctx.kind, joined);
 }
 
 function loadPracovnici(){
