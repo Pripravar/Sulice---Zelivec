@@ -6114,6 +6114,7 @@ function openPhotoFs(src, firebaseKey, item) {
 // Vykreslí jednu fotku do fullscreenu (sdílí openPhotoFs i navigace tažením). Vždy plná verze (url).
 function _renderFsItem(url, firebaseKey, item) {
   closeFsMenu();
+  if(typeof _closePhotoCmtBox === 'function') _closePhotoCmtBox();   // zavři rozepsané komentářové pole při přepnutí fotky
   resolveFileUrl(url).then(function(u){
     document.getElementById('photo-fs-img').src = u;
     var ob = document.getElementById('photo-fs-open'); if(ob) ob.href = u;
@@ -6221,7 +6222,9 @@ function _renderFsCommentBar(){
     var meta = [c.author, c.ts ? new Date(c.ts).toLocaleDateString('cs-CZ') : ''].filter(Boolean).join(' · ');
     var ctrl = canMod(c) ? (' <span onclick="editOnePhotoComment(\''+c.id+'\')" style="cursor:pointer;opacity:.75;margin-left:4px;">✏️</span>'
                           + '<span onclick="deleteOnePhotoComment(\''+c.id+'\')" style="cursor:pointer;opacity:.75;margin-left:2px;">🗑️</span>') : '';
-    return '<div style="padding:3px 0;">💬 '+escapeHtml(c.text)+(meta?(' <span style="opacity:.7;">— '+escapeHtml(meta)+'</span>'):'')+ctrl+'</div>';
+    var ctext = escapeHtml(c.text);
+    (c.mentions||[]).forEach(function(mn){ if(mn && mn.name){ var e=escapeHtml('@'+mn.name); ctext = ctext.split(e).join('<span style="color:#22d3ee;font-weight:700;">'+e+'</span>'); } });
+    return '<div style="padding:3px 0;">💬 '+ctext+(meta?(' <span style="opacity:.7;">— '+escapeHtml(meta)+'</span>'):'')+ctrl+'</div>';
   }).join('');
   cEl.style.display='block';
 }
@@ -6259,33 +6262,51 @@ function _afterCommentChange(msg){
   if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
   showToast(msg, 1500);
 }
-// Přidá komentář do vlákna fotky + pošle upozornění (autorovi fotky + dřívějším komentujícím).
+// Otevře inline pole komentáře k fotce (dřív prompt – ten neuměl @ našeptávač).
 function editPhotoComment(){
   if(!_photoFsKey || !window.currentUser){ showToast('Komentovat lze jen fotky po přihlášení', 2500); return; }
   if(!hasPerm('komentare')){ showToast('💬 Komentování Ti admin nepovolil', 2800); return; }
-  var v = prompt('Napiš komentář k fotce:');
-  if(v === null) return;
-  v = v.trim(); if(!v) return;
+  if(typeof closeFsMenu === 'function') closeFsMenu();
+  var box = document.getElementById('photo-fs-cmt-box'), inp = document.getElementById('photo-fs-cmt-input');
+  if(!box || !inp) return;
+  inp.value = ''; window._mentionPicks = {};
+  box.style.display = 'flex';
+  setTimeout(function(){ try { inp.focus(); } catch(e){} }, 60);
+}
+function _closePhotoCmtBox(){
+  var box = document.getElementById('photo-fs-cmt-box'); if(box) box.style.display='none';
+  window._mentionPicks = {}; _hideMentionPop();
+}
+// Uloží komentář z inline pole + @zmínky; zmíněným pošle push (přes stávající foto_komentar frontu).
+function submitPhotoComment(){
+  var inp = document.getElementById('photo-fs-cmt-input'); if(!inp) return;
+  var v = (inp.value||'').trim(); if(!v) return;
+  if(!_photoFsKey || !window.currentUser){ showToast('Komentovat lze jen fotky po přihlášení', 2500); return; }
+  var mentions = _extractMentions(v);
   trackEvent('foto_komentar');
-  var prev = _photoComments(_photoFsItem);   // pro upozornění: kdo už komentoval (před přidáním)
+  var prev = _photoComments(_photoFsItem);   // kdo už komentoval (před přidáním)
   var cid = 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2,4);
   var c = { text: v, author: (window.currentUser.name||''), uid: window.currentUser.uid, ts: Date.now() };
+  if(mentions.length) c.mentions = mentions;
   db.ref('standalone_photos/'+_photoFsKey+'/komentare/'+cid).set(c).then(function(){
     if(!_photoFsItem.komentare) _photoFsItem.komentare = {};
     _photoFsItem.komentare[cid] = c;
+    _closePhotoCmtBox();
     _renderFsCommentBar();
-    _notifyPhotoComment(_photoFsItem, prev, v);
+    _notifyPhotoComment(_photoFsItem, prev, v, mentions.map(function(m){ return m.uid; }));
     showToast('💬 Komentář přidán', 1500);
+    if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
   }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
 }
 // Zařadí upozornění na komentář k fotce (Cloud Function pošle push). Příjemci = autor fotky +
 // všichni dřívější komentující, mimo toho, kdo právě píše.
-function _notifyPhotoComment(photo, prevComments, text){
+function _notifyPhotoComment(photo, prevComments, text, mentionUids){
   if(!window.currentUser) return;
   var me = window.currentUser.uid;
   var uids = [];
   if(photo && photo.uid) uids.push(photo.uid);
   (prevComments||[]).forEach(function(cc){ if(cc.uid) uids.push(cc.uid); });
+  (mentionUids||[]).forEach(function(u){ if(u) uids.push(u); });   // @zmínění dostanou push, i když fotku nekomentovali
   uids = uids.filter(function(u){ return u && u !== me; });
   uids = uids.filter(function(u, i){ return uids.indexOf(u) === i; });   // unikáty
   if(!uids.length) return;
@@ -14411,6 +14432,12 @@ function copyDiaryExport(){
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
   <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
   <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:60px;bottom:calc(60px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.95);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:32vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:6;border-top:1px solid rgba(255,255,255,0.12);"></div>
+  <!-- Inline pole komentáře k fotce (nahrazuje prompt → jde v něm @označit osobu) -->
+  <div id="photo-fs-cmt-box" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:60px;bottom:calc(60px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.98);padding:8px 12px;z-index:9;border-top:1px solid rgba(255,255,255,0.16);align-items:center;gap:8px;">
+    <input id="photo-fs-cmt-input" type="text" placeholder="Komentář… (@ označí osobu)" autocomplete="off" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)" onkeydown="if(event.key==='Enter')submitPhotoComment()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 11px;font-size:14px;">
+    <button onclick="submitPhotoComment()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:10px 14px;font-weight:700;cursor:pointer;min-height:42px;">Odeslat</button>
+    <button onclick="_closePhotoCmtBox()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:10px 12px;cursor:pointer;min-height:42px;">✕</button>
+  </div>
   <!-- Vysouvací menu „co s fotkou“ (skryté; otevře ⋯ Možnosti) -->
   <div id="photo-fs-menu" onclick="event.stopPropagation();closeFsMenu()" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom));width:min(320px,92vw);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:8px;flex-direction:column;gap:6px;z-index:8;box-shadow:0 8px 28px rgba(0,0,0,.65);">
     <button id="photo-fs-tomap" onclick="showPhotoOnMap()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🗺️ Ukázat v mapě (kde vyfoceno)</button>
