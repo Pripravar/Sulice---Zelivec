@@ -5215,7 +5215,7 @@ function keyOutBlackBorder(dataUrl, thr, cb){
   var img = new Image();
   img.onload = function(){
     var w = img.naturalWidth, h = img.naturalHeight;
-    var maxPx = 2400;   // omez práci/velikost (ukládáme stejně do ~2600 px PNG)
+    var maxPx = 3400;   // strop kvůli výkonu flood-fillu; zvednuto z 2400 → ostřejší ortofoto (upload zvládne až 3600 px)
     if(w > maxPx || h > maxPx){ if(w >= h){ h = Math.round(h*maxPx/w); w = maxPx; } else { w = Math.round(w*maxPx/h); h = maxPx; } }
     var c = document.createElement('canvas'); c.width = w; c.height = h;
     var ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
@@ -5336,14 +5336,15 @@ function saveDroneOverlay(){
   }
 
   if(isPng){
-    // PNG bez ztrátové komprese – zkoušej klesající rozměry, ať se vejde pod 14 MB limit funkce
-    resizePngUnder(srcDataUrl, [2600, 2200, 1800, 1400], 13500000, function(r){
+    // PNG bez ztrátové komprese. Ukládá se PŘÍMO do Storage (ne přes Cloud Function) → 14 MB limit
+    // NEPLATÍ; strop je jen kvůli paměti telefonu a době uploadu. Vyšší rozměr = ostřejší ortofoto.
+    resizePngUnder(srcDataUrl, [3600, 3000, 2600, 2200], 26000000, function(r){
       if(!r){ status.textContent = '❌ PNG je i po zmenšení moc velké'; return; }
       doUpload(r.base64, 'drone_' + Date.now() + '.png');
     });
   } else {
-    // JPEG: max 3000 px / Q0.85 (NE 1600 – kvůli čitelnosti při měření)
-    resizeImageMax(srcDataUrl, 3000, 0.85, function(resized){
+    // JPEG: vyšší kvalita (3600 px / Q0.92) – kvůli čitelnosti a měření nad ortofotem.
+    resizeImageMax(srcDataUrl, 3600, 0.92, function(resized){
       if(!resized){ status.textContent = '❌ Chyba zpracování obrázku'; return; }
       doUpload(resized.replace(/^data:image\/\w+;base64,/, ''), 'drone_' + Date.now() + '.jpg');
     });
@@ -12321,6 +12322,9 @@ function renderMaterialy(){
         (can?('<button onclick="materialAddPhoto(\''+id+'\')" title="Přidat fotku" style="background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px;font-size:14px;cursor:pointer;min-width:34px;min-height:34px;">➕📷</button>'+
               '<button onclick="materialDelete(\''+id+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:7px;color:#fff;padding:6px;font-size:13px;cursor:pointer;min-width:34px;min-height:34px;">🗑</button>'):'')+
       '</div>'+
+      (can
+        ? '<textarea onchange="materialSetNote(\''+id+'\',this.value)" placeholder="📝 poznámka k materiálu…" style="width:100%;margin-top:5px;min-height:46px;font-size:13px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);box-sizing:border-box;resize:vertical;">'+escapeHtml(m.poznamka||'')+'</textarea>'
+        : (m.poznamka?('<div style="margin-top:5px;font-size:13px;color:var(--text);white-space:pre-wrap;background:var(--panel2);border-radius:8px;padding:7px 9px;">📝 '+escapeHtml(m.poznamka)+'</div>'):''))+
       (thumbs?('<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">'+thumbs+'</div>'):'')+
     '</div>';
   }).join('');
@@ -12331,16 +12335,24 @@ function materialAdd(){
   if(!nazev){ showToast('Zadej název materiálu', 2000); return; }
   var so=(document.getElementById('mat-so').value||'');
   var id='m_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  var poznamka=(document.getElementById('mat-poznamka')?document.getElementById('mat-poznamka').value:'').trim();
   photoBufUpload('material', function(urls){
-    var entry={ id:id, nazev:nazev, so:so, ts:Date.now(), uid:window.currentUser.uid, name:window.currentUser.name };
+    var entry={ id:id, nazev:nazev, so:so, poznamka:poznamka, ts:Date.now(), uid:window.currentUser.uid, name:window.currentUser.name };
     if(urls && urls.length) entry.photos=urls;
     if(!window.diaryCurrentData.materialyList) window.diaryCurrentData.materialyList={};
     window.diaryCurrentData.materialyList[id]=entry;
     diarySaveDay(); renderMaterialy();
     document.getElementById('mat-nazev').value=''; document.getElementById('mat-so').value='';
+    var mp=document.getElementById('mat-poznamka'); if(mp) mp.value='';
     setPhotoBuf('material', []); renderPhotoBuf('material','mat-photos-preview');
     showToast('🚛 Materiál přidán', 1400);
   });
+}
+// Poznámka ke konkrétnímu materiálu (edituje autor/admin). Nerenderuje znovu (nechá kurzor).
+function materialSetNote(id, val){
+  var list=(window.diaryCurrentData&&window.diaryCurrentData.materialyList)||{}; var m=list[id]; if(!m) return;
+  if(!(isAdmin() || (window.currentUser && m.uid===window.currentUser.uid))){ showToast('Upravit můžeš jen svůj materiál', 2500); return; }
+  m.poznamka=(val||'').trim(); diarySaveDay();
 }
 // Přidat další fotku ke stávajícímu materiálu (workflow: další dodák na stejný materiál).
 function materialAddPhoto(id){
@@ -14997,6 +15009,7 @@ function copyDiaryExport(){
         <div style="display:flex;gap:6px;margin-bottom:5px;">
           <select id="mat-so" class="diary-field" style="flex:1;"><option value="">— SO (volitelně) —</option></select>
         </div>
+        <input id="mat-poznamka" class="diary-field" type="text" placeholder="📝 Poznámka k materiálu (dodavatel, množství, č. dodáku…)" style="margin-bottom:5px;">
         <div id="mat-photos-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5px;"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
           <button type="button" class="btn-secondary" style="flex:1;min-width:80px;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" onclick="document.getElementById('mat-photo-cam').click()">📷 Vyfotit</button>
