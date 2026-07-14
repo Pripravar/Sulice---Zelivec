@@ -7077,8 +7077,34 @@ function editPhotoSO() {
       item.so = upd.so; item.soList = soArr; item.restampOnDownload = true;
       showToast('✅ Zařazení změněno: ' + (soArr.length ? soArr.join(', ') : 'nezařazeno'), 2600);
       if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+      _restampPhotoNow(item, key);   // JEDNOTLIVÁ fotka → přerazítkuj hned (hromadné přeřazení zůstává na stažení)
     }).catch(function(){ showToast('❌ Chyba uložení', 2500); });
   }, preset);
+}
+// Okamžité přerazítkování JEDNÉ fotky po přeřazení SO: vygeneruje orazítkovanou verzi z ČISTÉHO originálu
+// s novým SO, nahraje ji a nastaví jako viditelnou. Bez originálu (staré fotky) se nedělá – jinak by
+// vzniklo dvojité razítko; tam zůstává `restampOnDownload` (přepočet při stažení).
+function _restampPhotoNow(item, key){
+  if(!item || !key || !item.urlOriginal) return;         // bez originálu → necháme na stažení
+  var wasStamped = (item.stamped !== false);
+  preparePhotoBlobForDownload(item, { stamp:{ stamp:true, fields:{so:true,km:true,datum:true,jmeno:true} } })
+    .then(function(blob){ return blobToDataUrl(blob); })
+    .then(function(dataUrl){
+      var b64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+      var path = 'photos/restamp_' + (item.ts||Date.now()) + '_' + Math.random().toString(36).slice(2,6) + '.jpg';
+      return _privStorage().ref(path).putString(b64, 'base64', { contentType:'image/jpeg' }).then(function(){
+        delete _fileUrlCache[path];
+        var u = { urlStamped: path, stamped: true, restampOnDownload: null };
+        if(wasStamped) u.url = path;
+        return db.ref('standalone_photos/'+key).update(u).then(function(){
+          item.urlStamped = path; item.restampOnDownload = false; item.stamped = true; if(wasStamped) item.url = path;
+          if(_photoFsKey === key){ try { _renderFsItem(item.url, key, item); } catch(e){} }
+          if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+          showToast('🏷️ Razítko aktualizováno', 1600);
+        });
+      });
+    })
+    .catch(function(e){ console.warn('restamp now:', e); showToast('⚠️ Razítko se přepočítá až při stažení', 2600); });
 }
 
 function deleteStandalonePhoto() {
@@ -12840,6 +12866,102 @@ function generateFullExport(){
   document.getElementById('diary-export-text').value = out.join('\n');
 }
 
+// ── PDF export deníku (tiskový náhled → „Uložit jako PDF"). Sekce dle checkboxů, vč. fotek. ──
+function generateDiaryPdf(){
+  var od = document.getElementById('exp-od').value, doDate = document.getElementById('exp-do').value;
+  if(!od || !doDate){ showToast('Vyber rozsah dat', 1500); return; }
+  if(od > doDate){ showToast('Datum od je větší než do', 2000); return; }
+  function _c(id){ var e=document.getElementById(id); return e ? e.checked : true; }
+  var inc = { sichtovka:_c('pdf-inc-sichtovka'), stroje:_c('pdf-inc-stroje'), materialy:_c('pdf-inc-materialy'),
+              zaznamy:_c('pdf-inc-zaznamy'), zkousky:_c('pdf-inc-zkousky'), fotky:_c('pdf-inc-fotky') };
+  var keys = Object.keys(window.diaryAllDays||{}).filter(function(dt){ return dt>=od && dt<=doDate; }).sort();
+  showSync('⏳ Připravuji PDF…');
+  var photosPromise = inc.fotky ? db.ref('standalone_photos').once('value').then(function(s){ return s.val()||{}; }) : Promise.resolve({});
+  photosPromise.then(function(allPhotos){
+    var refs = {}; function addRef(u){ if(u) refs[u]=true; }
+    keys.forEach(function(dt){ var d=window.diaryAllDays[dt]||{};
+      if(inc.materialy && d.materialyList) Object.keys(d.materialyList).forEach(function(id){ (d.materialyList[id].photos||[]).forEach(addRef); });
+    });
+    if(inc.zkousky) Object.keys(zkouskyData||{}).forEach(function(id){ var z=zkouskyData[id]; if(z && z.datum>=od && z.datum<=doDate) (z.photos||[]).forEach(addRef); });
+    var photoByDay = {};
+    if(inc.fotky) Object.keys(allPhotos).forEach(function(k){ var p=allPhotos[k]; if(!p) return; var dy=itemDateYmd(p); if(dy>=od && dy<=doDate){ (photoByDay[dy]=photoByDay[dy]||[]).push(p); addRef(p.thumb||p.url); } });
+    var refList = Object.keys(refs);
+    Promise.all(refList.map(function(p){ return resolveFileUrl(p).then(function(u){ return [p,u]; }).catch(function(){ return [p,'']; }); }))
+    .then(function(pairs){
+      var urlMap={}; pairs.forEach(function(pr){ urlMap[pr[0]]=pr[1]; });
+      var html = _buildDiaryPdfHtml(keys, od, doDate, inc, urlMap, photoByDay);
+      hideSync();
+      var w = window.open('', '_blank');
+      if(!w){ showToast('⚠️ Povol vyskakovací okna pro tisk PDF', 3800); return; }
+      w.document.open(); w.document.write(html); w.document.close();
+    });
+  }).catch(function(e){ hideSync(); showToast('❌ '+((e&&e.message)||'chyba PDF'), 3000); });
+}
+function _buildDiaryPdfHtml(keys, od, doDate, inc, urlMap, photoByDay){
+  function esc(s){ return escapeHtml(String(s==null?'':s)); }
+  function img(u){ return u ? '<img src="'+esc(u)+'">' : ''; }
+  var css = 'body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:22px;}'
+    + 'h1{font-size:18px;margin:0 0 2px;} .sub{color:#666;font-size:11px;margin-bottom:14px;}'
+    + '.day{page-break-inside:auto;border-top:2px solid #0d9488;margin-top:16px;padding-top:8px;}'
+    + 'h2{font-size:15px;margin:0 0 4px;color:#0d9488;} h3{font-size:13px;margin:12px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px;}'
+    + '.meta{font-size:12px;margin:2px 0;} table{width:100%;border-collapse:collapse;margin:4px 0;font-size:11px;}'
+    + 'th,td{border:1px solid #bbb;padding:4px 6px;text-align:left;} th{background:#eee;} td.num,th.num{text-align:right;} tr.sum td{font-weight:bold;background:#f4f4f4;}'
+    + '.mat{margin:6px 0;padding:6px 8px;background:#f7f7f7;border-radius:6px;} .mat .note{font-size:11px;color:#444;margin-top:2px;}'
+    + 'ul{margin:4px 0;padding-left:18px;} li{margin:2px 0;}'
+    + '.ph{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;} .ph img{width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;}'
+    + '.ph.grid figure{margin:0;width:120px;} .ph.grid figcaption{font-size:9px;color:#555;width:120px;word-wrap:break-word;}'
+    + '@media print{.day{page-break-inside:avoid;} @page{margin:14mm;}}';
+  var P = [];
+  P.push('<!doctype html><html lang="cs"><head><meta charset="utf-8"><title>Stavební deník '+esc(od)+(od!==doDate?(' – '+esc(doDate)):'')+'</title><style>'+css+'</style></head><body>');
+  P.push('<h1>Stavební deník — II/603 Sulice – Želivec</h1><div class="sub">Rozsah: '+esc(od)+' – '+esc(doDate)+' · vygenerováno '+esc(new Date().toLocaleString('cs-CZ'))+'</div>');
+  if(!keys.length) P.push('<p>V daném rozsahu nejsou žádné zápisy.</p>');
+  keys.forEach(function(dt){
+    var d=window.diaryAllDays[dt]||{}; var dObj=ymd_to_date(dt);
+    P.push('<section class="day"><h2>'+esc(dObj.toLocaleDateString('cs-CZ',{day:'numeric',month:'long',year:'numeric'}))+' ('+esc(dayOfWeekCs(dObj))+')</h2>');
+    if(d.pocasi) P.push('<div class="meta">Počasí: '+esc(d.pocasi)+'</div>');
+    var kont=[]; if(d.tds)kont.push('TDS'); if(d.bozp)kont.push('BOZP'); if(kont.length) P.push('<div class="meta">Kontroly: '+esc(kont.join(', '))+'</div>');
+    if(inc.sichtovka && d.sichtovka){
+      var pz=d.sichtovka_pozn||{}, rows=[], tot=0;
+      Object.keys(d.sichtovka).forEach(function(uid){ var h=parseFloat(d.sichtovka[uid]); if(isNaN(h)||h<=0) return; var w=lookupWorker(uid); rows.push({name:(w&&w.name)||('id:'+uid),firma:(w&&w.firma)||'',so:effectiveSOForId(uid,dt,'osoby'),h:h,pozn:pz[uid]||''}); tot+=h; });
+      rows.sort(function(a,b){ return (a.firma||'').localeCompare(b.firma||'','cs') || a.name.localeCompare(b.name,'cs'); });
+      if(rows.length){ P.push('<h3>Šichtovka</h3><table><thead><tr><th>Jméno</th><th>Firma</th><th>SO</th><th>Pozn.</th><th class="num">Hod.</th></tr></thead><tbody>');
+        rows.forEach(function(r){ P.push('<tr><td>'+esc(r.name)+'</td><td>'+esc(r.firma)+'</td><td>'+esc(r.so)+'</td><td>'+esc(r.pozn)+'</td><td class="num">'+r.h.toFixed(1)+'</td></tr>'); });
+        P.push('<tr class="sum"><td colspan="4">Celkem · '+rows.length+' osob</td><td class="num">'+tot.toFixed(1)+' h</td></tr></tbody></table>'); }
+    }
+    if(inc.stroje && d.stroje){
+      var sr=[]; Object.keys(d.stroje).forEach(function(sid){ var h=parseFloat(d.stroje[sid]); if(isNaN(h)||h<=0)return; var s=lookupStroj(sid); sr.push({nazev:(s&&s.nazev)||sid,firma:(s&&s.firma)||'',so:effectiveSOForId(sid,dt,'stroje'),h:h}); });
+      if(sr.length){ P.push('<h3>Stroje</h3><table><thead><tr><th>Stroj</th><th>Firma</th><th>SO</th><th class="num">Hod.</th></tr></thead><tbody>');
+        sr.forEach(function(r){ P.push('<tr><td>'+esc(r.nazev)+'</td><td>'+esc(r.firma)+'</td><td>'+esc(r.so)+'</td><td class="num">'+r.h.toFixed(1)+'</td></tr>'); }); P.push('</tbody></table>'); }
+    }
+    if(inc.materialy && d.materialyList){
+      var mids=Object.keys(d.materialyList); if(mids.length){ P.push('<h3>Materiály</h3>');
+        mids.forEach(function(id){ var m=d.materialyList[id]; P.push('<div class="mat"><b>🚛 '+esc(m.nazev||'materiál')+'</b>'+(m.so?(' · '+esc(m.so)):'')+(m.poznamka?('<div class="note">📝 '+esc(m.poznamka)+'</div>'):''));
+          if((m.photos||[]).length){ P.push('<div class="ph">'); m.photos.forEach(function(u){ P.push(img(urlMap[u]||u)); }); P.push('</div>'); } P.push('</div>'); }); }
+    }
+    if(inc.zkousky){
+      var zk=Object.keys(zkouskyData||{}).map(function(k){return zkouskyData[k];}).filter(function(z){ return z && z.datum===dt; });
+      if(zk.length){ P.push('<h3>Zkoušky</h3>');
+        zk.forEach(function(z){ var v=z.verdikt==='vyhovel'?'✅ ':(z.verdikt==='nevyhovel'?'❌ ':'');
+          P.push('<div class="mat"><b>'+v+esc(z.nazev||'zkouška')+'</b>'+(z.so?(' · '+esc(z.so)):'')+(z.km!=null?(' · km '+esc(fmtKm(z.km))):'')+(z.druh==='opravna'?' · opravná':'')+(z.poznamka?(' · '+esc(z.poznamka)):'')+(z.vysledek?('<div class="note">Výsledek: '+esc(z.vysledek)+(z.protokol?(' · protokol '+esc(z.protokol)):'')+'</div>'):''));
+          if((z.photos||[]).length){ P.push('<div class="ph">'); z.photos.forEach(function(u){ P.push(img(urlMap[u]||u)); }); P.push('</div>'); } P.push('</div>'); }); }
+    }
+    if(inc.zaznamy && d.zaznamy){
+      var zs=Object.keys(d.zaznamy).map(function(k){return d.zaznamy[k];}).sort(function(a,b){return (a.time||0)-(b.time||0);});
+      if(zs.length){ P.push('<h3>Záznamy</h3><ul>'); zs.forEach(function(z){ var t=z.time?new Date(z.time):null; var hh=t?(String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')):''; P.push('<li>'+esc(hh)+' ('+esc(z.name||'?')+') '+esc(z.text||'')+'</li>'); }); P.push('</ul>'); }
+    }
+    if(d.zaver) P.push('<h3>Závěr dne</h3><div class="meta">'+esc(d.zaver)+'</div>');
+    if(inc.fotky && photoByDay[dt] && photoByDay[dt].length){
+      P.push('<h3>Fotky ('+photoByDay[dt].length+')</h3><div class="ph grid">');
+      photoByDay[dt].forEach(function(p){ var u=urlMap[p.thumb||p.url]||''; var cap=[ (p.soList&&p.soList.length?p.soList.join(', '):p.so), (p.km?('km '+p.km):'') ].filter(Boolean).join(' · '); P.push('<figure>'+img(u)+'<figcaption>'+esc(cap)+'</figcaption></figure>'); });
+      P.push('</div>');
+    }
+    P.push('</section>');
+  });
+  P.push('<'+'script>window.onload=function(){setTimeout(function(){try{window.print();}catch(e){}},500);};<'+'/script>');
+  P.push('</body></html>');
+  return P.join('');
+}
+
 // ── Export: Jen šichtovka po firmách (podklad pro fakturaci) ───────
 function generateSichtovkaExport(){
   var od = document.getElementById('exp-od').value;
@@ -15131,6 +15253,19 @@ function copyDiaryExport(){
     <div style="display:flex;gap:8px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="copyDiaryExport()">📋 Zkopírovat</button>
       <button class="btn-secondary" style="flex:1;background:var(--panel2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;" onclick="closeDiaryExport()">Zavřít</button>
+    </div>
+    <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:10px;">
+      <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">📄 PDF – co zahrnout (rozsah dat výše)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 9px;font-size:13px;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pdf-inc-sichtovka" checked style="width:16px;height:16px;"> Šichtovka</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pdf-inc-stroje" checked style="width:16px;height:16px;"> Stroje</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pdf-inc-materialy" checked style="width:16px;height:16px;"> Materiály</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pdf-inc-zaznamy" checked style="width:16px;height:16px;"> Záznamy</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pdf-inc-zkousky" checked style="width:16px;height:16px;"> Zkoušky</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pdf-inc-fotky" checked style="width:16px;height:16px;"> Fotky</label>
+      </div>
+      <button class="btn-primary" style="width:100%;background:#0d9488;color:#fff;border:none;border-radius:8px;padding:11px;font-weight:700;cursor:pointer;" onclick="generateDiaryPdf()">🖨️ Vytvořit PDF</button>
+      <div style="font-size:10px;color:var(--text2);margin-top:4px;">Otevře náhled k tisku → v dialogu vyber „Uložit jako PDF". (Povol vyskakovací okna.)</div>
     </div>
   </div>
 </div>
