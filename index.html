@@ -1130,6 +1130,17 @@ document.addEventListener('touchend', function(e){
   </div>
 </div>
 
+<!-- Feed aktivity („co se děje") -->
+<div id="activity-modal" style="display:none;position:fixed;inset:0;z-index:5200;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">📢 Co se děje</div>
+      <button onclick="closeActivity()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="activity-list" style="padding:8px 14px;overflow-y:auto;flex:1;"></div>
+  </div>
+</div>
+
 <!-- iPhone instalační hint -->
 <div id="ios-install-hint">
   <span class="close" onclick="dismissIosHint()">✕</span>
@@ -1140,6 +1151,7 @@ document.addEventListener('touchend', function(e){
   <h1><span class="title-prefix">II/603 </span><span class="title-name">Sulice</span><span class="title-suffix"> – Želivec</span></h1>
   <div id="km-display">km –</div>
   <button id="btn-help" onclick="openHelp()" title="Nápověda – co appka umí a jak se ovládá" style="background:var(--panel2);border:1px solid var(--accent2);border-radius:8px;color:var(--accent2);padding:6px 10px;font-size:15px;font-weight:700;cursor:pointer;">❓</button>
+  <button id="btn-activity" onclick="openActivity()" title="Co se děje – aktivita v aplikaci" style="position:relative;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📢<span class="task-badge" id="activity-badge" style="display:none;">0</span></button>
   <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
   <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
   <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
@@ -2061,26 +2073,34 @@ var DOPLNKY_SO = [
   {id:'SO 441', kat:'400', badge:'VO1', km:2.756, kmShift:0, perpOffset:55,
    nazev:'SO 441 - Doplnění VO v úseku 1 (km 2,756)',
    vykresy:[
-     {typ:'📐 Situace',      nazev:'Situace SO 441',                       soubor:PDF_BASE+'SO_441/D4_SO441_02_PP_Situace_PDPS.pdf'},
-     {typ:'✂️ Řezy',          nazev:'Řezy SO 441',                          soubor:PDF_BASE+'SO_441/D4_SO441_03_PP_Rezy_PDPS.pdf'},
-     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 441',              soubor:PDF_BASE+'SO_441/D4_SO441_01_PP_TZ_PDPS.pdf'},
-     {typ:'🧮 Výpočet',       nazev:'Výpočet SO 441',                       soubor:PDF_BASE+'SO_441/D4_SO441_04_PP_Vypocet_PDPS.pdf'},
-     {typ:'📊 VV',            nazev:'Výkaz výměr SO 441',                   soubor:PDF_BASE+'SO_441/D4_SO441_05_PP_VV_PDPS.pdf'},
+     {typ:'📐 Situace',      nazev:'Situace SO 441 (RDS)',                 soubor:PDF_BASE+'SO_441/RDS_SO441_03_Situace.pdf'},
+     {typ:'✂️ Stožáry/řezy',  nazev:'Stožáry – řezy SO 441 (RDS)',          soubor:PDF_BASE+'SO_441/RDS_SO441_05_Stozary_rezy.pdf'},
+     {typ:'🧮 Výpočet',       nazev:'Výpočet osvětlení SO 441 (RDS)',       soubor:PDF_BASE+'SO_441/RDS_SO441_02_Vypocet.pdf'},
+     {typ:'📐 Schéma',       nazev:'Schéma SO 441 (RDS)',                  soubor:PDF_BASE+'SO_441/RDS_SO441_04_Schema.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 441 (RDS)',        soubor:PDF_BASE+'SO_441/RDS_SO441_01_TZ.pdf'},
+     {typ:'📏 Vzdálenosti',  nazev:'Dovolené vzdálenosti SO 441 (RDS)',    soubor:PDF_BASE+'SO_441/RDS_SO441_06_Dovolene_vzdalenosti.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 441 (RDS)',             soubor:PDF_BASE+'SO_441/RDS_SO441_07_VV.pdf'},
+     {typ:'📎 Desky',        nazev:'Desky SO 441 (RDS)',                   soubor:PDF_BASE+'SO_441/RDS_SO441_00_Desky.pdf'},
    ]},
   {id:'SO 443', kat:'400', badge:'VO3', km:1.190, kmShift:0, perpOffset:55,
    nazev:'SO 443 - Doplnění a úprava VO v úseku 3 - OK (kruháč, km 1,19)',
    vykresy:[
-     {typ:'📐 Situace',      nazev:'Situace SO 443',                       soubor:PDF_BASE+'SO_443/D4_SO443_02_VO_Situace_PDPS.pdf'},
-     {typ:'✂️ Řezy',          nazev:'Řezy SO 443',                          soubor:PDF_BASE+'SO_443/D4_SO443_03_VO_Rezy_PDPS.pdf'},
-     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 443',              soubor:PDF_BASE+'SO_443/D4_SO443_01_VO_TZ_PDPS.pdf'},
-     {typ:'📊 VV',            nazev:'Výkaz výměr SO 443',                   soubor:PDF_BASE+'SO_443/D4_SO443_04_VO_VV_PDPS.pdf'},
+     {typ:'📐 Situace',      nazev:'Situace VO SO 443 (RDS)',             soubor:PDF_BASE+'SO_443/RDS_SO443_02_Situace.pdf'},
+     {typ:'✂️ Stožáry/řezy',  nazev:'Stožáry – řezy SO 443 (RDS)',          soubor:PDF_BASE+'SO_443/RDS_SO443_04_Stozary_rezy.pdf'},
+     {typ:'📐 Schéma',       nazev:'Schéma SO 443 (RDS)',                  soubor:PDF_BASE+'SO_443/RDS_SO443_03_Schema.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 443 (RDS)',        soubor:PDF_BASE+'SO_443/RDS_SO443_01_TZ.pdf'},
+     {typ:'📏 Vzdálenosti',  nazev:'Dovolené vzdálenosti SO 443 (RDS)',    soubor:PDF_BASE+'SO_443/RDS_SO443_05_Dovolene_vzdalenosti.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 443 (RDS)',             soubor:PDF_BASE+'SO_443/RDS_SO443_06_VV.pdf'},
+     {typ:'📎 Desky',        nazev:'Desky SO 443 (RDS)',                   soubor:PDF_BASE+'SO_443/RDS_SO443_00_Desky.pdf'},
    ]},
   {id:'SO 444', kat:'400', badge:'VO4', km:2.405, kmShift:0.025, perpOffset:55,
    nazev:'SO 444 - Ochrana / úprava kabelů VO v úseku 4 (km 2,405)',
    vykresy:[
-     {typ:'📐 Situace',      nazev:'Situace SO 444',                       soubor:PDF_BASE+'SO_444/D4_SO444_02_VO_Situace_PDPS.pdf'},
-     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 444',              soubor:PDF_BASE+'SO_444/D4_SO444_01_VO_TZ_PDPS.pdf'},
-     {typ:'📊 VV',            nazev:'Výkaz výměr SO 444',                   soubor:PDF_BASE+'SO_444/D4_SO444_03_VO_VV_PDPS.pdf'},
+     {typ:'📐 Situace',      nazev:'Situace SO 444 (RDS)',                 soubor:PDF_BASE+'SO_444/RDS_SO444_02_Situace.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 444 (RDS)',        soubor:PDF_BASE+'SO_444/RDS_SO444_01_TZ.pdf'},
+     {typ:'📏 Vzdálenosti',  nazev:'Dovolené vzdálenosti SO 444 (RDS)',    soubor:PDF_BASE+'SO_444/RDS_SO444_03_Dovolene_vzdalenosti.pdf'},
+     {typ:'📊 VV',            nazev:'Výkaz výměr SO 444 (RDS)',             soubor:PDF_BASE+'SO_444/RDS_SO444_04_VV.pdf'},
+     {typ:'📎 Desky',        nazev:'Desky SO 444 (RDS)',                   soubor:PDF_BASE+'SO_444/RDS_SO444_00_Desky.pdf'},
    ]},
   {id:'SO 445', kat:'400', badge:'VO5', km:3.071, kmShift:0.025, perpOffset:55,
    nazev:'SO 445 - Ochrana / úprava kabelů VO v úseku 5 (km 3,071)',
@@ -2109,8 +2129,13 @@ var DOPLNKY_SO = [
   {id:'SO 524', kat:'500', badge:'P4', km:2.405, kmShift:0.050, perpOffset:85,
    nazev:'SO 524 - Ochrana / úprava STL plynovodů v úseku 4 (km 2,405)',
    vykresy:[
-     {typ:'📐 Výkres',       nazev:'Ochrana STL plynovodu v úseku 4',       soubor:PDF_BASE+'SO_524/D_5_2_1_SO_524_Ochrana_uprava_STL_plynovodu_v_useku_4.pdf'},
-     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva SO 524 / 525',         soubor:PDF_BASE+'SO_524/Technicka_zprava_SO524_525.pdf'},
+     {typ:'📐 Situace',      nazev:'Situace plynovod SO 524 (RDS)',        soubor:PDF_BASE+'SO_524/RDS_SO524_02_Situace.pdf'},
+     {typ:'📐 Propoj 1',     nazev:'Propoj 1 SO 524 (RDS)',               soubor:PDF_BASE+'SO_524/RDS_SO524_03_Propoj_1.pdf'},
+     {typ:'📐 Propoj 2',     nazev:'Propoj 2 SO 524 (RDS)',               soubor:PDF_BASE+'SO_524/RDS_SO524_04_Propoj_2.pdf'},
+     {typ:'✂️ Příčné řezy',   nazev:'Příčné řezy SO 524 (RDS)',            soubor:PDF_BASE+'SO_524/RDS_SO524_08_Pricne_rezy.pdf'},
+     {typ:'📐 Křížení kabelu',nazev:'Vzorové křížení kabelu SO 524 (RDS)', soubor:PDF_BASE+'SO_524/RDS_SO524_06_Vzorove_krizeni_kabelu.pdf'},
+     {typ:'📐 Ochr. trubka', nazev:'Ochranná trubka SO 524 (RDS)',        soubor:PDF_BASE+'SO_524/RDS_SO524_07_Ochranna_trubka.pdf'},
+     {typ:'📋 Tech. zpráva', nazev:'Technická zpráva plyn SO 524 (RDS)',  soubor:PDF_BASE+'SO_524/RDS_SO524_01_TZ.pdf'},
    ]},
   {id:'SO 525', kat:'500', badge:'P5', km:3.071, kmShift:0.050, perpOffset:85,
    nazev:'SO 525 - Ochrana / úprava STL plynovodů v úseku 5 (km 3,071)',
@@ -2818,6 +2843,7 @@ function submitVykresUpload(){
         } else {
           status.textContent = '✅ Hotovo';
           showToast('Výkres nahrán', 2000);
+          logActivity('📐', 'nahrál/a výkres' + (so?(' k '+String(so).replace('_',' ')):'') + (nazev?(' („'+nazev+'")'):''));
         }
         btn.disabled=false; btn.style.opacity='1'; btn.textContent='Nahrát výkres';
         document.getElementById('vyk-file').value='';
@@ -4290,6 +4316,7 @@ function confirmMeasureSave(){
   db.ref('mereni').push(rec).then(function(){
     closeMeasureSave();
     showToast('✅ Měření uloženo pro tým', 2000);
+    logActivity('📏', 'uložil/a měření „' + name + '"');
     measureClear();
   }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba ukládání'); });
 }
@@ -4450,7 +4477,7 @@ function saveZkouska(){
   photoBufUpload('zkouska', function(urls){
     if(urls && urls.length) z.photos = urls;
     showSync('⏳ Ukládám zkoušku…');
-    db.ref('zkousky/'+id).set(z).then(function(){ hideSync(); showToast('✅ Zkouška uložena', 1500); _mirrorZkouskaToGallery(z, urls); window.editingZkouskaId=null; _fillZkouskaForm({}); renderZkouskyList(); }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2500); });
+    db.ref('zkousky/'+id).set(z).then(function(){ hideSync(); showToast('✅ Zkouška uložena', 1500); if(!window.editingZkouskaId) logActivity('🔬', 'přidal/a zkoušku „' + nazev + '"' + (z.so?(' · '+z.so):'')); _mirrorZkouskaToGallery(z, urls); window.editingZkouskaId=null; _fillZkouskaForm({}); renderZkouskyList(); }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2500); });
   });
 }
 // Zrcadlí fotky zkoušky do galerie (/standalone_photos) s SO/km zkoušky + tagem `kategorie:'zkousky'`,
@@ -5974,6 +6001,7 @@ function saveNote() {
       author:author, authorUid:(window.currentUser ? window.currentUser.uid : ''), nazev:nazev, text:text, so:noteSo||null,
       photos:keepUrls.concat(uploadedUrls), time:new Date().toLocaleString('cs-CZ') };
     saveNote_toFirebase(note, null);
+    logActivity('📝', 'přidal/a poznámku' + (noteSo?(' k '+noteSo):(nazev?(' „'+nazev+'"'):'')));
   }
   // Razítko: jen pokud uživatel zaškrtl toggle (a uložíme preferenci pro příště)
   var stampToggle = document.getElementById('note-stamp-toggle');
@@ -6300,6 +6328,8 @@ function submitPhotoComment(){
     _closePhotoCmtBox();
     _renderFsCommentBar();
     _notifyPhotoComment(_photoFsItem, prev, v, mentions.map(function(m){ return m.uid; }));
+    var _pcil = [( _photoFsItem.soList && _photoFsItem.soList.length ? _photoFsItem.soList.join(', ') : _photoFsItem.so), (_photoFsItem.km?('km '+_photoFsItem.km):'')].filter(Boolean).join(' · ');
+    logActivity('💬', 'okomentoval/a fotku' + (_pcil?(' ('+_pcil+')'):''));
     showToast('💬 Komentář přidán', 1500);
     if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
   }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
@@ -8811,6 +8841,7 @@ function _processPhotoQueue(){
             db.ref('standalone_photos/' + t).set(entry).then(function(){
               _tagPhoto(t);   // AI popis obsahu na pozadí (pro vyhledávání)
               photoPending = Math.max(0, photoPending-1); _photoBadge();
+              _logPhotoActivity(entry.soList && entry.soList.length ? entry.soList.join(', ') : (entry.so||''));
               setTimeout(_processPhotoQueue, 400);
             }).catch(function(){ fail('db'); });
           }
@@ -9924,6 +9955,67 @@ function trackEvent(key){
     }
   }catch(e){}
 }
+
+// ── FEED AKTIVITY („co se děje") – jeden centrální log /aktivita, čte ho každý přihlášený ──
+// logActivity(emoji, text) zapíše krátký řádek. Text je věta bez jména (jméno = kdo).
+function logActivity(emoji, text){
+  try{
+    if(!window.db || typeof firebase === 'undefined' || !text) return;
+    var kdo = (window.currentUser && window.currentUser.name) || '';
+    db.ref('aktivita').push({ emoji: emoji||'•', kdo: kdo, text: text, ts: firebase.database.ServerValue.TIMESTAMP }).catch(function(){});
+  }catch(e){}
+}
+// Fotky v sérii by feed zaplavily → jedna série na stejné SO = jeden řádek (throttle 90 s).
+window._lastPhotoActLog = { so:null, ts:0 };
+function _logPhotoActivity(so){
+  var now = Date.now(), last = window._lastPhotoActLog;
+  if(last && last.so === so && (now - last.ts) < 90000){ last.ts = now; return; }
+  window._lastPhotoActLog = { so: so, ts: now };
+  logActivity('📷', 'přidal/a fotky' + (so?(' k '+so):''));
+}
+window._activityCache = [];
+function loadActivity(){
+  try{
+    db.ref('aktivita').orderByChild('ts').limitToLast(80).on('value', function(snap){
+      var arr = []; snap.forEach(function(ch){ var v=ch.val(); v._id=ch.key; arr.push(v); });
+      arr.reverse();   // nejnovější nahoře
+      window._activityCache = arr;
+      _updateActivityBadge();
+      var m = document.getElementById('activity-modal');
+      if(m && m.style.display === 'flex') _renderActivity();
+    }, function(){});
+  }catch(e){}
+}
+function _activitySeenTs(){ try{ return parseInt(localStorage.getItem('activitySeenTs'),10) || 0; }catch(e){ return 0; } }
+function _updateActivityBadge(){
+  var b = document.getElementById('activity-badge'); if(!b) return;
+  var seen = _activitySeenTs();
+  var me = (window.currentUser && window.currentUser.name) || '';
+  var n = (window._activityCache||[]).filter(function(a){ return (a.ts||0) > seen && a.kdo !== me; }).length;   // cizí novinky
+  if(n > 0){ b.textContent = n > 99 ? '99+' : n; b.style.display=''; }
+  else { b.style.display='none'; }
+}
+function openActivity(){
+  if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
+  document.getElementById('activity-modal').style.display = 'flex';
+  _renderActivity();
+  try{ localStorage.setItem('activitySeenTs', String(Date.now())); }catch(e){}
+  _updateActivityBadge();
+}
+function closeActivity(){ var m=document.getElementById('activity-modal'); if(m) m.style.display='none'; }
+function _renderActivity(){
+  var box = document.getElementById('activity-list'); if(!box) return;
+  var arr = window._activityCache || [];
+  if(!arr.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:26px;font-size:13px;">Zatím žádná aktivita.</div>'; return; }
+  box.innerHTML = arr.map(function(a){
+    return '<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);">'
+      + '<span style="font-size:17px;flex-shrink:0;line-height:1.2;">'+escapeHtml(a.emoji||'•')+'</span>'
+      + '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.35;">'
+      +   '<b>'+escapeHtml(a.kdo||'Někdo')+'</b> '+escapeHtml(a.text||'')
+      +   '<div style="font-size:10px;color:var(--text2);margin-top:1px;">'+escapeHtml(_relTime(a.ts))+'</div>'
+      + '</div></div>';
+  }).join('');
+}
 var _statsCache = null;   // {funkce:{}, lide:{}}
 var _statsTab = 'funkce';
 function openStats(){
@@ -10360,6 +10452,7 @@ function _enterApp(displayName){
   loadAllUsers();
   loadCategoryPerms();
   loadMjList();
+  loadActivity();
   loadTasks();
   loadPracovnici();
   loadStroje();
@@ -11369,6 +11462,10 @@ function saveTaskFromForm() {
       if(!isNaN(km)) task.km = km;
     }
     saveTaskToFirebase(task, function(){
+      if(!existing){
+        var pro = (window.newTaskAssignees||[]).map(function(a){ return a.name; }).filter(Boolean).join(', ');
+        logActivity('✅', 'zadal/a úkol „' + title + '"' + (pro?(' pro '+pro):'') + (soVal?(' · '+soVal):''));
+      }
       closeNewTaskModal();
     });
   }
@@ -11489,6 +11586,7 @@ function markTaskDone() {
   }).then(function(){
     showToast('✅ Úkol označen jako hotový', 1500);
     sendTaskNotificationRequest(t, 'hotovo');
+    logActivity('🎉', 'dokončil/a úkol „' + (t.title||'') + '"');
   });
 }
 
@@ -11650,6 +11748,7 @@ function addComment() {
     input.value = '';
     window._mentionPicks = {};   // reset po odeslání
     _hideMentionPop();
+    logActivity('💬', 'okomentoval/a úkol „' + (t.title||'') + '"');
     // Zmíněným pošli push navíc (Cloud Function zpracuje rec.mentions).
     sendTaskNotificationRequest(t, 'komentar', mentions.length ? { mentions: mentions.map(function(m){return m.uid;}), mentionBy: window.currentUser.name, mentionText: txt } : null);
   });
@@ -12098,6 +12197,7 @@ function strojeFillSelected(){
   diarySaveDay();
   var pa=document.getElementById('str-pick-all'); if(pa) pa.checked=false;
   renderStrojeList();
+  logActivity('📒', 'vyplnil/a stroje v šichtovce (' + boxes.length + ' · ' + h + ' h)');
   showToast('✓ Vyplněno '+boxes.length+' strojům · '+h+' h', 1800);
 }
 
@@ -12422,6 +12522,7 @@ function sichtovkaFillSelected(){
   diarySaveDay();
   var pa=document.getElementById('sht-pick-all'); if(pa) pa.checked=false;
   renderSichtovka();
+  logActivity('📒', 'vyplnil/a šichtovku (' + boxes.length + ' osob · ' + h + ' h)');
   showToast('✓ Vyplněno '+boxes.length+' vybraným · '+h+' h', 1800);
 }
 
@@ -12570,6 +12671,7 @@ function materialAdd(){
     var mp=document.getElementById('mat-poznamka'); if(mp) mp.value='';
     var mpc=document.getElementById('mat-pocet'); if(mpc) mpc.value=''; var mmj=document.getElementById('mat-mj'); if(mmj) mmj.value='';
     setPhotoBuf('material', []); renderPhotoBuf('material','mat-photos-preview');
+    logActivity('🚛', 'přidal/a materiál „' + nazev + '"' + (so?(' · '+so):''));
     showToast('🚛 Materiál přidán', 1400);
   });
 }
@@ -12648,6 +12750,7 @@ function nakladAdd(){
   diarySaveDay(); renderNaklad();
   document.getElementById('na-firma').value=''; document.getElementById('na-pocet').value=''; document.getElementById('na-hodiny').value='';
   var np=document.getElementById('na-poznamka'); if(np) np.value='';
+  logActivity('🚛', 'zapsal/a do šichtovky náklaďák (' + _naOzn(oznaceni) + (firma?(' · '+firma):'') + ' · ' + pocet + '×)');
   showToast('🚛 NA přidán', 1200);
 }
 function nakladDelete(id){
