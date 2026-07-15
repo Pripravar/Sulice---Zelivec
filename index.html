@@ -4320,7 +4320,7 @@ function confirmMeasureSave(){
   db.ref('mereni').push(rec).then(function(){
     closeMeasureSave();
     showToast('✅ Měření uloženo pro tým', 2000);
-    logActivity('📏', 'uložil/a měření „' + name + '"');
+    logActivity('📏', 'uložil/a měření „' + name + '"', {k:'mereni'});
     measureClear();
   }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba ukládání'); });
 }
@@ -4481,7 +4481,7 @@ function saveZkouska(){
   photoBufUpload('zkouska', function(urls){
     if(urls && urls.length) z.photos = urls;
     showSync('⏳ Ukládám zkoušku…');
-    db.ref('zkousky/'+id).set(z).then(function(){ hideSync(); showToast('✅ Zkouška uložena', 1500); if(!window.editingZkouskaId) logActivity('🔬', 'přidal/a zkoušku „' + nazev + '"' + (z.so?(' · '+z.so):'')); _mirrorZkouskaToGallery(z, urls); window.editingZkouskaId=null; _fillZkouskaForm({}); renderZkouskyList(); }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2500); });
+    db.ref('zkousky/'+id).set(z).then(function(){ hideSync(); showToast('✅ Zkouška uložena', 1500); if(!window.editingZkouskaId) logActivity('🔬', 'přidal/a zkoušku „' + nazev + '"' + (z.so?(' · '+z.so):''), {k:'zkousky', id:id}); _mirrorZkouskaToGallery(z, urls); window.editingZkouskaId=null; _fillZkouskaForm({}); renderZkouskyList(); }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2500); });
   });
 }
 // Zrcadlí fotky zkoušky do galerie (/standalone_photos) s SO/km zkoušky + tagem `kategorie:'zkousky'`,
@@ -6005,7 +6005,7 @@ function saveNote() {
       author:author, authorUid:(window.currentUser ? window.currentUser.uid : ''), nazev:nazev, text:text, so:noteSo||null,
       photos:keepUrls.concat(uploadedUrls), time:new Date().toLocaleString('cs-CZ') };
     saveNote_toFirebase(note, null);
-    logActivity('📝', 'přidal/a poznámku' + (noteSo?(' k '+noteSo):(nazev?(' „'+nazev+'"'):'')));
+    logActivity('📝', 'přidal/a poznámku' + (noteSo?(' k '+noteSo):(nazev?(' „'+nazev+'"'):'')), {k:'note'});
   }
   // Razítko: jen pokud uživatel zaškrtl toggle (a uložíme preferenci pro příště)
   var stampToggle = document.getElementById('note-stamp-toggle');
@@ -6333,7 +6333,7 @@ function submitPhotoComment(){
     _renderFsCommentBar();
     _notifyPhotoComment(_photoFsItem, prev, v, mentions.map(function(m){ return m.uid; }));
     var _pcil = [( _photoFsItem.soList && _photoFsItem.soList.length ? _photoFsItem.soList.join(', ') : _photoFsItem.so), (_photoFsItem.km?('km '+_photoFsItem.km):'')].filter(Boolean).join(' · ');
-    logActivity('💬', 'okomentoval/a fotku' + (_pcil?(' ('+_pcil+')'):''));
+    logActivity('💬', 'okomentoval/a fotku' + (_pcil?(' ('+_pcil+')'):''), {k:'photo', id:_photoFsKey});
     showToast('💬 Komentář přidán', 1500);
     if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
   }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
@@ -9961,13 +9961,65 @@ function trackEvent(key){
 }
 
 // ── FEED AKTIVITY („co se děje") – jeden centrální log /aktivita, čte ho každý přihlášený ──
-// logActivity(emoji, text) zapíše krátký řádek. Text je věta bez jména (jméno = kdo).
-function logActivity(emoji, text){
+// logActivity(emoji, text, target) zapíše krátký řádek. Text je věta bez jména (jméno = kdo).
+// target (volitelně) = kam proklik vede, např. {k:'task', id:'...'} / {k:'photo', id:'...'} /
+// {k:'zkousky'} / {k:'note'} / {k:'mereni'} / {k:'denik'} / {k:'gallery'}. Bez targetu = neklikací.
+function logActivity(emoji, text, target){
   try{
     if(!window.db || typeof firebase === 'undefined' || !text) return;
     var kdo = (window.currentUser && window.currentUser.name) || '';
-    db.ref('aktivita').push({ emoji: emoji||'•', kdo: kdo, text: text, ts: firebase.database.ServerValue.TIMESTAMP }).catch(function(){});
+    var rec = { emoji: emoji||'•', kdo: kdo, text: text, ts: firebase.database.ServerValue.TIMESTAMP };
+    if(target && target.k){ rec.cil = target; }   // 'cil' = cíl prokliku (jen platné klíče, ať to neroste)
+    db.ref('aktivita').push(rec).catch(function(){});
   }catch(e){}
+}
+// Které právo je potřeba pro proklik na daný cíl (feed vidí každý, ale DOVNITŘ jen s právem).
+function _activityTargetPerm(cil){
+  if(!cil) return null;
+  switch(cil.k){
+    case 'task':    return 'ukoly';
+    case 'photo':   return 'galerie';
+    case 'gallery': return 'galerie';
+    case 'zkousky': return 'zkousky';
+    case 'note':    return 'pripominky';
+    case 'mereni':  return 'mereni';
+    case 'denik':   return 'denik';
+  }
+  return null;
+}
+// Smí tento uživatel na cíl kliknout? (fail-closed – neznámý druh = ne)
+function _canOpenActivityTarget(cil){
+  var perm = _activityTargetPerm(cil);
+  return perm ? hasPerm(perm) : false;
+}
+// Proklik z feedu na konkrétní zmiňovaný úkon. idx = pořadí v _activityCache (nejnovější=0).
+// BEZPEČNOST: feed je viditelný všem přihlášeným, ale otevřít úkon smí jen kdo má na tu funkci právo.
+// Brána je tady CENTRÁLNĚ (fail-closed) – chytí i volání z konzole, i kdyby render „otevřít →" neschoval.
+function openActivityTarget(idx){
+  var a = (window._activityCache||[])[idx]; if(!a || !a.cil) return;
+  var c = a.cil;
+  if(!_canOpenActivityTarget(c)){ showToast('🔒 Na tuhle věc nemáš oprávnění', 2800); return; }
+  closeActivity();
+  try{
+    if(c.k === 'task'   && c.id){ if(typeof openTaskDetail==='function') openTaskDetail(c.id); return; }
+    if(c.k === 'photo'  && c.id){ _openPhotoByKey(c.id); return; }
+    if(c.k === 'zkousky'){ if(typeof openZkouskyPanel==='function') openZkouskyPanel(); return; }
+    if(c.k === 'note'){    if(typeof openNotesEvidence==='function') openNotesEvidence(); return; }
+    if(c.k === 'mereni'){  if(typeof openMereniEvidence==='function') openMereniEvidence(); return; }
+    if(c.k === 'denik'){   if(typeof openDiaryPanel==='function') openDiaryPanel(); return; }
+    if(c.k === 'gallery'){ if(typeof openGallery==='function') openGallery(); return; }
+  }catch(e){}
+}
+// Otevře fotku ve fullscreenu jen z jejího klíče (dohledá záznam v DB, projde bránou canViewPhoto).
+function _openPhotoByKey(key){
+  if(!key) return;
+  db.ref('standalone_photos/'+key).once('value').then(function(snap){
+    var it = snap.val();
+    if(!it){ showToast('Fotka už neexistuje', 2200); return; }
+    it.fbKey = key;
+    if(!canViewPhoto(it)){ showToast('🔒 Tuhle fotku nemáš oprávnění zobrazit', 2800); return; }
+    openPhotoFs(it.url, key, it);
+  }).catch(function(){ showToast('Fotku se nepodařilo otevřít', 2200); });
 }
 // Fotky v sérii by feed zaplavily → jedna série na stejné SO = jeden řádek (throttle 90 s).
 window._lastPhotoActLog = { so:null, ts:0 };
@@ -9975,10 +10027,11 @@ function _logPhotoActivity(so){
   var now = Date.now(), last = window._lastPhotoActLog;
   if(last && last.so === so && (now - last.ts) < 90000){ last.ts = now; return; }
   window._lastPhotoActLog = { so: so, ts: now };
-  logActivity('📷', 'přidal/a fotky' + (so?(' k '+so):''));
+  logActivity('📷', 'přidal/a fotky' + (so?(' k '+so):''), {k:'gallery'});
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-15', verze:'v120', text:'👆 V „aktivitě" jde teď kliknout na řádek a rovnou skočit na konkrétní věc – úkol, fotku, zkoušku, deník…' },
   { datum:'2026-07-15', verze:'v117', text:'📢 Nové: „Novinky & aktivita" v hlavičce – tady vidíš co přibylo v appce i kdo co dělá (komentáře, úkoly, fotky…).' },
   { datum:'2026-07-15', verze:'v116', text:'✍️ U TePř lze převzít existující podpis osoby a dopodepsat s vlastním datem. 🚛 Náklaďáky v šichtovce mají poznámku.' },
   { datum:'2026-07-15', verze:'v115', text:'📍 U fotky jde teď změnit i smazat staničení (nejen SO). 🔍 V galerii + zvětšuje, − zmenšuje (prohozeno).' },
@@ -10047,12 +10100,16 @@ function _renderActivity(){
   }
   var arr = window._activityCache || [];
   if(!arr.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:26px;font-size:13px;">Zatím žádná aktivita – jakmile někdo něco udělá (komentář, úkol, fotka…), objeví se to tady.</div>'; return; }
-  box.innerHTML = arr.map(function(a){
-    return '<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);">'
+  box.innerHTML = arr.map(function(a, i){
+    var klik = !!(a.cil && a.cil.k);   // řádek je klikací jen když nese cíl prokliku
+    var attrs = klik
+      ? ' onclick="openActivityTarget('+i+')" title="Otevřít" style="cursor:pointer;display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);"'
+      : ' style="display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);"';
+    return '<div'+attrs+'>'
       + '<span style="font-size:17px;flex-shrink:0;line-height:1.2;">'+escapeHtml(a.emoji||'•')+'</span>'
       + '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.35;">'
       +   '<b>'+escapeHtml(a.kdo||'Někdo')+'</b> '+escapeHtml(a.text||'')
-      +   '<div style="font-size:10px;color:var(--text2);margin-top:1px;">'+escapeHtml(_relTime(a.ts))+'</div>'
+      +   '<div style="font-size:10px;color:var(--text2);margin-top:1px;">'+escapeHtml(_relTime(a.ts))+(klik?' · <span style="color:#22d3ee;font-weight:700;">otevřít →</span>':'')+'</div>'
       + '</div></div>';
   }).join('');
 }
@@ -11504,7 +11561,7 @@ function saveTaskFromForm() {
     saveTaskToFirebase(task, function(){
       if(!existing){
         var pro = (window.newTaskAssignees||[]).map(function(a){ return a.name; }).filter(Boolean).join(', ');
-        logActivity('✅', 'zadal/a úkol „' + title + '"' + (pro?(' pro '+pro):'') + (soVal?(' · '+soVal):''));
+        logActivity('✅', 'zadal/a úkol „' + title + '"' + (pro?(' pro '+pro):'') + (soVal?(' · '+soVal):''), {k:'task', id:id});
       }
       closeNewTaskModal();
     });
@@ -11626,7 +11683,7 @@ function markTaskDone() {
   }).then(function(){
     showToast('✅ Úkol označen jako hotový', 1500);
     sendTaskNotificationRequest(t, 'hotovo');
-    logActivity('🎉', 'dokončil/a úkol „' + (t.title||'') + '"');
+    logActivity('🎉', 'dokončil/a úkol „' + (t.title||'') + '"', {k:'task', id:t.id});
   });
 }
 
@@ -11788,7 +11845,7 @@ function addComment() {
     input.value = '';
     window._mentionPicks = {};   // reset po odeslání
     _hideMentionPop();
-    logActivity('💬', 'okomentoval/a úkol „' + (t.title||'') + '"');
+    logActivity('💬', 'okomentoval/a úkol „' + (t.title||'') + '"', {k:'task', id:t.id});
     // Zmíněným pošli push navíc (Cloud Function zpracuje rec.mentions).
     sendTaskNotificationRequest(t, 'komentar', mentions.length ? { mentions: mentions.map(function(m){return m.uid;}), mentionBy: window.currentUser.name, mentionText: txt } : null);
   });
@@ -12237,7 +12294,7 @@ function strojeFillSelected(){
   diarySaveDay();
   var pa=document.getElementById('str-pick-all'); if(pa) pa.checked=false;
   renderStrojeList();
-  logActivity('📒', 'vyplnil/a stroje v šichtovce (' + boxes.length + ' · ' + h + ' h)');
+  logActivity('📒', 'vyplnil/a stroje v šichtovce (' + boxes.length + ' · ' + h + ' h)', {k:'denik'});
   showToast('✓ Vyplněno '+boxes.length+' strojům · '+h+' h', 1800);
 }
 
@@ -12562,7 +12619,7 @@ function sichtovkaFillSelected(){
   diarySaveDay();
   var pa=document.getElementById('sht-pick-all'); if(pa) pa.checked=false;
   renderSichtovka();
-  logActivity('📒', 'vyplnil/a šichtovku (' + boxes.length + ' osob · ' + h + ' h)');
+  logActivity('📒', 'vyplnil/a šichtovku (' + boxes.length + ' osob · ' + h + ' h)', {k:'denik'});
   showToast('✓ Vyplněno '+boxes.length+' vybraným · '+h+' h', 1800);
 }
 
@@ -12711,7 +12768,7 @@ function materialAdd(){
     var mp=document.getElementById('mat-poznamka'); if(mp) mp.value='';
     var mpc=document.getElementById('mat-pocet'); if(mpc) mpc.value=''; var mmj=document.getElementById('mat-mj'); if(mmj) mmj.value='';
     setPhotoBuf('material', []); renderPhotoBuf('material','mat-photos-preview');
-    logActivity('🚛', 'přidal/a materiál „' + nazev + '"' + (so?(' · '+so):''));
+    logActivity('🚛', 'přidal/a materiál „' + nazev + '"' + (so?(' · '+so):''), {k:'denik'});
     showToast('🚛 Materiál přidán', 1400);
   });
 }
@@ -12790,7 +12847,7 @@ function nakladAdd(){
   diarySaveDay(); renderNaklad();
   document.getElementById('na-firma').value=''; document.getElementById('na-pocet').value=''; document.getElementById('na-hodiny').value='';
   var np=document.getElementById('na-poznamka'); if(np) np.value='';
-  logActivity('🚛', 'zapsal/a do šichtovky náklaďák (' + _naOzn(oznaceni) + (firma?(' · '+firma):'') + ' · ' + pocet + '×)');
+  logActivity('🚛', 'zapsal/a do šichtovky náklaďák (' + _naOzn(oznaceni) + (firma?(' · '+firma):'') + ' · ' + pocet + '×)', {k:'denik'});
   showToast('🚛 NA přidán', 1200);
 }
 function nakladDelete(id){
