@@ -12618,11 +12618,21 @@ function renderNaklad(){
   if(!box) return;
   if(!ids.length){ box.innerHTML='<div style="font-size:12px;color:var(--text2);padding:4px 0;">Zatím žádné nákladní automobily.</div>'; return; }
   box.innerHTML=ids.map(function(id){ var n=list[id]; var can=isAdmin()||(window.currentUser&&n.uid===window.currentUser.uid);
-    return '<div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding:7px 2px;">'
+    return '<div style="border-bottom:1px solid var(--border);padding:7px 2px;">'
+      +'<div style="display:flex;align-items:center;gap:8px;">'
       +'<div style="flex:1;min-width:0;font-size:13px;color:var(--text);">🚛 <b>'+escapeHtml(_naOzn(n.oznaceni))+'</b>'+(n.firma?(' · '+escapeHtml(n.firma)):'')+' · '+(n.pocet||1)+'×'+(n.hodiny!=null?(' · '+n.hodiny+' h'):'')+'</div>'
       +(can?('<button onclick="nakladDelete(\''+id+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:7px;color:#fff;padding:6px;font-size:13px;cursor:pointer;min-width:34px;min-height:34px;">🗑</button>'):'')
+      +'</div>'
+      +(can
+        ? '<input type="text" onchange="nakladSetNote(\''+id+'\',this.value)" placeholder="📝 co dělali, kam jezdili, co vezli…" value="'+escapeHtml(n.poznamka||'')+'" style="width:100%;margin-top:4px;font-size:12px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);background:var(--panel2);color:var(--text);box-sizing:border-box;">'
+        : (n.poznamka?('<div style="margin-top:4px;font-size:12px;color:var(--text2);">📝 '+escapeHtml(n.poznamka)+'</div>'):''))
       +'</div>';
   }).join('');
+}
+function nakladSetNote(id, val){
+  var list=(window.diaryCurrentData&&window.diaryCurrentData.naklad)||{}; var n=list[id]; if(!n) return;
+  if(!(isAdmin()||(window.currentUser&&n.uid===window.currentUser.uid))){ showToast('Upravit můžeš jen svůj záznam', 2500); return; }
+  n.poznamka=(val||'').trim(); diarySaveDay();
 }
 function nakladAdd(){
   if(!window.currentUser){ showToast('Přihlaš se', 2000); return; }
@@ -12631,11 +12641,13 @@ function nakladAdd(){
   var pocet=parseInt(document.getElementById('na-pocet').value,10);
   var hodiny=parseFloat(document.getElementById('na-hodiny').value);
   if(isNaN(pocet)||pocet<1){ showToast('Zadej počet vozidel', 2000); return; }
+  var poznamka=(document.getElementById('na-poznamka')?document.getElementById('na-poznamka').value:'').trim();
   var id='na_'+Date.now()+'_'+Math.random().toString(36).substr(2,4);
   if(!window.diaryCurrentData.naklad) window.diaryCurrentData.naklad={};
-  window.diaryCurrentData.naklad[id]={ id:id, oznaceni:oznaceni, firma:firma, pocet:pocet, hodiny:(isNaN(hodiny)?null:hodiny), uid:window.currentUser.uid, name:window.currentUser.name, ts:Date.now() };
+  window.diaryCurrentData.naklad[id]={ id:id, oznaceni:oznaceni, firma:firma, pocet:pocet, hodiny:(isNaN(hodiny)?null:hodiny), poznamka:poznamka, uid:window.currentUser.uid, name:window.currentUser.name, ts:Date.now() };
   diarySaveDay(); renderNaklad();
   document.getElementById('na-firma').value=''; document.getElementById('na-pocet').value=''; document.getElementById('na-hodiny').value='';
+  var np=document.getElementById('na-poznamka'); if(np) np.value='';
   showToast('🚛 NA přidán', 1200);
 }
 function nakladDelete(id){
@@ -13095,7 +13107,7 @@ function generateFullExport(){
       out.push('Nákladní automobily:');
       Object.keys(d.naklad).sort(function(a,b){ return (d.naklad[a].ts||0)-(d.naklad[b].ts||0); }).forEach(function(id){
         var n=d.naklad[id];
-        out.push('  · ' + _naOzn(n.oznaceni) + (n.firma?(' · '+n.firma):'') + ' · ' + (n.pocet||1) + '×' + (n.hodiny!=null?(' · '+n.hodiny+' h'):''));
+        out.push('  · ' + _naOzn(n.oznaceni) + (n.firma?(' · '+n.firma):'') + ' · ' + (n.pocet||1) + '×' + (n.hodiny!=null?(' · '+n.hodiny+' h'):'') + (n.poznamka?('   ('+n.poznamka+')'):''));
       });
     }
     // Záznamy
@@ -13219,8 +13231,8 @@ function _buildDiaryPdfHtml(keys, od, doDate, inc, urlMap, photoByDay){
     }
     if(d.naklad && Object.keys(d.naklad).length){
       var nids=Object.keys(d.naklad).sort(function(a,b){ return (d.naklad[a].ts||0)-(d.naklad[b].ts||0); });
-      P.push('<h3>Nákladní automobily</h3><table><thead><tr><th>Označení</th><th>Firma</th><th class="num">Počet</th><th class="num">Hod.</th></tr></thead><tbody>');
-      nids.forEach(function(id){ var n=d.naklad[id]; P.push('<tr><td>'+esc(_naOzn(n.oznaceni))+'</td><td>'+esc(n.firma||'')+'</td><td class="num">'+(n.pocet||1)+'</td><td class="num">'+(n.hodiny!=null?n.hodiny:'')+'</td></tr>'); });
+      P.push('<h3>Nákladní automobily</h3><table><thead><tr><th>Označení</th><th>Firma</th><th class="num">Počet</th><th class="num">Hod.</th><th>Poznámka</th></tr></thead><tbody>');
+      nids.forEach(function(id){ var n=d.naklad[id]; P.push('<tr><td>'+esc(_naOzn(n.oznaceni))+'</td><td>'+esc(n.firma||'')+'</td><td class="num">'+(n.pocet||1)+'</td><td class="num">'+(n.hodiny!=null?n.hodiny:'')+'</td><td>'+esc(n.poznamka||'')+'</td></tr>'); });
       P.push('</tbody></table>');
     }
     if(inc.materialy && d.materialyList){
@@ -13788,6 +13800,53 @@ function deleteSignature(teprId, sigId){
   db.ref('tepr_podpisy/' + teprId + '/' + sigId).remove().then(function(){
     showToast('🗑 Smazáno', 1200);
   });
+}
+
+// ── Převzít existující podpis (dopodepsat) ───────────────────────────
+// Umožní vzít podpis osoby, který už někde je, a použít ho na JINÉ (nové) TePř s vlastním datem.
+// Podpis se vykreslí na plátno → `saveSignature` ho uloží běžnou cestou (víc TePř + datum už umí).
+function _loadSignatureToCanvas(dataUrl){
+  var canvas=document.getElementById('sign-canvas'); if(!canvas) return;
+  var ctx=canvas.getContext('2d'); signClearCanvas();
+  var img=new Image();
+  img.onload=function(){ try { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); } catch(e){} };
+  img.src=dataUrl;
+}
+function openReuseSignPicker(){
+  var ov=document.getElementById('reuse-sign-modal');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='reuse-sign-modal';
+    ov.style.cssText='position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;';
+    ov.innerHTML='<div style="background:var(--panel);border-radius:14px;max-width:440px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;"><div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">📋 Převzít podpis osoby</div><button onclick="document.getElementById(\'reuse-sign-modal\').style.display=\'none\'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button></div>'
+      +'<div style="font-size:11px;color:var(--text2);padding:8px 16px 0;">Vyber, čí podpis převzít. Pak nastav <b>datum</b> a zaškrtni <b>které TePř</b> podepsat, a dej Uložit.</div>'
+      +'<div id="reuse-sign-list" style="padding:10px 16px;overflow-y:auto;flex:1;"></div></div>';
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  var box=document.getElementById('reuse-sign-list'); box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;">⏳ Načítám…</div>';
+  db.ref('tepr_podpisy').once('value').then(function(snap){
+    var all=snap.val()||{}, byPerson={};
+    Object.keys(all).forEach(function(tid){ var sigs=all[tid]||{}; Object.keys(sigs).forEach(function(sid){ var s=sigs[sid]; if(!s||!s.jmeno||!s.dataUrl) return; var key=(s.jmeno||'').trim().toLowerCase()+'|'+(s.firma||''); var cur=byPerson[key]; if(!cur || (s.vytvoreno||0)>(cur.vytvoreno||0)) byPerson[key]=s; }); });
+    var arr=Object.keys(byPerson).map(function(k){return byPerson[k];}).sort(function(a,b){return (a.jmeno||'').localeCompare(b.jmeno||'','cs');});
+    if(!arr.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;">Zatím žádné uložené podpisy.</div>'; return; }
+    box.innerHTML='';
+    arr.forEach(function(s){
+      var b=document.createElement('button');
+      b.style.cssText='display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:6px;cursor:pointer;';
+      b.innerHTML='<img src="'+s.dataUrl+'" style="width:64px;height:34px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid var(--border);flex-shrink:0;"><div style="flex:1;min-width:0;font-size:12px;"><div style="color:var(--text);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(s.jmeno)+'</div><div style="color:var(--text2);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml([s.funkce,s.firma].filter(Boolean).join(' · '))+'</div></div>';
+      b.onclick=(function(sig){ return function(){ _pickReuseSignature(sig); }; })(s);
+      box.appendChild(b);
+    });
+  }).catch(function(){ box.innerHTML='<div style="text-align:center;color:#e94560;padding:24px;">❌ Nepodařilo se načíst.</div>'; });
+}
+function _pickReuseSignature(s){
+  document.getElementById('sign-name').value=s.jmeno||'';
+  document.getElementById('sign-funkce').value=s.funkce||'';
+  var fi=document.getElementById('sign-firma'); if(fi) fi.value=s.firma||'';
+  _loadSignatureToCanvas(s.dataUrl);
+  var m=document.getElementById('reuse-sign-modal'); if(m) m.style.display='none';
+  showToast('✍️ Podpis převzat – nastav DATUM a zaškrtni TePř, pak Ulož', 3200);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -15420,6 +15479,7 @@ function copyDiaryExport(){
           <input id="na-pocet" class="diary-field" type="number" min="1" step="1" placeholder="počet" style="flex:0 0 80px;">
           <input id="na-hodiny" class="diary-field" type="number" min="0" max="24" step="0.5" placeholder="hodin" style="flex:0 0 80px;">
         </div>
+        <input id="na-poznamka" class="diary-field" type="text" placeholder="📝 poznámka (co dělali, kam jezdili, co vezli…)" style="margin-bottom:5px;">
         <button type="button" onclick="nakladAdd()" style="width:100%;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">➕ Přidat NA</button>
       </div>
     </div>
@@ -15863,9 +15923,12 @@ function copyDiaryExport(){
     </label>
     <input type="date" class="diary-field" id="sign-datum">
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
       <span id="sign-lbl-podpis-span">Podpis (kresli prstem)</span>
-      <button id="sign-btn-clear" onclick="signClearCanvas()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">⌫ Vyčistit</button>
+      <span style="display:flex;gap:6px;">
+        <button id="sign-btn-reuse" onclick="openReuseSignPicker()" title="Použít existující podpis osoby (dopodepsat) – zvolíš datum a TePř" style="background:var(--panel2);border:1px solid var(--accent2);border-radius:6px;color:var(--accent2);padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;">📋 Převzít podpis</button>
+        <button id="sign-btn-clear" onclick="signClearCanvas()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:3px 8px;font-size:11px;cursor:pointer;">⌫ Vyčistit</button>
+      </span>
     </label>
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;flex-shrink:0;height:200px;">
       <canvas id="sign-canvas" width="520" height="200" style="display:block;width:100%;height:200px;background:#fff;cursor:crosshair;"></canvas>
