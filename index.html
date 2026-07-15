@@ -1133,9 +1133,13 @@ document.addEventListener('touchend', function(e){
 <!-- Feed aktivity („co se děje") -->
 <div id="activity-modal" style="display:none;position:fixed;inset:0;z-index:5200;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
-    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">📢 Co se děje</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 8px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">📢 Novinky & aktivita</div>
       <button onclick="closeActivity()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;padding:8px 14px 0;flex-shrink:0;">
+      <button id="acttab-novinky" onclick="setActivityTab('novinky')" style="flex:1;padding:9px 6px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">🆕 Co je nového</button>
+      <button id="acttab-feed" onclick="setActivityTab('feed')" style="flex:1;padding:9px 6px;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">📢 Aktivita</button>
     </div>
     <div id="activity-list" style="padding:8px 14px;overflow-y:auto;flex:1;"></div>
   </div>
@@ -9973,7 +9977,24 @@ function _logPhotoActivity(so){
   window._lastPhotoActLog = { so: so, ts: now };
   logActivity('📷', 'přidal/a fotky' + (so?(' k '+so):''));
 }
+// ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
+var APP_NOVINKY = [
+  { datum:'2026-07-15', verze:'v117', text:'📢 Nové: „Novinky & aktivita" v hlavičce – tady vidíš co přibylo v appce i kdo co dělá (komentáře, úkoly, fotky…).' },
+  { datum:'2026-07-15', verze:'v116', text:'✍️ U TePř lze převzít existující podpis osoby a dopodepsat s vlastním datem. 🚛 Náklaďáky v šichtovce mají poznámku.' },
+  { datum:'2026-07-15', verze:'v115', text:'📍 U fotky jde teď změnit i smazat staničení (nejen SO). 🔍 V galerii + zvětšuje, − zmenšuje (prohozeno).' },
+  { datum:'2026-07-14', verze:'v114', text:'📒 Šichtovka: víc SO k člověku/stroji, nákladní automobily, „počet + MJ" u materiálu, „vyplnit vybraným". 🖨️ PDF deníku vč. fotek.' },
+  { datum:'2026-07-14', verze:'v113', text:'📷 Při vkládání fotek z galerie jde rovnou dopsat i SO. 🚜 Stroje v šichtovce lze řadit podle firmy/SO.' },
+  { datum:'2026-07-13', verze:'v112', text:'💬 Označování osob přes @ funguje i v komentářích u fotek (nejen u úkolů).' },
+  { datum:'2026-07-13', verze:'v110', text:'🛰️ Vyšší kvalita dron ortofota. 🖼️ 🗂️ výběr fotky z galerie appky u poznámky.' },
+  { datum:'2026-07-13', verze:'v108', text:'💬 @označení osob v komentářích úkolů. 📷 Série focení si pamatuje vybrané objekty. 📍 Geo připomínka úkolu je teď výrazná.' },
+  { datum:'2026-07-09', verze:'v107', text:'🏢 Nově se u profilu vyplňuje firma (aby bylo jasné, kdo za koho je).' },
+  { datum:'2026-07-08', verze:'v105', text:'🔐 Práva podle kategorií (M-SILNICE / SUB / investor) + admin může spravovat a mazat uživatele.' }
+];
+function _novinkySeen(){ try{ return localStorage.getItem('novinkySeenDatum') || ''; }catch(e){ return ''; } }
+function _novinkyLatest(){ return (APP_NOVINKY[0] && APP_NOVINKY[0].datum) || ''; }
+
 window._activityCache = [];
+window._activityTab = 'novinky';
 function loadActivity(){
   try{
     db.ref('aktivita').orderByChild('ts').limitToLast(80).on('value', function(snap){
@@ -9989,24 +10010,43 @@ function loadActivity(){
 function _activitySeenTs(){ try{ return parseInt(localStorage.getItem('activitySeenTs'),10) || 0; }catch(e){ return 0; } }
 function _updateActivityBadge(){
   var b = document.getElementById('activity-badge'); if(!b) return;
-  var seen = _activitySeenTs();
   var me = (window.currentUser && window.currentUser.name) || '';
-  var n = (window._activityCache||[]).filter(function(a){ return (a.ts||0) > seen && a.kdo !== me; }).length;   // cizí novinky
+  var nAkce = (window._activityCache||[]).filter(function(a){ return (a.ts||0) > _activitySeenTs() && a.kdo !== me; }).length;
+  var nNov  = APP_NOVINKY.filter(function(x){ return (x.datum||'') > _novinkySeen(); }).length;
+  var n = nAkce + nNov;
   if(n > 0){ b.textContent = n > 99 ? '99+' : n; b.style.display=''; }
   else { b.style.display='none'; }
 }
+function setActivityTab(t){ window._activityTab = t; _renderActivity(); }
 function openActivity(){
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   document.getElementById('activity-modal').style.display = 'flex';
+  // Default na tu záložku, kde je novinka; jinak novinky
+  var hasNewAkce = (window._activityCache||[]).some(function(a){ var me=(window.currentUser&&window.currentUser.name)||''; return (a.ts||0) > _activitySeenTs() && a.kdo !== me; });
+  var hasNewNov  = APP_NOVINKY.some(function(x){ return (x.datum||'') > _novinkySeen(); });
+  window._activityTab = (hasNewAkce && !hasNewNov) ? 'feed' : 'novinky';
   _renderActivity();
-  try{ localStorage.setItem('activitySeenTs', String(Date.now())); }catch(e){}
+  try{ localStorage.setItem('activitySeenTs', String(Date.now())); localStorage.setItem('novinkySeenDatum', _novinkyLatest()); }catch(e){}
   _updateActivityBadge();
 }
 function closeActivity(){ var m=document.getElementById('activity-modal'); if(m) m.style.display='none'; }
 function _renderActivity(){
   var box = document.getElementById('activity-list'); if(!box) return;
+  // Styl záložek
+  var tn=document.getElementById('acttab-novinky'), tf=document.getElementById('acttab-feed');
+  function styleTab(el,on){ if(!el) return; el.style.background = on?'#22d3ee':'var(--panel2)'; el.style.color = on?'#0f3460':'var(--text2)'; }
+  styleTab(tn, window._activityTab==='novinky'); styleTab(tf, window._activityTab==='feed');
+  if(window._activityTab === 'novinky'){
+    box.innerHTML = APP_NOVINKY.map(function(x){
+      return '<div style="padding:9px 2px;border-bottom:1px solid var(--border);">'
+        + '<div style="font-size:13px;color:var(--text);line-height:1.4;">'+escapeHtml(x.text||'')+'</div>'
+        + '<div style="font-size:10px;color:var(--text2);margin-top:2px;">'+escapeHtml(x.datum||'')+(x.verze?(' · '+escapeHtml(x.verze)):'')+'</div>'
+        + '</div>';
+    }).join('') || '<div style="text-align:center;color:var(--text2);padding:26px;font-size:13px;">Zatím žádné novinky.</div>';
+    return;
+  }
   var arr = window._activityCache || [];
-  if(!arr.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:26px;font-size:13px;">Zatím žádná aktivita.</div>'; return; }
+  if(!arr.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:26px;font-size:13px;">Zatím žádná aktivita – jakmile někdo něco udělá (komentář, úkol, fotka…), objeví se to tady.</div>'; return; }
   box.innerHTML = arr.map(function(a){
     return '<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);">'
       + '<span style="font-size:17px;flex-shrink:0;line-height:1.2;">'+escapeHtml(a.emoji||'•')+'</span>'
