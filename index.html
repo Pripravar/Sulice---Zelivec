@@ -6131,6 +6131,8 @@ function _renderFsItem(url, firebaseKey, item) {
   if(delBtn) delBtn.style.display = canEd ? 'inline-block' : 'none';
   var soBtn = document.getElementById('photo-fs-soedit');
   if(soBtn) soBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';   // přeřadit smí kdokoliv přihlášený
+  var kmBtn = document.getElementById('photo-fs-kmedit');
+  if(kmBtn) kmBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';
   // Popiska „kdo/kde/kdy" (aby bylo vždy vidět autora i bez razítka)
   var infoEl = document.getElementById('photo-fs-info');
   if(infoEl){
@@ -7098,23 +7100,33 @@ function editPhotoSO() {
   chooseSOForPhoto(item.km, function(soArr){
     soArr = soArr || [];
     var upd = { so: soArr[0] || '', soList: soArr, restampOnDownload: true };
-    // #8 – při přetřídění umožnit i změnu / smazání staničení km (Zrušit = km beze změny).
-    var kmNew = prompt('Staničení km – uprav, nebo nech PRÁZDNÉ = smazat km.\n(Zrušit = km nechat beze změny)', (item.km||''));
-    if(kmNew !== null){
-      kmNew = kmNew.trim();
-      upd.km = kmNew;
-      var rk = kmNew ? parseKmStr(kmNew) : null;
-      if(rk != null){ var ll = realKmToLatLng(rk); if(ll){ upd.lat = ll[0]; upd.lng = ll[1]; } }
-      else if(!kmNew){ upd.lat = null; upd.lng = null; }   // km smazáno → i souřadnice pryč
-    }
     db.ref('standalone_photos/' + key).update(upd).then(function(){
       item.so = upd.so; item.soList = soArr; item.restampOnDownload = true;
-      if('km' in upd){ item.km = upd.km; if('lat' in upd){ item.lat = upd.lat; item.lng = upd.lng; } }
-      showToast('✅ Zařazení změněno: ' + (soArr.length ? soArr.join(', ') : 'nezařazeno') + (('km' in upd)?(' · km '+(upd.km||'—')):''), 2800);
+      showToast('✅ Zařazení změněno: ' + (soArr.length ? soArr.join(', ') : 'nezařazeno'), 2600);
       if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
       _restampPhotoNow(item, key);   // JEDNOTLIVÁ fotka → přerazítkuj hned (hromadné přeřazení zůstává na stažení)
     }).catch(function(){ showToast('❌ Chyba uložení', 2500); });
   }, preset);
+}
+// 📍 Změna / smazání STANIČENÍ (km) u nahrané fotky – samostatně (bez SO pickeru). Přerazítkuje hned.
+function editPhotoKm(){
+  var item = _photoFsItem, key = _photoFsKey;
+  if(!item || !key){ showToast('Tuhle fotku nelze upravit (jen fotky z galerie)', 2800); return; }
+  if(!window.currentUser){ showToast('Pro úpravu se přihlas', 2800); return; }
+  if(typeof closeFsMenu === 'function') closeFsMenu();
+  var kmNew = prompt('Staničení km – uprav, nebo nech PRÁZDNÉ = smazat km.\n(Zrušit = beze změny)', (item.km||''));
+  if(kmNew === null) return;
+  kmNew = kmNew.trim();
+  var upd = { km: kmNew, restampOnDownload: true };
+  var rk = kmNew ? parseKmStr(kmNew) : null;
+  if(rk != null){ var ll = realKmToLatLng(rk); if(ll){ upd.lat = ll[0]; upd.lng = ll[1]; } }
+  else if(!kmNew){ upd.lat = null; upd.lng = null; }   // km smazáno → i souřadnice pryč
+  db.ref('standalone_photos/' + key).update(upd).then(function(){
+    item.km = upd.km; if('lat' in upd){ item.lat = upd.lat; item.lng = upd.lng; } item.restampOnDownload = true;
+    showToast('✅ Staničení: ' + (kmNew ? ('km '+kmNew) : 'smazáno'), 2400);
+    if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+    _restampPhotoNow(item, key);
+  }).catch(function(){ showToast('❌ Chyba uložení', 2500); });
 }
 // Okamžité přerazítkování JEDNÉ fotky po přeřazení SO: vygeneruje orazítkovanou verzi z ČISTÉHO originálu
 // s novým SO, nahraje ji a nastaví jako viditelnou. Bez originálu (staré fotky) se nedělá – jinak by
@@ -14704,6 +14716,7 @@ function copyDiaryExport(){
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">⬇ Stáhnout s datem</button>
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;text-decoration:none;font-size:15px;font-weight:700;min-height:48px;display:flex;align-items:center;">&#128247; Otevřít v prohlížeči</a>
     <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🏗️ Přeřadit (SO)</button>
+    <button id="photo-fs-kmedit" onclick="editPhotoKm()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📍 Přeřadit / smazat staničení (km)</button>
     <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;text-align:left;background:rgba(233,69,96,0.15);color:#e94560;border:1px solid #e94560;padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">&#128465; Smazat</button>
   </div>
   <div id="photo-fs-bar" style="flex-shrink:0;width:100%;box-sizing:border-box;display:flex;gap:10px;justify-content:center;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.6);" onclick="event.stopPropagation()">
@@ -14775,9 +14788,9 @@ function copyDiaryExport(){
       <div style="flex:1;">
         <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🔍 Velikost náhledů</div>
         <div style="display:flex;align-items:center;gap:6px;">
-          <button onclick="stepGalleryCols(-1)" title="Větší náhledy (méně ve řadě)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:40px;height:34px;font-size:18px;font-weight:700;cursor:pointer;">−</button>
+          <button onclick="stepGalleryCols(1)" title="Menší náhledy (víc ve řadě)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:40px;height:34px;font-size:18px;font-weight:700;cursor:pointer;">−</button>
           <span id="gallery-cols-readout" style="flex:1;text-align:center;font-size:12px;color:var(--text2);">3 ve řadě</span>
-          <button onclick="stepGalleryCols(1)" title="Menší náhledy (víc ve řadě)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:40px;height:34px;font-size:18px;font-weight:700;cursor:pointer;">+</button>
+          <button onclick="stepGalleryCols(-1)" title="Větší náhledy (méně ve řadě)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);width:40px;height:34px;font-size:18px;font-weight:700;cursor:pointer;">+</button>
         </div>
       </div>
     </div>
