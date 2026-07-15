@@ -10031,7 +10031,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
-  { datum:'2026-07-15', verze:'v120', text:'👆 V „aktivitě" jde teď kliknout na řádek a rovnou skočit na konkrétní věc – úkol, fotku, zkoušku, deník…' },
+  { datum:'2026-07-15', verze:'v121', text:'👆 V „aktivitě" jde teď kliknout na řádek a rovnou skočit na konkrétní věc – úkol, fotku, zkoušku, deník… (jen na to, na co máš právo).' },
   { datum:'2026-07-15', verze:'v117', text:'📢 Nové: „Novinky & aktivita" v hlavičce – tady vidíš co přibylo v appce i kdo co dělá (komentáře, úkoly, fotky…).' },
   { datum:'2026-07-15', verze:'v116', text:'✍️ U TePř lze převzít existující podpis osoby a dopodepsat s vlastním datem. 🚛 Náklaďáky v šichtovce mají poznámku.' },
   { datum:'2026-07-15', verze:'v115', text:'📍 U fotky jde teď změnit i smazat staničení (nejen SO). 🔍 V galerii + zvětšuje, − zmenšuje (prohozeno).' },
@@ -10101,7 +10101,8 @@ function _renderActivity(){
   var arr = window._activityCache || [];
   if(!arr.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:26px;font-size:13px;">Zatím žádná aktivita – jakmile někdo něco udělá (komentář, úkol, fotka…), objeví se to tady.</div>'; return; }
   box.innerHTML = arr.map(function(a, i){
-    var klik = !!(a.cil && a.cil.k);   // řádek je klikací jen když nese cíl prokliku
+    // Klikací jen když nese cíl A uživatel na tu funkci má právo (jinak ani „otevřít →" nevidí).
+    var klik = !!(a.cil && a.cil.k) && _canOpenActivityTarget(a.cil);
     var attrs = klik
       ? ' onclick="openActivityTarget('+i+')" title="Otevřít" style="cursor:pointer;display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);"'
       : ' style="display:flex;gap:9px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--border);"';
