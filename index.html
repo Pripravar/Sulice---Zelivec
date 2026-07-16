@@ -1693,7 +1693,7 @@ document.addEventListener('touchend', function(e){
           <input id="lib-bulk-km" type="text" placeholder="např. 2,350 nebo ZS" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
         </label>
         <label style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text2);">🏗️ SO objekt
-          <input id="lib-bulk-so" type="text" list="so-catalog-list" placeholder="např. SO 101 (jinak dle km)" autocomplete="off" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+          <input id="lib-bulk-so" type="text" readonly onclick="openSOFieldPicker('lib-bulk-so')" placeholder="klepni a vyber SO (jinak dle km)" autocomplete="off" style="padding:9px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;">
         </label>
         <button onclick="libApplyBulk()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;min-height:42px;">Použít u všech</button>
       </div>
@@ -10122,6 +10122,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-16', verze:'v125', text:'🏗️ SO se všude vybírá ze seznamu (ne psaním): u vkládání fotek z knihovny, u poznámky i u úkolu – klepneš do políčka a vybereš, jako u focení.' },
   { datum:'2026-07-16', verze:'v124', text:'🙂 Reakce na komentáře fotek teď opravdu fungují (a přežijí překreslení). 📞 Telefon je vidět i v šichtovce – rovnou volání, nebo doplnění čísla. 🚜 Když stroji/autu zadáš strojníka/řidiče, jeho čas a co dělal se sám ukáže a přenese k tomu člověku (nevyplňuješ dvakrát).' },
   { datum:'2026-07-16', verze:'v123', text:'📒 Šichtovka dál: 📋 Kopírovat den, ↩︎ Zpět (vrátí poslední změnu), ↺ Reset dne. Sbalení řádku (jen jméno + hodiny, klik rozbalí). U strojů a aut 🧑 obsluha (strojník/řidič – z lidí nebo nový). Náklaďáky lze řadit (firma/SO/abecedně). U lidí 📞 telefon. 🙂 Reakce na komentáře opraveny – teď stačí jeden ťuk.' },
   { datum:'2026-07-15', verze:'v122', text:'📒 Velká šichtovka: kolonka „od-do" (sama spočítá hodiny) + pauza, „vyplnit vybraným" teď i poznámky/SO, dočasně skrýt lidi/stroje/auta, náklaďáky jako stroje (od-do/co vozili/SO), zvýraznění vyplněných, a nový „Závěr dne" seskupený podle SO. 🙂 Emoji reakce na komentáře (fotky i úkoly).' },
@@ -12220,7 +12221,7 @@ function openSichtSoPicker(id, kind){
   var ov = document.getElementById('sicht-so-modal');
   if(!ov){
     ov=document.createElement('div'); ov.id='sicht-so-modal';
-    ov.style.cssText='position:fixed;inset:0;z-index:4600;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;';
+    ov.style.cssText='position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;';
     ov.innerHTML='<div style="background:var(--panel);border-radius:14px;max-width:440px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">'
       +'<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;"><div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🏗️ Objekty (můžeš vybrat víc)</div><button onclick="document.getElementById(\'sicht-so-modal\').style.display=\'none\'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button></div>'
       +'<div id="sicht-so-list" style="padding:10px 14px;overflow-y:auto;flex:1;"></div>'
@@ -12258,7 +12259,22 @@ function _sichtSoSave(){
     _updateBulkSoLabel(ctx.kind);
     return;
   }
+  if(ctx.id==='__FIELD__'){   // #11 – zapiš výběr SO do libovolného políčka (foto z knihovny / poznámka / úkol)
+    var inp=document.getElementById(ctx.targetInput);
+    if(inp){ inp.value=joined; try{ inp.dispatchEvent(new Event('change')); }catch(e){} }
+    return;
+  }
   changeSOForDay(ctx.id, ctx.kind, joined);
+}
+// #11 – obecný výběr SO ze seznamu do políčka (místo ručního psaní). Políčko drží hodnotu (čárkou oddělené).
+function openSOFieldPicker(inputId){
+  openSichtSoPicker('__FIELD__', 'osoby');   // vytvoří/zobrazí modal
+  var mo=document.getElementById('sicht-so-modal'); if(mo) mo.style.zIndex='6000';   // nad hostitelské modaly (lib import 5200 apod.)
+  var inp=document.getElementById(inputId);
+  var cur=(inp&&inp.value||'').trim();
+  var selSet={}; cur.split(',').map(function(s){ return s.trim(); }).filter(Boolean).forEach(function(s){ selSet[s]=true; });
+  window._sichtSoCtx = { id:'__FIELD__', kind:'osoby', targetInput:inputId, selSet:selSet };
+  _renderSichtSoList();
 }
 
 function loadPracovnici(){
@@ -15604,7 +15620,7 @@ function copyDiaryExport(){
     </div>
     <input id="note-nazev" class="note-field" type="text" placeholder="📛 Název (nepovinný)" maxlength="60" style="font-weight:600;">
     <input id="note-stanic" class="note-field" type="text" placeholder="📍 Staničení (např. 1+250) – umístí na mapu" maxlength="12" inputmode="text">
-    <input id="note-so" class="note-field" type="text" list="note-so-list" placeholder="🏗️ SO objekt (nepovinné) – do razítka" maxlength="40" autocomplete="off">
+    <input id="note-so" class="note-field" type="text" readonly onclick="openSOFieldPicker('note-so')" placeholder="🏗️ SO objekt (nepovinné) – klepni a vyber" autocomplete="off" style="cursor:pointer;">
     <datalist id="note-so-list"></datalist>
     <input id="note-author" class="note-field" type="text" placeholder="Vaše jméno *" maxlength="40">
     <textarea id="note-text" class="note-field" placeholder="Text poznámky..."></textarea>
@@ -16039,7 +16055,7 @@ function copyDiaryExport(){
     </select>
 
     <label>🏗️ SO objekt (nepovinné)</label>
-    <input class="task-field" id="tnm-so" list="tnm-so-list" placeholder="např. SO 101 – vyber nebo napiš" autocomplete="off">
+    <input class="task-field" id="tnm-so" type="text" readonly onclick="openSOFieldPicker('tnm-so')" placeholder="klepni a vyber SO (nepovinné)" autocomplete="off" style="cursor:pointer;">
     <datalist id="tnm-so-list"></datalist>
 
     <label id="tnm-loc-label" style="display:none;">📍 Lokace</label>
