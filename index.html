@@ -979,6 +979,8 @@ textarea.diary-field { resize:none; min-height:60px; }
 /* #9 – telefon v šichtovce + propojení obsluhy stroje k člověku */
 .sht-tel { background:rgba(34,211,238,0.12); color:var(--accent2); font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; text-decoration:none; margin-left:6px; }
 .sht-tel-add { background:transparent; border:1px dashed var(--border); color:var(--text2); font-size:10px; padding:1px 6px; border-radius:8px; cursor:pointer; margin-left:6px; }
+.sht-telrow { margin-top:2px; }
+.sht-telrow .sht-tel, .sht-telrow .sht-tel-add { margin-left:0; display:inline-block; }
 .sht-oplink { align-self:flex-start; font-size:11px; color:var(--accent2); background:rgba(34,211,238,0.08); border-radius:7px; padding:2px 8px; margin-top:2px; }
 /* #7 – emoji reakce na komentáře */
 .cmt-reacts { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin-top:3px; }
@@ -10135,6 +10137,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-16', verze:'v128', text:'📞 Telefon je teď vidět i u rozbaleného řádku v šichtovce (na vlastním řádku, neořízne se). 🔍 Do „Lidé/firmy", „Spravovat stroje" i „Spravovat auta" přibylo hledání a řazení (abecedně / podle firmy / SO).' },
   { datum:'2026-07-16', verze:'v127', text:'🧹 Reset v šichtovce teď maže i SO (jednotlivec, celý oddíl „vč. SO", i reset dne „vyprázdnit"). 🏗️ SO u materiálu se vybírá s popisem objektu. 📷 Fotky u materiálu se teď ukládají i do galerie pod zadané SO (jako každá jiná fotka) – označené 🚛.' },
   { datum:'2026-07-16', verze:'v126', text:'🧹 V šichtovce jde vymazat vyplnění – jednotlivě u člověka/stroje/auta (ikonka 🧹 v řádku), nebo hromadně celé skupině. Vratné tlačítkem Zpět. 🏗️ Výběr SO ze seznamu funguje i u jednotlivých fotek při vkládání z knihovny (nejen hromadně).' },
   { datum:'2026-07-16', verze:'v125', text:'🏗️ SO se všude vybírá ze seznamu (ne psaním): u vkládání fotek z knihovny, u poznámky i u úkolu – klepneš do políčka a vybereš, jako u focení.' },
@@ -12451,8 +12454,16 @@ function strojeFillSelected(){
 function openStrojeModal(){
   var list = document.getElementById('stroje-list');
   var arr = getAllStroje(true);
+  var q = (document.getElementById('stroje-search') && document.getElementById('stroje-search').value || '').trim().toLowerCase();
+  var sm = (document.getElementById('stroje-sortsel') && document.getElementById('stroje-sortsel').value) || 'abc';
+  if(q) arr = arr.filter(function(s){ return ((s.nazev||'')+' '+(s.firma||'')+' '+(s.so||'')+' '+(s.typ||'')).toLowerCase().indexOf(q)!==-1; });
+  arr.sort(function(a,b){
+    if(sm==='firma'){ var fa=(a.firma||'￿').toLowerCase(), fb=(b.firma||'￿').toLowerCase(); if(fa!==fb) return fa<fb?-1:1; }
+    else if(sm==='so'){ var sa=(a.so||'￿'), sb=(b.so||'￿'); if(sa!==sb) return sa.localeCompare(sb, undefined, {numeric:true}); }
+    return (a.nazev||'').localeCompare(b.nazev||'', 'cs');
+  });
   if(arr.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Zatím žádné stroje. Přidej dole.</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">'+(q?'Nic neodpovídá hledání.':'Zatím žádné stroje. Přidej dole.')+'</div>';
   } else {
     list.innerHTML = arr.map(function(s){
       var hidden = (s.vSichtovce === false) ? ' <span style="color:var(--text2);font-size:10px;">(skryto)</span>' : '';
@@ -13094,8 +13105,9 @@ function renderSichtovka(){
   function _shtRowHtml(u){
     var typIcon = u.type === 'manual' ? ' <span style="color:var(--text2);font-size:10px;">👷</span>' : '';
     var pickHtml = '<input type="checkbox" class="sht-pick" data-uid="' + u.id + '" style="width:18px;height:18px;flex-shrink:0;margin-right:2px;">';
-    var nameHtml = escapeHtml(u.name) + typIcon + _telChipHtml(u);
-    if(_isCollapsed('osoby', u.id)) return _collapsedRowHtml('osoby', u.id, pickHtml, nameHtml, sicht[u.id]);
+    var nameHtml = escapeHtml(u.name) + typIcon;
+    // telefon do sbaleného řádku vejme za jméno; do rozbaleného dáme na vlastní řádek (jinak ho ořízne nowrap)
+    if(_isCollapsed('osoby', u.id)) return _collapsedRowHtml('osoby', u.id, pickHtml, nameHtml + ' ' + _telChipHtml(u), sicht[u.id]);
     var h = sicht[u.id];
     var hVal = (h === undefined || h === null || h === '') ? '' : h;
     var pVal = pozn[u.id] || '';
@@ -13106,6 +13118,7 @@ function renderSichtovka(){
       + pickHtml
       + '<div class="sht-left">'
       +   '<div class="sht-name">' + nameHtml + '</div>'
+      +   '<div class="sht-telrow">' + _telChipHtml(u) + '</div>'
       +   '<input type="text" class="sht-note" placeholder="poznámka (např. odešel k zubaři 13:00)" value="' + escapeHtml(pVal) + '" onchange="sichtovkaSetNote(\'' + u.id + '\', this.value)">'
       +   _timeCellHtml('osoby', u.id)
       +   _operatorLinksHtml(u.name, opMap)
@@ -13509,7 +13522,15 @@ function nakladFillSelected(){
 function openNakladyModal(){
   var box = document.getElementById('naklady-list'); if(!box) return;
   var arr = getAllNaklady(true);
-  if(!arr.length){ box.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Zatím žádná auta. Přidej dole.</div>'; }
+  var q = (document.getElementById('naklady-search') && document.getElementById('naklady-search').value || '').trim().toLowerCase();
+  var sm = (document.getElementById('naklady-sortsel') && document.getElementById('naklady-sortsel').value) || 'abc';
+  if(q) arr = arr.filter(function(s){ return ((s.nazev||'')+' '+(s.firma||'')+' '+(s.so||'')+' '+_naOzn(s.typ)).toLowerCase().indexOf(q)!==-1; });
+  arr.sort(function(a,b){
+    if(sm==='firma'){ var fa=(a.firma||'￿').toLowerCase(), fb=(b.firma||'￿').toLowerCase(); if(fa!==fb) return fa<fb?-1:1; }
+    else if(sm==='so'){ var sa=(a.so||'￿'), sb=(b.so||'￿'); if(sa!==sb) return sa.localeCompare(sb, undefined, {numeric:true}); }
+    return (a.nazev||'').localeCompare(b.nazev||'', 'cs');
+  });
+  if(!arr.length){ box.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">'+(q?'Nic neodpovídá hledání.':'Zatím žádná auta. Přidej dole.')+'</div>'; }
   else box.innerHTML = arr.map(function(s){
     var hidden = (s.vSichtovce===false) ? ' <span style="color:var(--text2);font-size:10px;">(skryto)</span>' : '';
     var firmaB = s.firma ? ' <span style="background:var(--panel2);color:var(--accent2);font-size:10px;padding:1px 6px;border-radius:8px;">'+escapeHtml(s.firma)+'</span>' : '';
@@ -13883,8 +13904,16 @@ function closeDiaryExport(){ document.getElementById('diary-export-modal').class
 function openFirmyModal(){
   var list = document.getElementById('firmy-list');
   var workers = getAllWorkers(true); // include hidden = true (chceme vidět i schované)
+  // #B – hledání + řazení
+  var q = (document.getElementById('firmy-search') && document.getElementById('firmy-search').value || '').trim().toLowerCase();
+  var sortMode = (document.getElementById('firmy-sort') && document.getElementById('firmy-sort').value) || 'abc';
+  if(q) workers = workers.filter(function(w){ return ((w.name||'')+' '+(w.firma||'')+' '+(w.telefon||'')).toLowerCase().indexOf(q) !== -1; });
+  workers.sort(function(a,b){
+    if(sortMode==='firma'){ var fa=(a.firma||'￿').toLowerCase(), fb=(b.firma||'￿').toLowerCase(); if(fa!==fb) return fa<fb?-1:1; }
+    return (a.name||'').localeCompare(b.name||'', 'cs');
+  });
   if(workers.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">Zatím žádní pracovníci. Přidej dělníka dole, nebo nech ostatní přihlásit se Googlem/telefonem.</div>';
+    list.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px;">'+(q?'Nic neodpovídá hledání.':'Zatím žádní pracovníci. Přidej dělníka dole, nebo nech ostatní přihlásit se Googlem/telefonem.')+'</div>';
   } else {
     list.innerHTML = workers.map(function(w){
       var typeIcon = w.type === 'manual' ? '👷' : '🔐';
@@ -16703,6 +16732,10 @@ function copyDiaryExport(){
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,560px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
     <h3 style="font-size:15px;color:var(--accent2);">🚛 Nákladní automobily</h3>
     <div style="font-size:12px;color:var(--text2);">Uložená auta (jako stroje) — klepni ✏️ pro úpravu. V šichtovce se u nich pak vyplňují hodiny, od-do, co vozili a SO.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input id="naklady-search" type="text" oninput="openNakladyModal()" placeholder="🔍 hledat označení / firmu / SO" class="diary-field" style="flex:1;min-width:150px;">
+      <select id="naklady-sortsel" onchange="openNakladyModal()" class="diary-field" style="flex:0 0 auto;width:auto;"><option value="abc">🔤 abecedně</option><option value="firma">🏢 podle firmy</option><option value="so">🏗️ podle SO</option></select>
+    </div>
     <div id="naklady-list" style="display:flex;flex-direction:column;gap:6px;"></div>
 
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
@@ -16754,6 +16787,10 @@ function copyDiaryExport(){
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,560px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
     <h3 style="font-size:15px;color:var(--accent2);">👷 Pracovníci & firmy</h3>
     <div style="font-size:12px;color:var(--text2);">Klepni na ✏️ pro úpravu osoby. Můžeš nastavit firmu, SO a zda se zobrazí v šichtovce.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input id="firmy-search" type="text" oninput="openFirmyModal()" placeholder="🔍 hledat jméno / firmu / telefon" class="diary-field" style="flex:1;min-width:150px;">
+      <select id="firmy-sort" onchange="openFirmyModal()" class="diary-field" style="flex:0 0 auto;width:auto;"><option value="abc">🔤 abecedně</option><option value="firma">🏢 podle firmy</option></select>
+    </div>
     <div id="firmy-list" style="display:flex;flex-direction:column;gap:6px;"></div>
 
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
@@ -16775,6 +16812,10 @@ function copyDiaryExport(){
   <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(96vw,560px);max-height:92vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
     <h3 style="font-size:15px;color:var(--accent2);">🚜 Stroje a mechanizace</h3>
     <div style="font-size:12px;color:var(--text2);">Stroje, autodomíchávače, bagry atd. — klepni ✏️ pro úpravu.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input id="stroje-search" type="text" oninput="openStrojeModal()" placeholder="🔍 hledat název / firmu / SO" class="diary-field" style="flex:1;min-width:150px;">
+      <select id="stroje-sortsel" onchange="openStrojeModal()" class="diary-field" style="flex:0 0 auto;width:auto;"><option value="abc">🔤 abecedně</option><option value="firma">🏢 podle firmy</option><option value="so">🏗️ podle SO</option></select>
+    </div>
     <div id="stroje-list" style="display:flex;flex-direction:column;gap:6px;"></div>
 
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
