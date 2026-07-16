@@ -9524,6 +9524,13 @@ function _galleryItemEl(item) {
     zkB.style.cssText = 'position:absolute;bottom:4px;right:4px;background:#0d9488;color:#fff;font-size:12px;font-weight:800;padding:1px 5px;border-radius:6px;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,.4);';
     div.appendChild(zkB);
   }
+  if(item.kategorie === 'material'){
+    var mB = document.createElement('div');
+    mB.textContent = '🚛';
+    mB.title = 'Fotka k materiálu' + (item.materialNazev ? (': ' + item.materialNazev) : '');
+    mB.style.cssText = 'position:absolute;bottom:4px;right:4px;background:#b45309;color:#fff;font-size:12px;font-weight:800;padding:1px 5px;border-radius:6px;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+    div.appendChild(mB);
+  }
   var _kn = _photoComments(item).length;
   if(_kn){
     var kB = document.createElement('div');
@@ -10128,6 +10135,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-16', verze:'v127', text:'🧹 Reset v šichtovce teď maže i SO (jednotlivec, celý oddíl „vč. SO", i reset dne „vyprázdnit"). 🏗️ SO u materiálu se vybírá s popisem objektu. 📷 Fotky u materiálu se teď ukládají i do galerie pod zadané SO (jako každá jiná fotka) – označené 🚛.' },
   { datum:'2026-07-16', verze:'v126', text:'🧹 V šichtovce jde vymazat vyplnění – jednotlivě u člověka/stroje/auta (ikonka 🧹 v řádku), nebo hromadně celé skupině. Vratné tlačítkem Zpět. 🏗️ Výběr SO ze seznamu funguje i u jednotlivých fotek při vkládání z knihovny (nejen hromadně).' },
   { datum:'2026-07-16', verze:'v125', text:'🏗️ SO se všude vybírá ze seznamu (ne psaním): u vkládání fotek z knihovny, u poznámky i u úkolu – klepneš do políčka a vybereš, jako u focení.' },
   { datum:'2026-07-16', verze:'v124', text:'🙂 Reakce na komentáře fotek teď opravdu fungují (a přežijí překreslení). 📞 Telefon je vidět i v šichtovce – rovnou volání, nebo doplnění čísla. 🚜 Když stroji/autu zadáš strojníka/řidiče, jeho čas a co dělal se sám ukáže a přenese k tomu člověku (nevyplňuješ dvakrát).' },
@@ -12659,8 +12667,8 @@ function openResetDayModal(){
     ov.innerHTML='<div style="background:var(--panel);border-radius:14px;max-width:390px;width:100%;padding:18px;border:1px solid var(--border);">'
       +'<div style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:6px;">↺ Reset dne</div>'
       +'<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Do jakého stavu vrátit dnešek? (Půjde vrátit tlačítkem Zpět.)</div>'
-      +'<button onclick="resetDay(\'load\')" style="width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;text-align:left;">↩︎ Před dnešní úpravy<div style="font-size:11px;color:var(--text2);font-weight:400;">Stav, v jakém byl den při otevření.</div></button>'
-      +'<button onclick="resetDay(\'base\')" style="width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;text-align:left;">🗑 Úplně vyprázdnit<div style="font-size:11px;color:var(--text2);font-weight:400;">Nic vyplněného, vše rozbalené (bez převzetí z předešlého dne).</div></button>'
+      +'<button onclick="resetDay(\'load\')" style="width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;text-align:left;">↩︎ Před dnešní úpravy<div style="font-size:11px;color:var(--text2);font-weight:400;">Stav, v jakém byl den při otevření (vč. SO).</div></button>'
+      +'<button onclick="resetDay(\'base\')" style="width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;text-align:left;">🗑 Úplně vyprázdnit<div style="font-size:11px;color:var(--text2);font-weight:400;">Nic vyplněného, i SO smazané, vše rozbalené (bez převzetí z předešlého dne).</div></button>'
       +'<button onclick="document.getElementById(\'resetday-modal\').style.display=\'none\'" style="width:100%;background:transparent;color:var(--text2);border:none;padding:8px;font-size:13px;cursor:pointer;">Zrušit</button>'
       +'</div>';
     document.body.appendChild(ov);
@@ -12671,10 +12679,14 @@ function resetDay(mode){
   var m=document.getElementById('resetday-modal'); if(m) m.style.display='none';
   if(window._diaryLastState){ window._diaryUndo.push(_diaryClone(window.diaryCurrentData)); if(window._diaryUndo.length>40) window._diaryUndo.shift(); }   // reset je vratný
   var nd;
-  if(mode==='base'){ nd = { datum:window.diaryCurrentDate, pocasi:'', tds:false, bozp:false, sichtovka:{}, zaznamy:{}, materialy:'', zaver:'', skryti:{osoby:{},stroje:{},naklad:{}} }; }
+  if(mode==='base'){
+    nd = { datum:window.diaryCurrentDate, pocasi:'', tds:false, bozp:false, sichtovka:{}, zaznamy:{}, materialy:'', zaver:'', skryti:{osoby:{},stroje:{},naklad:{}} };
+    // #12b – vyprázdnit i SO (explicitní Bez SO u všech aktivních), ať nezůstane předvyplněné
+    ['osoby','stroje','naklad'].forEach(function(k){ var N=WORK_NODES[k]; nd[N.so]={}; _sectionActiveIds(k).forEach(function(id){ nd[N.so][id]=''; }); });
+  }
   else { nd = _diaryClone(window._diaryLoadSnap) || { datum:window.diaryCurrentDate }; }
   _diaryApplyState(nd, true);
-  showToast(mode==='base' ? '↺ Den vyprázdněn' : '↺ Vráceno před dnešní úpravy', 1800);
+  showToast(mode==='base' ? '↺ Den vyprázdněn (včetně SO)' : '↺ Vráceno před dnešní úpravy', 1800);
 }
 // #8 – kopírovat den (zdrojový vyplněný den → do dneška; volitelně jen zaškrtnutým)
 function _daysWithWorklog(){
@@ -12963,13 +12975,25 @@ function _syncOperatorFromMachine(kind, id){
   if(od) d.sichtovka_oddo[person.id]=od;
   if(h!=null && h>0) d.sichtovka[person.id]=h;
 }
-// #12 – smazat vyplnění (reset do bezvyplněného stavu). Maže hodiny/pozn/od-do/pauzu/obsluhu;
-// SO-přiřazení (kam patří) nechává. Vratné přes „Zpět".
+// #12 – smazat vyplnění (reset do bezvyplněného stavu). Maže hodiny/pozn/od-do/pauzu/obsluhu
+// A TAKÉ SO (nastaví explicitní „Bez SO" na tento den, ať nezůstane předvyplněné). Vratné přes „Zpět".
 function _clearWorkFields(kind, id){
   var d=window.diaryCurrentData; if(!d) return;
   var N=WORK_NODES[kind];
   [N.hod, N.pozn, N.oddo, N.pauza].forEach(function(node){ if(d[node]) delete d[node][id]; });
   var ob=_obsluhaNode(kind); if(d[ob]) delete d[ob][id];
+  d[N.so]=d[N.so]||{}; d[N.so][id]='';   // explicitní Bez SO (přebije i zděděné/profilové SO)
+}
+// Aktivní id v sekci k danému dni (na hromadné vyprázdnění SO).
+function _sectionActiveIds(kind){
+  var dt=window.diaryCurrentDate||'';
+  var arr = kind==='osoby' ? getAllWorkers() : (kind==='stroje' ? getAllStroje() : getAllNaklady());
+  return arr.filter(function(x){ return !(x.aktivniOd && dt && x.aktivniOd > dt); }).map(function(x){ return x.id; });
+}
+function _blankSOForSection(kind){
+  var d=window.diaryCurrentData, N=WORK_NODES[kind];
+  d[N.so]=d[N.so]||{};
+  _sectionActiveIds(kind).forEach(function(id){ d[N.so][id]=''; });
 }
 function workClearOne(kind, id){
   _clearWorkFields(kind, id);
@@ -12978,13 +13002,14 @@ function workClearOne(kind, id){
 }
 function workClearGroup(kind){
   var lbl = kind==='osoby' ? 'všech lidí' : (kind==='stroje' ? 'všech strojů' : 'všech aut');
-  if(!confirm('Vymazat vyplnění u ' + lbl + '? (Půjde vrátit tlačítkem Zpět.)')) return;
+  if(!confirm('Reset celého oddílu – vymazat vyplnění (včetně SO) u ' + lbl + '? (Půjde vrátit tlačítkem Zpět.)')) return;
   var d=window.diaryCurrentData; if(!d) return;
   var N=WORK_NODES[kind];
   [N.hod, N.pozn, N.oddo, N.pauza, _obsluhaNode(kind)].forEach(function(node){ d[node]={}; });
+  _blankSOForSection(kind);   // #12b – i SO
   diarySaveDay(); _rerenderWork(kind);
   if(kind==='stroje' || kind==='naklad') renderSichtovka();
-  showToast('🧹 Vyplnění vymazáno', 1600);
+  showToast('🧹 Oddíl vyresetován', 1600);
 }
 // Malé tlačítko „vymazat" v řádku – jen když je něco vyplněno.
 function _clearBtnHtml(kind, id){
@@ -13262,12 +13287,15 @@ function _mjDelete(u){
   var arr=(window.mjList||[]).filter(function(x){ return x!==u; });
   db.ref('nastaveni/mj').set(arr).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
 }
+// Materiálové SO je teď výběr z katalogu s popisy (openSOFieldPicker) – tato fce už jen resetuje pole.
 function materialFillSoOptions(){
   var so=document.getElementById('mat-so'); if(!so) return;
-  var cur=so.value, opts=['<option value="">— SO (volitelně) —</option>'];
-  if(typeof STAVEBNI_OBJEKTY!=='undefined') STAVEBNI_OBJEKTY.forEach(function(s){ opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id)+'</option>'); });
-  if(typeof DOPLNKY_SO!=='undefined') DOPLNKY_SO.forEach(function(s){ opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id)+'</option>'); });
-  so.innerHTML=opts.join(''); so.value=cur;
+  if(so.tagName === 'SELECT'){   // starý fallback (kdyby se vrátil <select>)
+    var cur=so.value, opts=['<option value="">— SO (volitelně) —</option>'];
+    if(typeof STAVEBNI_OBJEKTY!=='undefined') STAVEBNI_OBJEKTY.forEach(function(s){ opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id)+'</option>'); });
+    if(typeof DOPLNKY_SO!=='undefined') DOPLNKY_SO.forEach(function(s){ opts.push('<option value="'+escapeHtml(s.id)+'">'+escapeHtml(s.id)+'</option>'); });
+    so.innerHTML=opts.join(''); so.value=cur;
+  }
 }
 function renderMaterialy(){
   var box=document.getElementById('mat-list'); var cnt=document.getElementById('mat-count');
@@ -13292,6 +13320,24 @@ function renderMaterialy(){
     '</div>';
   }).join('');
 }
+// Zrcadlí fotky materiálu do galerie (/standalone_photos) pod SO materiálu – ať se chovají jako
+// fotka pořízená odkudkoli (vidět v galerii pod zadaným SO). Deterministický klíč = idempotentní.
+function _mirrorMaterialPhotosToGallery(m, urls){
+  if(!urls || !urls.length || !m) return;
+  var soL = m.so ? String(m.so).split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+  var dt = window.diaryCurrentDate || '';
+  urls.forEach(function(u){
+    if(!u) return;
+    var key = 'mat_' + String(u).replace(/[^a-z0-9]/gi,'_').slice(0,120);
+    var entry = {
+      url: u, stamped: false, so: (soL[0]||''), soList: soL, km: null,
+      author: m.name || (window.currentUser && window.currentUser.name) || '',
+      uid: m.uid || (window.currentUser && window.currentUser.uid) || '',
+      date: dt, time: dt, ts: m.ts || Date.now(), kategorie: 'material', materialNazev: m.nazev || ''
+    };
+    db.ref('standalone_photos/'+key).update(entry).catch(function(){});
+  });
+}
 function materialAdd(){
   if(!window.currentUser){ showToast('Přihlaš se', 2000); return; }
   var nazev=(document.getElementById('mat-nazev').value||'').trim();
@@ -13308,6 +13354,7 @@ function materialAdd(){
     if(urls && urls.length) entry.photos=urls;
     if(!window.diaryCurrentData.materialyList) window.diaryCurrentData.materialyList={};
     window.diaryCurrentData.materialyList[id]=entry;
+    if(urls && urls.length) _mirrorMaterialPhotosToGallery(entry, urls);   // → i do galerie pod SO
     diarySaveDay(); renderMaterialy();
     document.getElementById('mat-nazev').value=''; document.getElementById('mat-so').value='';
     var mp=document.getElementById('mat-poznamka'); if(mp) mp.value='';
@@ -13344,12 +13391,15 @@ function _matCommitPhotos(urls){
   var id=_matPhotoTargetId; if(!id || !urls || !urls.length) return;
   var list=(window.diaryCurrentData&&window.diaryCurrentData.materialyList)||{}; var m=list[id]; if(!m) return;
   m.photos=(m.photos||[]).concat(urls);
+  _mirrorMaterialPhotosToGallery(m, urls);   // → i do galerie pod SO
   diarySaveDay(); renderMaterialy(); showToast('📷 Fotka přidána k materiálu', 1400);
 }
 function materialDelete(id){
   var list=(window.diaryCurrentData&&window.diaryCurrentData.materialyList)||{}; var m=list[id]; if(!m) return;
   if(!(isAdmin() || (window.currentUser && m.uid===window.currentUser.uid))){ showToast('Smazat můžeš jen svůj materiál', 2500); return; }
   if(!confirm('Smazat materiál „'+(m.nazev||'')+'"?')) return;
+  // uklidit i zrcadlené fotky v galerii (deterministické klíče z cesty)
+  (m.photos||[]).forEach(function(u){ if(!u) return; var key='mat_'+String(u).replace(/[^a-z0-9]/gi,'_').slice(0,120); db.ref('standalone_photos/'+key).remove().catch(function(){}); });
   delete window.diaryCurrentData.materialyList[id]; diarySaveDay(); renderMaterialy();
 }
 // ── Nákladní automobily (NA) – registr jako stroje ──────────────────
@@ -16417,7 +16467,7 @@ function copyDiaryExport(){
       </div>
       <div id="sht-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="sht-total">Celkem <b>0 h</b></div>
-      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('osoby')">🧹 Vymazat vyplnění (všem lidem)</button></div>
+      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('osoby')">🧹 Reset oddílu – všem lidem (vč. SO)</button></div>
     </div>
 
     <!-- Stroje -->
@@ -16443,7 +16493,7 @@ function copyDiaryExport(){
       </div>
       <div id="str-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="str-total">Celkem <b>0 h</b></div>
-      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('stroje')">🧹 Vymazat vyplnění (všem strojům)</button></div>
+      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('stroje')">🧹 Reset oddílu – všem strojům (vč. SO)</button></div>
     </div>
 
     <!-- Nákladní automobily (NA) – registr jako stroje -->
@@ -16469,7 +16519,7 @@ function copyDiaryExport(){
       </div>
       <div id="na-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="na-total">Celkem <b>0 h</b></div>
-      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('naklad')">🧹 Vymazat vyplnění (všem autům)</button></div>
+      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('naklad')">🧹 Reset oddílu – všem autům (vč. SO)</button></div>
       <div id="na-legacy"></div>
     </div>
 
@@ -16499,7 +16549,7 @@ function copyDiaryExport(){
         <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:4px;">➕ Přidat materiál (název + SO + fotky dodáku)</div>
         <input id="mat-nazev" class="diary-field" type="text" placeholder="např. drenážní štěrk, beton C25/30…" style="margin-bottom:5px;">
         <div style="display:flex;gap:6px;margin-bottom:5px;">
-          <select id="mat-so" class="diary-field" style="flex:1;"><option value="">— SO (volitelně) —</option></select>
+          <input type="text" id="mat-so" class="diary-field" style="flex:1;cursor:pointer;" readonly onclick="openSOFieldPicker('mat-so')" placeholder="🏗️ klepni a vyber SO (volitelně)" autocomplete="off">
         </div>
         <div style="display:flex;gap:6px;margin-bottom:5px;align-items:center;">
           <input id="mat-pocet" class="diary-field" type="number" step="0.001" placeholder="počet (nepovinné)" style="flex:1;">
