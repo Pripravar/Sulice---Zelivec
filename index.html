@@ -972,6 +972,10 @@ textarea.diary-field { resize:none; min-height:60px; }
 /* #9 – obsluha (strojník/řidič) */
 .sht-obsluha { align-self:flex-start; background:var(--panel2); border:1px solid var(--border); border-radius:12px; color:var(--accent2); font-size:11px; font-weight:700; padding:2px 9px; cursor:pointer; margin-top:2px; }
 .sht-obsluha:hover { border-color:var(--accent2); }
+/* #9 – telefon v šichtovce + propojení obsluhy stroje k člověku */
+.sht-tel { background:rgba(34,211,238,0.12); color:var(--accent2); font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; text-decoration:none; margin-left:6px; }
+.sht-tel-add { background:transparent; border:1px dashed var(--border); color:var(--text2); font-size:10px; padding:1px 6px; border-radius:8px; cursor:pointer; margin-left:6px; }
+.sht-oplink { align-self:flex-start; font-size:11px; color:var(--accent2); background:rgba(34,211,238,0.08); border-radius:7px; padding:2px 8px; margin-top:2px; }
 /* #7 – emoji reakce na komentáře */
 .cmt-reacts { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin-top:3px; }
 .cmt-react { display:inline-flex; align-items:center; gap:3px; background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:1px 7px; font-size:12px; cursor:pointer; line-height:1.6; }
@@ -6286,7 +6290,7 @@ function _photoComments(it){
     else if(legacy.text) out.push({ id:'__legacy__', text: legacy.text, author: legacy.author||'', uid: legacy.uid||'', ts: legacy.ts||0 });
   }
   var kk = it && it.komentare;
-  if(kk) Object.keys(kk).forEach(function(cid){ var c=kk[cid]; if(c && c.text) out.push({ id:cid, text:c.text, author:c.author||'', uid:c.uid||'', ts:c.ts||0 }); });
+  if(kk) Object.keys(kk).forEach(function(cid){ var c=kk[cid]; if(c && c.text) out.push({ id:cid, text:c.text, author:c.author||'', uid:c.uid||'', ts:c.ts||0, mentions:c.mentions||null, reakce:c.reakce||null }); });
   out.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
   return out;
 }
@@ -10118,6 +10122,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-16', verze:'v124', text:'🙂 Reakce na komentáře fotek teď opravdu fungují (a přežijí překreslení). 📞 Telefon je vidět i v šichtovce – rovnou volání, nebo doplnění čísla. 🚜 Když stroji/autu zadáš strojníka/řidiče, jeho čas a co dělal se sám ukáže a přenese k tomu člověku (nevyplňuješ dvakrát).' },
   { datum:'2026-07-16', verze:'v123', text:'📒 Šichtovka dál: 📋 Kopírovat den, ↩︎ Zpět (vrátí poslední změnu), ↺ Reset dne. Sbalení řádku (jen jméno + hodiny, klik rozbalí). U strojů a aut 🧑 obsluha (strojník/řidič – z lidí nebo nový). Náklaďáky lze řadit (firma/SO/abecedně). U lidí 📞 telefon. 🙂 Reakce na komentáře opraveny – teď stačí jeden ťuk.' },
   { datum:'2026-07-15', verze:'v122', text:'📒 Velká šichtovka: kolonka „od-do" (sama spočítá hodiny) + pauza, „vyplnit vybraným" teď i poznámky/SO, dočasně skrýt lidi/stroje/auta, náklaďáky jako stroje (od-do/co vozili/SO), zvýraznění vyplněných, a nový „Závěr dne" seskupený podle SO. 🙂 Emoji reakce na komentáře (fotky i úkoly).' },
   { datum:'2026-07-15', verze:'v121', text:'👆 V „aktivitě" jde teď kliknout na řádek a rovnou skočit na konkrétní věc – úkol, fotku, zkoušku, deník… (jen na to, na co máš právo).' },
@@ -12376,8 +12381,9 @@ function strojSetHours(id, val){
   var v = parseFloat(val);
   if(isNaN(v) || v <= 0) delete window.diaryCurrentData.stroje[id];
   else window.diaryCurrentData.stroje[id] = v;
+  _syncOperatorFromMachine('stroje', id);   // #9
   diarySaveDay();
-  renderStrojeList();
+  renderStrojeList(); renderSichtovka();
 }
 function strojSetNote(id, val){
   if(!window.diaryCurrentData) return;
@@ -12757,7 +12763,9 @@ function workSetOdDo(kind, id, val){
   var v = (val||'').trim();
   if(v) d[N.oddo][id] = v; else delete d[N.oddo][id];
   _recomputeWorkHours(kind, id);
+  if(kind==='stroje' || kind==='naklad') _syncOperatorFromMachine(kind, id);   // #9
   diarySaveDay(); _rerenderWork(kind);
+  if(kind==='stroje' || kind==='naklad') renderSichtovka();
 }
 function workSetPauza(kind, id, hours){   // hours = číslo (0 = bez pauzy), explicitně uloženo
   var N = WORK_NODES[kind], d = window.diaryCurrentData; if(!d) return;
@@ -12863,9 +12871,11 @@ function setObsluha(name){
   var node=_obsluhaNode(ctx.kind);
   if(!d[node]) d[node]={};
   if(name) d[node][ctx.id]=name; else delete d[node][ctx.id];
+  if(name) _syncOperatorFromMachine(ctx.kind, ctx.id);   // #9 – přenes čas stroje na člověka
   diarySaveDay();
   var m=document.getElementById('obsluha-modal'); if(m) m.style.display='none';
   _rerenderWork(ctx.kind);
+  renderSichtovka();
 }
 function clearObsluha(){ setObsluha(''); }
 function addObsluhaManual(){
@@ -12878,6 +12888,56 @@ function addObsluhaManual(){
   }
   inp.value='';
   setObsluha(nm);
+}
+// #9 – telefon v řádku osoby: buď číslo (proklik na volání), nebo tlačítko doplnit.
+function _telChipHtml(w){
+  if(w.telefon) return '<a href="tel:'+escapeHtml(String(w.telefon).replace(/\s/g,''))+'" class="sht-tel" title="Zavolat" onclick="event.stopPropagation();">📞 '+escapeHtml(w.telefon)+'</a>';
+  return '<button type="button" class="sht-tel-add" title="Doplnit telefon" onclick="addWorkerPhone(\''+w.id+'\',\''+w.type+'\')">+📞</button>';
+}
+function addWorkerPhone(id, type){
+  var v = prompt('Telefon:'); if(v===null) return; v=(v||'').trim();
+  var path=(type==='manual'?'pracovnici/':'uzivatele/')+id+'/telefon';
+  var pr = v ? db.ref(path).set(v) : db.ref(path).remove();
+  pr.then(function(){ showToast(v?'📞 Telefon uložen':'Telefon smazán', 1400); renderSichtovka(); }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
+}
+// #9 – mapa obsluhy: jméno strojníka/řidiče → stroje/auta, které dnes obsluhuje (s vyplněnými daty).
+function _buildOperatorMap(){
+  var d=window.diaryCurrentData||{}, map={};
+  [['stroje', getAllStroje()], ['naklad', getAllNaklady()]].forEach(function(pair){
+    var kind=pair[0], arr=pair[1], N=WORK_NODES[kind], obs=d[_obsluhaNode(kind)]||{};
+    arr.forEach(function(s){
+      var nm=obs[s.id]; if(!nm) return;
+      (map[nm]=map[nm]||[]).push({ kind:kind, id:s.id, nazev:s.nazev, ico:(kind==='stroje'?'🚜':'🚛'),
+        note:(d[N.pozn]||{})[s.id]||'', hours:(d[N.hod]||{})[s.id], oddo:(d[N.oddo]||{})[s.id]||'' });
+    });
+  });
+  return map;
+}
+// Řádek(y) „🚜 stroj · práce · čas · h" u člověka, který stroj obsluhuje (vidí to tam, nevyplňuje 2×).
+function _operatorLinksHtml(personName, opMap){
+  var links=(opMap && opMap[personName]) || []; if(!links.length) return '';
+  return links.map(function(m){
+    var parts=[ m.ico + ' ' + escapeHtml(m.nazev) ];
+    if(m.note) parts.push(escapeHtml(m.note));
+    if(m.oddo) parts.push(escapeHtml(m.oddo));
+    if(m.hours!=null && m.hours!=='') parts.push(_fmtHrs(m.hours)+' h');
+    return '<div class="sht-oplink" title="Obsluhuje tento stroj/auto">'+parts.join(' · ')+'</div>';
+  }).join('');
+}
+// Když stroj/auto má obsluhu a je vyplněný čas → přenes hodiny/od-do na toho člověka (jen když je prázdný,
+// ať nepřepíšu ruční zápis). Aby se stejná věc nevyplňovala dvakrát.
+function _syncOperatorFromMachine(kind, id){
+  if(kind!=='stroje' && kind!=='naklad') return;
+  var name=_obsluhaOf(kind, id); if(!name) return;
+  var person=getAllWorkers().filter(function(w){ return w.name===name; })[0]; if(!person) return;
+  var d=window.diaryCurrentData; if(!d) return;
+  var N=WORK_NODES[kind];
+  var h=(d[N.hod]||{})[id], od=(d[N.oddo]||{})[id];
+  d.sichtovka=d.sichtovka||{}; d.sichtovka_oddo=d.sichtovka_oddo||{};
+  var pHas = (d.sichtovka[person.id]!=null && d.sichtovka[person.id]!=='') || !!(d.sichtovka_oddo[person.id]);
+  if(pHas) return;   // neruš ruční zápis člověka
+  if(od) d.sichtovka_oddo[person.id]=od;
+  if(h!=null && h>0) d.sichtovka[person.id]=h;
 }
 // Kompaktní (sbalený) řádek – jen jméno + hodiny + „▸ rozbalit".
 function _collapsedRowHtml(kind, id, pickHtml, nameHtml, hoursVal){
@@ -12953,10 +13013,11 @@ function renderSichtovka(){
     if(fa!==fb) return fa<fb?-1:1;
     return (a.name||'').localeCompare(b.name||'', 'cs');
   });
+  var opMap = _buildOperatorMap();   // #9 – kdo obsluhuje jaké stroje/auta
   function _shtRowHtml(u){
     var typIcon = u.type === 'manual' ? ' <span style="color:var(--text2);font-size:10px;">👷</span>' : '';
     var pickHtml = '<input type="checkbox" class="sht-pick" data-uid="' + u.id + '" style="width:18px;height:18px;flex-shrink:0;margin-right:2px;">';
-    var nameHtml = escapeHtml(u.name) + typIcon;
+    var nameHtml = escapeHtml(u.name) + typIcon + _telChipHtml(u);
     if(_isCollapsed('osoby', u.id)) return _collapsedRowHtml('osoby', u.id, pickHtml, nameHtml, sicht[u.id]);
     var h = sicht[u.id];
     var hVal = (h === undefined || h === null || h === '') ? '' : h;
@@ -12970,6 +13031,7 @@ function renderSichtovka(){
       +   '<div class="sht-name">' + nameHtml + '</div>'
       +   '<input type="text" class="sht-note" placeholder="poznámka (např. odešel k zubaři 13:00)" value="' + escapeHtml(pVal) + '" onchange="sichtovkaSetNote(\'' + u.id + '\', this.value)">'
       +   _timeCellHtml('osoby', u.id)
+      +   _operatorLinksHtml(u.name, opMap)
       + '</div>'
       + soSelect
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.id + '" onchange="sichtovkaSet(\'' + u.id + '\', this.value)">'
@@ -13319,7 +13381,8 @@ function nakladSetHours(id, val){
   if(!window.diaryCurrentData.naklad_hod) window.diaryCurrentData.naklad_hod = {};
   var v = parseFloat(val);
   if(isNaN(v) || v <= 0) delete window.diaryCurrentData.naklad_hod[id]; else window.diaryCurrentData.naklad_hod[id] = v;
-  diarySaveDay(); renderNaklad();
+  _syncOperatorFromMachine('naklad', id);   // #9
+  diarySaveDay(); renderNaklad(); renderSichtovka();
 }
 function nakladSetNote(id, val){
   if(!window.diaryCurrentData) return;
@@ -16161,7 +16224,8 @@ function copyDiaryExport(){
             <li><b>Vyplnit vybraným:</b> zaškrtni koho/co, nahoře vyplň hodiny / od-do / poznámku / SO a jedním tlačítkem se to nastaví všem zaškrtnutým.</li>
             <li><b>🗕 Sbalit:</b> koho/co zrovna nevyplňuješ, sbal — zůstane vidět jen jméno + hodiny, klik na <b>▸</b> zase rozbalí. Sbalení se přenáší z předešlého dne.</li>
             <li><b>Náklaďáky</b> fungují jako stroje: přes „🚛 Spravovat auta" založíš auto a pak u něj den po dni vyplňuješ od-do, co vozilo, hodiny a SO. Jdou i řadit (firma/SO/abecedně).</li>
-            <li><b>🧑 Obsluha:</b> u stroje/auta přiřaď strojníka/řidiče — vybereš z lidí, nebo napíšeš nového (přidá se i do lidí). U lidí lze uložit i <b>📞 telefon</b>.</li>
+            <li><b>🧑 Obsluha:</b> u stroje/auta přiřaď strojníka/řidiče — vybereš z lidí, nebo napíšeš nového (přidá se i do lidí). Když je stroj vyplněný (čas, co dělal), <b>přenese se to i k tomu člověku</b> v šichtovce — nevyplňuješ dvakrát.</li>
+            <li><b>📞 Telefon:</b> ulož u osoby (edit v „👷 Lidé/firmy") — je pak vidět i přímo v šichtovce s proklikem na volání, a jde doplnit i odtud tlačítkem +📞.</li>
             <li><b>📋 Kopírovat den:</b> převezme vyplnění (hodiny/od-do/poznámky/SO) z jiného dne — celé, nebo jen zaškrtnutým řádkům.</li>
             <li><b>↩︎ Zpět</b> vrátí poslední změnu, <b>↺ Reset dne</b> vrátí den před dnešní úpravy (nebo úplně vyprázdní).</li>
             <li><b>Vyplněné řádky</b> jsou zvýrazněné (tučně), ať hned vidíš, kdo už zapsaný je.</li>
