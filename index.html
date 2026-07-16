@@ -964,6 +964,10 @@ textarea.diary-field { resize:none; min-height:60px; }
 /* #4 – skrývání */
 .sht-hide-btn { background:transparent; border:none; color:var(--text2); font-size:13px; cursor:pointer; padding:2px 4px; flex-shrink:0; opacity:.6; }
 .sht-hide-btn:hover { opacity:1; }
+.sht-clr-btn { background:transparent; border:none; font-size:13px; cursor:pointer; padding:2px 4px; flex-shrink:0; opacity:.6; }
+.sht-clr-btn:hover { opacity:1; }
+.sht-clr-group { background:var(--panel2); border:1px solid var(--border); border-radius:7px; color:var(--text2); font-size:11px; padding:5px 9px; cursor:pointer; }
+.sht-clr-group:hover { color:#e57373; border-color:#e57373; }
 .sht-hidden-toggle { width:100%; text-align:left; background:var(--panel2); border:1px dashed var(--border); border-radius:8px; color:var(--text2); padding:7px 10px; font-size:12px; cursor:pointer; margin-top:8px; }
 .sht-row.is-hidden { opacity:.72; }
 .sht-row.is-collapsed { padding:4px 0; opacity:.72; }
@@ -9144,8 +9148,10 @@ function renderLibImportList(){
       else { libImportItems[idx].km = raw; libImportItems[idx].lat=null; libImportItems[idx].lng=null; }  // volný text
       e.target.value = libImportItems[idx].km;
     }; })(i);
-    var soInp = document.createElement('input'); soInp.type='text'; soInp.placeholder='SO'; soInp.value=it.so||''; soInp.setAttribute('list','so-catalog-list'); soInp.autocomplete='off';
-    soInp.style.cssText = 'flex:1;min-width:95px;padding:7px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);';
+    var soInp = document.createElement('input'); soInp.type='text'; soInp.placeholder='klepni → SO'; soInp.value=it.so||''; soInp.readOnly=true; soInp.autocomplete='off';
+    soInp.id = 'lib-item-so-' + i;
+    soInp.style.cssText = 'flex:1;min-width:95px;padding:7px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;';
+    soInp.onclick = (function(id){ return function(){ openSOFieldPicker(id); }; })(soInp.id);
     soInp.onchange = (function(idx){ return function(e){ libImportItems[idx].so = e.target.value.trim(); }; })(i);
     fields.appendChild(dInp); fields.appendChild(kInp); fields.appendChild(soInp); row.appendChild(fields);
     var rm = document.createElement('button'); rm.textContent='✕'; rm.title='Odebrat z výběru';
@@ -10122,6 +10128,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-16', verze:'v126', text:'🧹 V šichtovce jde vymazat vyplnění – jednotlivě u člověka/stroje/auta (ikonka 🧹 v řádku), nebo hromadně celé skupině. Vratné tlačítkem Zpět. 🏗️ Výběr SO ze seznamu funguje i u jednotlivých fotek při vkládání z knihovny (nejen hromadně).' },
   { datum:'2026-07-16', verze:'v125', text:'🏗️ SO se všude vybírá ze seznamu (ne psaním): u vkládání fotek z knihovny, u poznámky i u úkolu – klepneš do políčka a vybereš, jako u focení.' },
   { datum:'2026-07-16', verze:'v124', text:'🙂 Reakce na komentáře fotek teď opravdu fungují (a přežijí překreslení). 📞 Telefon je vidět i v šichtovce – rovnou volání, nebo doplnění čísla. 🚜 Když stroji/autu zadáš strojníka/řidiče, jeho čas a co dělal se sám ukáže a přenese k tomu člověku (nevyplňuješ dvakrát).' },
   { datum:'2026-07-16', verze:'v123', text:'📒 Šichtovka dál: 📋 Kopírovat den, ↩︎ Zpět (vrátí poslední změnu), ↺ Reset dne. Sbalení řádku (jen jméno + hodiny, klik rozbalí). U strojů a aut 🧑 obsluha (strojník/řidič – z lidí nebo nový). Náklaďáky lze řadit (firma/SO/abecedně). U lidí 📞 telefon. 🙂 Reakce na komentáře opraveny – teď stačí jeden ťuk.' },
@@ -12370,6 +12377,7 @@ function renderStrojeList(){
       + soSelect
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" onchange="strojSetHours(\'' + s.id + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
+      + _clearBtnHtml('stroje', s.id)
       + '<button type="button" class="sht-hide-btn" title="sbalit" onclick="workToggleHidden(\'stroje\',\'' + s.id + '\')">🗕</button>'
       + '</div>';
   }
@@ -12955,6 +12963,34 @@ function _syncOperatorFromMachine(kind, id){
   if(od) d.sichtovka_oddo[person.id]=od;
   if(h!=null && h>0) d.sichtovka[person.id]=h;
 }
+// #12 – smazat vyplnění (reset do bezvyplněného stavu). Maže hodiny/pozn/od-do/pauzu/obsluhu;
+// SO-přiřazení (kam patří) nechává. Vratné přes „Zpět".
+function _clearWorkFields(kind, id){
+  var d=window.diaryCurrentData; if(!d) return;
+  var N=WORK_NODES[kind];
+  [N.hod, N.pozn, N.oddo, N.pauza].forEach(function(node){ if(d[node]) delete d[node][id]; });
+  var ob=_obsluhaNode(kind); if(d[ob]) delete d[ob][id];
+}
+function workClearOne(kind, id){
+  _clearWorkFields(kind, id);
+  diarySaveDay(); _rerenderWork(kind);
+  if(kind==='stroje' || kind==='naklad') renderSichtovka();   // obsluha-link u lidí
+}
+function workClearGroup(kind){
+  var lbl = kind==='osoby' ? 'všech lidí' : (kind==='stroje' ? 'všech strojů' : 'všech aut');
+  if(!confirm('Vymazat vyplnění u ' + lbl + '? (Půjde vrátit tlačítkem Zpět.)')) return;
+  var d=window.diaryCurrentData; if(!d) return;
+  var N=WORK_NODES[kind];
+  [N.hod, N.pozn, N.oddo, N.pauza, _obsluhaNode(kind)].forEach(function(node){ d[node]={}; });
+  diarySaveDay(); _rerenderWork(kind);
+  if(kind==='stroje' || kind==='naklad') renderSichtovka();
+  showToast('🧹 Vyplnění vymazáno', 1600);
+}
+// Malé tlačítko „vymazat" v řádku – jen když je něco vyplněno.
+function _clearBtnHtml(kind, id){
+  if(!_rowIsFilled(kind, id)) return '';
+  return '<button type="button" class="sht-clr-btn" title="Vymazat vyplnění" onclick="workClearOne(\''+kind+'\',\''+id+'\')">🧹</button>';
+}
 // Kompaktní (sbalený) řádek – jen jméno + hodiny + „▸ rozbalit".
 function _collapsedRowHtml(kind, id, pickHtml, nameHtml, hoursVal){
   var hTxt = (hoursVal!=null && hoursVal!=='') ? (_fmtHrs(hoursVal)+' h') : '';
@@ -13052,6 +13088,7 @@ function renderSichtovka(){
       + soSelect
       + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="' + hVal + '" placeholder="–" data-uid="' + u.id + '" onchange="sichtovkaSet(\'' + u.id + '\', this.value)">'
       + '<span class="sht-suffix">h</span>'
+      + _clearBtnHtml('osoby', u.id)
       + '<button type="button" class="sht-hide-btn" title="sbalit" onclick="workToggleHidden(\'osoby\',\'' + u.id + '\')">🗕</button>'
       + '</div>';
   }
@@ -13374,6 +13411,7 @@ function renderNaklad(){
         + soSelect
         + '<input type="number" class="sht-hours" min="0" max="24" step="0.5" value="'+hVal+'" placeholder="–" onchange="nakladSetHours(\''+s.id+'\',this.value)">'
         + '<span class="sht-suffix">h</span>'
+        + _clearBtnHtml('naklad', s.id)
         + '<button type="button" class="sht-hide-btn" title="sbalit" onclick="workToggleHidden(\'naklad\',\''+s.id+'\')">🗕</button>'
         + '</div>';
     };
@@ -16244,6 +16282,7 @@ function copyDiaryExport(){
             <li><b>📞 Telefon:</b> ulož u osoby (edit v „👷 Lidé/firmy") — je pak vidět i přímo v šichtovce s proklikem na volání, a jde doplnit i odtud tlačítkem +📞.</li>
             <li><b>📋 Kopírovat den:</b> převezme vyplnění (hodiny/od-do/poznámky/SO) z jiného dne — celé, nebo jen zaškrtnutým řádkům.</li>
             <li><b>↩︎ Zpět</b> vrátí poslední změnu, <b>↺ Reset dne</b> vrátí den před dnešní úpravy (nebo úplně vyprázdní).</li>
+            <li><b>🧹 Vymazat vyplnění:</b> u řádku (ikonka 🧹, když je něco vyplněno) smaže hodiny/od-do/poznámku/obsluhu jen tomu jednomu; tlačítko pod sekcí vymaže celé skupině. SO-přiřazení zůstává. Vratné přes Zpět.</li>
             <li><b>Vyplněné řádky</b> jsou zvýrazněné (tučně), ať hned vidíš, kdo už zapsaný je.</li>
             <li><b>📌 Závěr dne</b> se plní sám — kdo/co dělal, seskupené podle SO. Poznámku upravíš přímo v něm a propíše se i do šichtovky (a naopak).</li>
           </ul>
@@ -16378,6 +16417,7 @@ function copyDiaryExport(){
       </div>
       <div id="sht-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="sht-total">Celkem <b>0 h</b></div>
+      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('osoby')">🧹 Vymazat vyplnění (všem lidem)</button></div>
     </div>
 
     <!-- Stroje -->
@@ -16403,6 +16443,7 @@ function copyDiaryExport(){
       </div>
       <div id="str-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="str-total">Celkem <b>0 h</b></div>
+      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('stroje')">🧹 Vymazat vyplnění (všem strojům)</button></div>
     </div>
 
     <!-- Nákladní automobily (NA) – registr jako stroje -->
@@ -16428,6 +16469,7 @@ function copyDiaryExport(){
       </div>
       <div id="na-list" style="margin-top:8px;"></div>
       <div class="sht-total" id="na-total">Celkem <b>0 h</b></div>
+      <div style="text-align:right;margin-top:6px;"><button type="button" class="sht-clr-group" onclick="workClearGroup('naklad')">🧹 Vymazat vyplnění (všem autům)</button></div>
       <div id="na-legacy"></div>
     </div>
 
