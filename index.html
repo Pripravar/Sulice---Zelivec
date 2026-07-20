@@ -373,6 +373,10 @@ textarea.note-field { min-height:80px; resize:vertical; }
 
 /* Fullscreen foto */
 #photo-fs { position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:5000; display:none; flex-direction:column; align-items:stretch; justify-content:flex-start; cursor:zoom-out; }
+/* Šipky „dopředu/zpět" přímo v 360° obraze (Street-View posun).
+   Pozn.: Pannellum dává hotspotu třídu .pnlm-hotspot-base (ne .pnlm-hotspot) → cílíme přes .pano-arrow. */
+.pnlm-hotspot-base.pano-arrow{ width:58px !important; height:58px !important; margin:-29px 0 0 -29px; background:rgba(255,255,255,.9); border-radius:50%; box-shadow:0 2px 12px rgba(0,0,0,.6); cursor:pointer; display:flex; align-items:center; justify-content:center; color:#0f3460; font-size:32px; font-weight:800; line-height:1; }
+.pnlm-hotspot-base.pano-arrow:hover{ background:#fff; }
 #photo-fs.open { display:flex; }
 #photo-fs-stage { flex:1 1 auto; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 #photo-fs #photo-fs-img { max-width:100%; max-height:100%; object-fit:contain; }
@@ -1282,11 +1286,11 @@ document.addEventListener('touchend', function(e){
     <button onclick="openDroneEvidence()" style="margin-top:7px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;cursor:pointer;width:100%;">🗂️ Evidence / smazat dron snímky</button>
   </div>
   <div style="padding:4px 0 2px;" data-perm="pano">
-    <div class="layer-row">
-      <label>📷 360° foto (procházka)</label>
-      <label class="toggle"><input type="checkbox" id="lyr-pano" onchange="toggleLayer('pano',this.checked)"><span class="toggle-slider"></span></label>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">📷 360° foto (klikni datum = procházka)</div>
+    <div id="pano-date-row" style="display:flex;flex-wrap:wrap;gap:6px;">
+      <span style="font-size:12px;color:var(--text2);opacity:.7;">zatím žádné</span>
     </div>
-    <div style="font-size:11px;color:var(--text2);opacity:.75;">Klikni na fialový bod na trase = otevře 360° snímek. Šipkami listuješ dál.</div>
+    <div style="font-size:11px;color:var(--text2);opacity:.75;margin-top:5px;">Zapni datum → na trase přibudou fialové body. Klik na bod = 360° snímek; šipkami (i přímo v obraze) jdeš dál.</div>
   </div>
   <!-- data-perm-managed=1 → sekci odkrývá až kontrola, že overlay JSON existuje (viz níž) -->
   <div id="situace-section" style="display:none;padding:4px 0 2px;" data-perm="situace" data-perm-managed="1">
@@ -5578,28 +5582,55 @@ var pano360Data = {};       // /panorama_360 (klíč → záznam)
 var _panoList = [];         // seřazeno podle poradi (pro listování)
 var _panoIdx = -1;          // aktuálně zobrazený index v _panoList
 var _panoViewer = null;     // instance Pannellum
+var panoActiveDate = null;  // právě zobrazená procházka (datum) – přepíná se chipy jako u dronu
 
 function loadPanorama360(){
   try {
     db.ref('panorama_360').on('value', function(snap){
       pano360Data = snap.val() || {};
-      _panoList = Object.keys(pano360Data).map(function(k){
-        var r = pano360Data[k]; if(r) r._key = k; return r;
-      }).filter(function(r){ return r && r.lat != null && r.lon != null; })
-        .sort(function(a,b){ return (a.poradi||0) - (b.poradi||0); });
+      if(panoActiveDate && panoDates().indexOf(panoActiveDate) === -1) panoActiveDate = null;
+      rebuildPanoDateButtons();
       renderPano360Markers();
     }, function(err){ console.warn('loadPanorama360:', err && err.message); });
   } catch(e){ console.warn('loadPanorama360 výjimka:', e); }
 }
+function panoDates(){
+  var set = {}; Object.keys(pano360Data).forEach(function(k){ var r = pano360Data[k]; if(r && r.datum) set[r.datum] = 1; });
+  return Object.keys(set).sort();   // YYYY-MM-DD vzestupně = chronologicky
+}
+function _panoItemsForDate(datum){
+  return Object.keys(pano360Data).map(function(k){ var r = pano360Data[k]; if(r) r._key = k; return r; })
+    .filter(function(r){ return r && r.datum === datum && r.lat != null && r.lon != null; })
+    .sort(function(a,b){ return (a.poradi||0) - (b.poradi||0); });
+}
+function rebuildPanoDateButtons(){
+  var row = document.getElementById('pano-date-row'); if(!row) return;
+  var dates = panoDates();
+  if(!dates.length){ row.innerHTML = '<span style="font-size:12px;color:var(--text2);opacity:.7;">zatím žádné</span>'; return; }
+  row.innerHTML = '';
+  dates.forEach(function(d){
+    var b = document.createElement('button');
+    b.className = 'bm-btn' + (d===panoActiveDate ? ' active' : '');
+    b.textContent = '📷 ' + panoFmtDatum(d);
+    b.onclick = (function(dd){ return function(){ selectPanoDate(dd); }; })(d);
+    row.appendChild(b);
+  });
+}
+function selectPanoDate(d){
+  if(!hasPerm('pano')){ showToast('🔒 360° foto Ti administrátor nepovolil', 2800); return; }   // fail-closed i z konzole
+  panoActiveDate = (panoActiveDate === d) ? null : d;   // klik na aktivní datum = skrýt
+  rebuildPanoDateButtons();
+  renderPano360Markers(true);
+}
 
-function renderPano360Markers(){
-  if(!layerGroups.pano) layerGroups.pano = L.layerGroup();   // default mimo mapu, zapne přepínač ve Vrstvách
-  var wasOn = map.hasLayer(layerGroups.pano);
+function renderPano360Markers(fit){
+  if(!layerGroups.pano) layerGroups.pano = L.layerGroup();
   layerGroups.pano.clearLayers();
-  if(!_panoList.length) return;
+  _panoList = panoActiveDate ? _panoItemsForDate(panoActiveDate) : [];
+  if(!_panoList.length){ if(map.hasLayer(layerGroups.pano)) map.removeLayer(layerGroups.pano); return; }
   // tenká spojnice trasy (v pořadí bodů = jak se šlo)
   var line = _panoList.map(function(r){ return [r.lat, r.lon]; });
-  L.polyline(line, { color:'#a855f7', weight:3, opacity:0.55, dashArray:'4,5' }).addTo(layerGroups.pano);
+  L.polyline(line, { color:'#a855f7', weight:3, opacity:0.6, dashArray:'4,5' }).addTo(layerGroups.pano);
   _panoList.forEach(function(r){
     var mk = L.marker([r.lat, r.lon], { icon: L.divIcon({ className:'',
       html:'<div style="font-size:17px;filter:drop-shadow(0 1px 2px #000);">📷</div>',
@@ -5607,7 +5638,32 @@ function renderPano360Markers(){
     mk.on('click', function(){ openPano360(r._key); });
     mk.addTo(layerGroups.pano);
   });
-  if(wasOn) layerGroups.pano.addTo(map);   // překreslení po změně dat nesmí shodit zapnutou vrstvu
+  if(!map.hasLayer(layerGroups.pano)) layerGroups.pano.addTo(map);
+  if(fit){
+    try { var b = L.latLngBounds(line); var z = Math.min(19, map.getBoundsZoom(b, false, L.point(50,50))); map.setView(b.getCenter(), z, { animate:false }); } catch(e){}
+  }
+}
+// bearing z bodu a[lat,lon] → b (0=sever, po směru hodin) – pro natočení šipek v obraze
+function _panoBearing(a, b){
+  var toR = Math.PI/180, la1 = a[0]*toR, la2 = b[0]*toR, dlon = (b[1]-a[1])*toR;
+  var y = Math.sin(dlon)*Math.cos(la2), x = Math.cos(la1)*Math.sin(la2) - Math.sin(la1)*Math.cos(la2)*Math.cos(dlon);
+  return (Math.atan2(y, x)*180/Math.PI + 360) % 360;
+}
+// hotspoty „dopředu/zpět" přímo v panoramatu (Street-View posun) – míří na sousední bod
+function _panoArrowEl(div, label){ div.innerHTML = label; }   // kruh/centrování řeší CSS .pano-arrow
+function _panoHotspots(idx){
+  var hs = [], r = _panoList[idx];
+  if(idx < _panoList.length-1){
+    var nx = _panoList[idx+1];
+    hs.push({ pitch:-14, yaw:_panoBearing([r.lat,r.lon],[nx.lat,nx.lon]), cssClass:'pano-arrow',
+      createTooltipFunc:_panoArrowEl, createTooltipArgs:'▲', clickHandlerFunc:function(){ panoStep(1); } });
+  }
+  if(idx > 0){
+    var pv = _panoList[idx-1];
+    hs.push({ pitch:-14, yaw:_panoBearing([r.lat,r.lon],[pv.lat,pv.lon]), cssClass:'pano-arrow',
+      createTooltipFunc:_panoArrowEl, createTooltipArgs:'▲', clickHandlerFunc:function(){ panoStep(-1); } });
+  }
+  return hs;
 }
 
 function panoFmtDatum(d){   // 2026-07-18 → 18. 7. 2026
@@ -5645,7 +5701,7 @@ function _panoShow(idx){
         type:'equirectangular', panorama:u, autoLoad:true,
         yaw: (r.azimut!=null ? r.azimut : 0), hfov:110, minHfov:50, maxHfov:120,
         crossOrigin:'anonymous', showZoomCtrl:true, showFullscreenCtrl:false,
-        compass:false, autoRotate:0
+        compass:false, autoRotate:0, hotSpots:_panoHotspots(idx)
       });
     } catch(e){ if(mount) mount.innerHTML = '<div style="color:#fff;padding:20px;">❌ Snímek se nepodařilo zobrazit</div>'; }
   }).catch(function(){ if(mount) mount.innerHTML = '<div style="color:#fff;padding:20px;">❌ Nepodařilo se načíst snímek</div>'; });
@@ -9963,7 +10019,7 @@ var LAYER_PERM = {
   propustky:'objekty', doplnky:'objekty', so:'objekty',
   notes0:'pripominky', notes1:'pripominky', notes2:'pripominky', notes3:'pripominky',
   notes4:'pripominky', notes5:'pripominky', notes6:'pripominky',
-  mereni:'mereni', zkousky:'zkousky', pano:'pano'
+  mereni:'mereni', zkousky:'zkousky'
 };
 var LAYER_CB = { propustky:'lyr-prop' };   // id přepínače ≠ 'lyr-'+name
 // Společný guard vrstvy: bez práva přepínač ODŠKRTNE a vrstvu nezapne (funguje i z konzole).
@@ -10248,7 +10304,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
-  { datum:'2026-07-20', verze:'v129', text:'📷 Nová vrstva „360° foto (procházka trasou)" – ve Vrstvách zapneš fialovou trasu s body, klik na bod otevře 360° snímek na celou obrazovku (GoPro MAX2). Prstem se rozhlédneš dokola, šipkami ‹ › (nebo klávesami) přeskočíš na sousední místo – jako Street View po stavbě. První dávka: procházka z 18. 7. 2026.' },
+  { datum:'2026-07-20', verze:'v130', text:'📷 Nová vrstva „360° foto (procházka trasou)" – jako Street View po stavbě (GoPro MAX2). Ve Vrstvách zapneš datum procházky (víc procházek = víc datumů, jako u dronu), na trase přibudou fialové body. Klik na bod = 360° snímek na celou obrazovku: prstem se rozhlédneš dokola a posuneš se dál buď šipkami ‹ ›, klávesami, nebo ťuknutím na šipku ▲ přímo v obraze (dopředu po cestě). První procházka: 18. 7. 2026.' },
   { datum:'2026-07-16', verze:'v128', text:'📞 Telefon je teď vidět i u rozbaleného řádku v šichtovce (na vlastním řádku, neořízne se). 🔍 Do „Lidé/firmy", „Spravovat stroje" i „Spravovat auta" přibylo hledání a řazení (abecedně / podle firmy / SO).' },
   { datum:'2026-07-16', verze:'v127', text:'🧹 Reset v šichtovce teď maže i SO (jednotlivec, celý oddíl „vč. SO", i reset dne „vyprázdnit"). 🏗️ SO u materiálu se vybírá s popisem objektu. 📷 Fotky u materiálu se teď ukládají i do galerie pod zadané SO (jako každá jiná fotka) – označené 🚛.' },
   { datum:'2026-07-16', verze:'v126', text:'🧹 V šichtovce jde vymazat vyplnění – jednotlivě u člověka/stroje/auta (ikonka 🧹 v řádku), nebo hromadně celé skupině. Vratné tlačítkem Zpět. 🏗️ Výběr SO ze seznamu funguje i u jednotlivých fotek při vkládání z knihovny (nejen hromadně).' },
@@ -16506,8 +16562,8 @@ function copyDiaryExport(){
 
       <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">📷 360° foto (procházka trasou)</summary>
         <div style="padding:6px 0 2px;color:var(--text2);">
-          360° snímky z <b>GoPro MAX2</b> podél trasy = procházka jako Street View. Zapni ve <b>☰ Vrstvy → 📷 360° foto</b> — na mapě se objeví <b>fialová trasa s body</b>.<br>
-          <b>Klikni na bod</b> = 360° snímek na celou obrazovku. Prstem (nebo myší) se rozhlédneš dokola; <b>šipkami ‹ ›</b> nebo klávesami ← → přeskočíš na sousední místo, <b>✕</b> nebo Esc zavře.<br>
+          360° snímky z <b>GoPro MAX2</b> podél trasy = procházka jako Street View. Ve <b>☰ Vrstvy → 📷 360° foto</b> klikni na <b>datum procházky</b> (víc procházek = víc datumů, jako u dronu) — na mapě se objeví <b>fialová trasa s body</b>.<br>
+          <b>Klikni na bod</b> = 360° snímek na celou obrazovku. Prstem (nebo myší) se rozhlédneš dokola. Dál se posuneš třemi způsoby: <b>šipkami ‹ ›</b> po stranách, klávesami ← →, nebo <b>ťuknutím na šipku ▲ přímo v obraze</b> (míří dopředu po cestě). <b>✕</b> nebo Esc zavře.<br>
           Snímek se otevře natočený <b>ve směru chůze</b>. Vrstvu může admin zapnout/vypnout v právech (📷 360° foto).
         </div>
       </details>
