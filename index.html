@@ -865,7 +865,14 @@ textarea.task-field { resize:none; min-height:80px; }
 /* Detail úkolu */
 #task-detail .td-status { display:inline-block; padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700; }
 #task-detail .td-status.open { background:#ffb44455; color:#ffb444; }
+#task-detail .td-status.prog { background:#3b82f655; color:#93c5fd; }
 #task-detail .td-status.done { background:#48bb7855; color:#48bb78; }
+#task-detail .td-history { font-size:12px; color:var(--text2); line-height:1.5; padding:4px 2px 2px; }
+.td-hist-item { display:flex; gap:6px; padding:2px 0; align-items:flex-start; }
+.td-hist-item .em { flex:0 0 auto; }
+.td-hist-item b { color:var(--text); font-weight:600; }
+.td-hist-item .tm { color:var(--text2); opacity:.65; margin-left:5px; font-size:11px; white-space:nowrap; }
+.tc-prog { color:#93c5fd; font-weight:600; }
 #task-detail .td-info { font-size:12px; color:var(--text2); line-height:1.7; }
 #task-detail .td-info b { color:var(--text); font-weight:600; }
 #task-detail .td-text { background:var(--panel2); border-radius:8px; padding:10px; font-size:14px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
@@ -10304,6 +10311,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-22', verze:'v131', text:'✅ Úkoly: 🙋 tlačítko „Převzít / Řeším" ukáže, že úkol někdo aktivně řeší (a kdo) – ne jen zaúkolovaný. 🔄 „Předat" úkol na jiného člověka, s historií kdo komu předal. 📋 U každého úkolu je „Průběh" (zadáno → převzato → předáno → hotovo, kdo a kdy). Při „Hotovo" jde připsat nepovinnou poznámku k výsledku.' },
   { datum:'2026-07-20', verze:'v130', text:'📷 Nová vrstva „360° foto (procházka trasou)" – jako Street View po stavbě (GoPro MAX2). Ve Vrstvách zapneš datum procházky (víc procházek = víc datumů, jako u dronu), na trase přibudou fialové body. Klik na bod = 360° snímek na celou obrazovku: prstem se rozhlédneš dokola a posuneš se dál buď šipkami ‹ ›, klávesami, nebo ťuknutím na šipku ▲ přímo v obraze (dopředu po cestě). První procházka: 18. 7. 2026.' },
   { datum:'2026-07-16', verze:'v128', text:'📞 Telefon je teď vidět i u rozbaleného řádku v šichtovce (na vlastním řádku, neořízne se). 🔍 Do „Lidé/firmy", „Spravovat stroje" i „Spravovat auta" přibylo hledání a řazení (abecedně / podle firmy / SO).' },
   { datum:'2026-07-16', verze:'v127', text:'🧹 Reset v šichtovce teď maže i SO (jednotlivec, celý oddíl „vč. SO", i reset dne „vyprázdnit"). 🏗️ SO u materiálu se vybírá s popisem objektu. 📷 Fotky u materiálu se teď ukládají i do galerie pod zadané SO (jako každá jiná fotka) – označené 🚛.' },
@@ -11349,10 +11357,12 @@ function renderTasksList() {
     var profHtml = t.profese ? '<span class="tc-prof">' + escapeHtml(t.profese) + '</span>' : '';
     var km = (t.km !== undefined && t.km !== null) ? ('km ' + (typeof fmtKm === 'function' ? fmtKm(t.km) : t.km.toFixed(3))) : '';
     var cmtCount = t.komentare ? Object.keys(t.komentare).length : 0;
+    var stateHtml = (t.stav === 'inprogress') ? ('<span class="tc-prog">🔵 Řeší: ' + escapeHtml(t.resiName || '') + '</span>') : '';
     return '<div class="' + cls + '" onclick="openTaskDetail(\'' + t.id + '\')">'
       + '<div class="tc-title">' + escapeHtml(t.title || '(bez názvu)') + '</div>'
       + '<div class="tc-meta">'
       +   profHtml
+      +   stateHtml
       +   '<span>👥 ' + escapeHtml(prirazeno) + '</span>'
       +   (termin ? '<span>📅 ' + termin + '</span>' : '')
       +   (km ? '<span>📍 ' + km + '</span>' : '')
@@ -11890,8 +11900,9 @@ function openTaskDetail(id) {
 function renderTaskDetail(t) {
   document.getElementById('td-title').textContent = t.title || '(bez názvu)';
   var st = document.getElementById('td-status');
-  st.textContent = t.stav === 'done' ? '✅ Hotovo' : '🟡 Otevřeno';
-  st.className = 'td-status ' + (t.stav === 'done' ? 'done' : 'open');
+  if(t.stav === 'done'){ st.textContent = '✅ Hotovo'; st.className = 'td-status done'; }
+  else if(t.stav === 'inprogress'){ st.textContent = '🔵 Řeší: ' + (t.resiName || '?'); st.className = 'td-status prog'; }
+  else { st.textContent = '🟡 Otevřeno'; st.className = 'td-status open'; }
 
   var prirazeno = (t.prirazeno || []).map(function(p){ return p.name; }).join(', ') || '—';
   var termin = t.termin ? new Date(t.termin).toLocaleDateString('cs-CZ') : '—';
@@ -11902,6 +11913,9 @@ function renderTaskDetail(t) {
   document.getElementById('td-info').innerHTML =
     '<div><b>Zadal:</b> ' + escapeHtml(t.zadalName || '') + ' (' + vytvoreno + ')</div>'
   + '<div><b>Přiřazeno:</b> ' + escapeHtml(prirazeno) + '</div>'
+  + (t.stav === 'inprogress' && t.resiName ? ('<div><b>🔵 Řeší:</b> ' + escapeHtml(t.resiName) + (t.prevzatoTs ? (' (od ' + new Date(t.prevzatoTs).toLocaleString('cs-CZ') + ')') : '') + '</div>') : '')
+  + (t.stav === 'done' && t.hotovilName ? ('<div><b>✅ Dokončil:</b> ' + escapeHtml(t.hotovilName) + '</div>') : '')
+  + (t.vysledek ? ('<div><b>📝 Výsledek:</b> ' + escapeHtml(t.vysledek) + '</div>') : '')
   + '<div><b>Termín:</b> ' + termin + ' &nbsp;&nbsp; <b>Priorita:</b> ' + prio + '</div>'
   + '<div><b>Profese:</b> ' + escapeHtml(profese) + (t.so ? (' &nbsp;&nbsp; <b>🏗️ SO:</b> ' + escapeHtml(t.so)) : '') + (km ? (' &nbsp;&nbsp; <b>📍</b> ' + km) : '') + '</div>';
 
@@ -11927,9 +11941,16 @@ function renderTaskDetail(t) {
   }
 
   // Tlačítka
+  var me = window.currentUser && window.currentUser.uid;
+  var takeBtn = document.getElementById('td-btn-take');
+  // „Převzít / Řeším" – dokud není hotovo a nejsem už já ten, kdo to řeší
+  if(takeBtn) takeBtn.style.display = (t.stav !== 'done' && t.resiUid !== me) ? '' : 'none';
+  var reBtn = document.getElementById('td-btn-reassign');
+  if(reBtn) reBtn.style.display = (t.stav !== 'done') ? '' : 'none';
   document.getElementById('td-btn-done').style.display   = t.stav === 'done' ? 'none' : '';
   document.getElementById('td-btn-reopen').style.display = t.stav === 'done' ? '' : 'none';
   document.getElementById('td-btn-map').style.display    = (t.lat !== undefined && t.lat !== null) ? '' : 'none';
+  _renderTaskHistory(t);
   // Smazat úkol smí jen zadavatel / koordinátor (legacy bez uid zůstává smazatelný)
   var tDelBtn = document.getElementById('td-btn-del');
   if(tDelBtn) tDelBtn.style.display = canDelete(t.zadalUid) ? '' : 'none';
@@ -11951,36 +11972,120 @@ function showTaskOnMap() {
   map.setView([t.lat, t.lng], 18);
 }
 
-function markTaskDone() {
-  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
-  if(!t) return;
-  t.stav = 'done';
-  t.hotovo = Date.now();
-  t.hotovilUid  = window.currentUser.uid;
-  t.hotovilName = window.currentUser.name;
+function _curTask(){ return window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0]; }
+
+// 🙋 Převzít / Řeším – zapíše, že úkol někdo aktivně řeší (ne jen zaúkolováno)
+function takeTask(){
+  var t = _curTask(); if(!t) return;
+  if(!window.currentUser){ showToast('Pro převzetí se přihlas (úkolníček → přihlášení)', 3500); return; }
+  var me = window.currentUser;
+  var ev = { ts:Date.now(), akce:'prevzato', uid:me.uid, name:me.name };
+  var hist = (t.historie || []).concat([ev]);
   db.ref('ukoly/' + t.id).update({
-    stav: 'done',
-    hotovo: Date.now(),
-    hotovilUid: window.currentUser.uid,
-    hotovilName: window.currentUser.name
+    stav:'inprogress', resiUid:me.uid, resiName:me.name, prevzatoTs:Date.now(), historie:hist
   }).then(function(){
-    showToast('✅ Úkol označen jako hotový', 1500);
-    sendTaskNotificationRequest(t, 'hotovo');
-    logActivity('🎉', 'dokončil/a úkol „' + (t.title||'') + '"', {k:'task', id:t.id});
+    showToast('🙋 Převzal/a jsi úkol – je v řešení', 1600);
+    logActivity('🙋', 'začal/a řešit úkol „' + (t.title||'') + '"', {k:'task', id:t.id});
   });
 }
 
-function reopenTask() {
-  var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
-  if(!t) return;
+// 🔄 Předat úkol jinému – s historií předávání
+function openReassignModal(){
+  var t = _curTask(); if(!t) return;
+  if(!window.currentUser){ showToast('Pro předání se přihlas', 3500); return; }
+  var sel = document.getElementById('task-reassign-pick');
+  sel.innerHTML = '<option value="">— vyber osobu —</option>';
+  Object.keys(window.allUsers || {}).forEach(function(uid){
+    var u = window.allUsers[uid]; if(!u || !u.name) return;
+    if(typeof isBlocked === 'function' && isBlocked(uid)) return;
+    var o = document.createElement('option');
+    o.value = uid; o.textContent = u.name + (u.firma ? (' – ' + u.firma) : '');
+    sel.appendChild(o);
+  });
+  document.getElementById('task-reassign-modal').style.display = 'flex';
+}
+function closeReassignModal(){ document.getElementById('task-reassign-modal').style.display = 'none'; }
+function reassignConfirm(){
+  var t = _curTask(); if(!t) return;
+  var uid = document.getElementById('task-reassign-pick').value;
+  var u = window.allUsers[uid];
+  if(!uid || !u){ showToast('Vyber, komu předáš úkol', 2200); return; }
+  var me = window.currentUser;
+  var ev = { ts:Date.now(), akce:'predano', uid:me.uid, name:me.name, komuUid:uid, komuName:u.name };
+  var hist = (t.historie || []).concat([ev]);
   db.ref('ukoly/' + t.id).update({
-    stav: 'open',
-    hotovo: null,
-    hotovilUid: null,
-    hotovilName: null
+    prirazeno:[{uid:uid, name:u.name}], resiUid:null, resiName:null, prevzatoTs:null,
+    stav: (t.stav === 'done' ? 'done' : 'open'),   // předání znovu otevře k převzetí novým řešitelem
+    historie:hist
+  }).then(function(){
+    closeReassignModal();
+    showToast('🔄 Úkol předán: ' + u.name, 1800);
+    logActivity('🔄', 'předal/a úkol „' + (t.title||'') + '" na ' + u.name, {k:'task', id:t.id});
+    var updated = Object.assign({}, t, {prirazeno:[{uid:uid, name:u.name}]});
+    sendTaskNotificationRequest(updated, 'novy');   // nový řešitel dostane upozornění (reuse 'novy', bez zásahu do CF)
+  });
+}
+
+// ✅ Hotovo – nepovinná poznámka k výsledku při uzavírání
+function openDoneModal(){
+  var t = _curTask(); if(!t) return;
+  var ta = document.getElementById('task-done-note'); if(ta) ta.value = '';
+  document.getElementById('task-done-modal').style.display = 'flex';
+  setTimeout(function(){ if(ta) ta.focus(); }, 60);
+}
+function closeDoneModal(){ document.getElementById('task-done-modal').style.display = 'none'; }
+function doneConfirm(){
+  var t = _curTask(); if(!t) return;
+  var note = ((document.getElementById('task-done-note')||{}).value || '').trim();
+  var me = window.currentUser || {};
+  var ev = { ts:Date.now(), akce:'hotovo', uid:me.uid, name:me.name }; if(note) ev.text = note;
+  var hist = (t.historie || []).concat([ev]);
+  var upd = { stav:'done', hotovo:Date.now(), hotovilUid:me.uid, hotovilName:me.name, historie:hist };
+  if(note) upd.vysledek = note;
+  db.ref('ukoly/' + t.id).update(upd).then(function(){
+    closeDoneModal();
+    Object.assign(t, upd);   // aktuální data i pro notifikaci
+    showToast('✅ Úkol označen jako hotový', 1500);
+    sendTaskNotificationRequest(t, 'hotovo');
+    logActivity('🎉', 'dokončil/a úkol „' + (t.title||'') + '"' + (note ? (' – ' + note) : ''), {k:'task', id:t.id});
+  });
+}
+// zpětná kompatibilita (kdyby někde volalo staré jméno)
+function markTaskDone(){ openDoneModal(); }
+
+function reopenTask() {
+  var t = _curTask(); if(!t) return;
+  var me = window.currentUser || {};
+  var ev = { ts:Date.now(), akce:'znovu', uid:me.uid, name:me.name };
+  var hist = (t.historie || []).concat([ev]);
+  db.ref('ukoly/' + t.id).update({
+    stav:'open', hotovo:null, hotovilUid:null, hotovilName:null, historie:hist
   }).then(function(){
     showToast('↩ Úkol znovu otevřen', 1500);
   });
+}
+
+// 📋 Průběh úkolu (timeline): zadáno → převzato → předáno → hotovo …
+function _taskHistLine(ev){
+  var emojiMap = { prevzato:'🙋', predano:'🔄', hotovo:'🎉', znovu:'↩' };
+  var em = emojiMap[ev.akce] || '•', txt;
+  if(ev.akce === 'prevzato')      txt = '<b>' + escapeHtml(ev.name||'') + '</b> převzal/a řešení';
+  else if(ev.akce === 'predano')  txt = '<b>' + escapeHtml(ev.name||'') + '</b> předal/a → <b>' + escapeHtml(ev.komuName||'') + '</b>';
+  else if(ev.akce === 'hotovo')   txt = '<b>' + escapeHtml(ev.name||'') + '</b> dokončil/a' + (ev.text ? (': ' + escapeHtml(ev.text)) : '');
+  else if(ev.akce === 'znovu')    txt = '<b>' + escapeHtml(ev.name||'') + '</b> znovu otevřel/a';
+  else txt = escapeHtml(ev.akce || '');
+  var tm = ev.ts ? new Date(ev.ts).toLocaleString('cs-CZ') : '';
+  return '<div class="td-hist-item"><span class="em">' + em + '</span><span>' + txt + '<span class="tm">' + tm + '</span></span></div>';
+}
+function _renderTaskHistory(t){
+  var box = document.getElementById('td-history'); if(!box) return;
+  var rows = [];
+  var prir = (t.prirazeno || []).map(function(p){ return p.name; }).join(', ');
+  rows.push('<div class="td-hist-item"><span class="em">📝</span><span>Zadal/a <b>' + escapeHtml(t.zadalName||'') + '</b>'
+    + (prir ? (' → ' + escapeHtml(prir)) : '')
+    + '<span class="tm">' + (t.vytvoreno ? new Date(t.vytvoreno).toLocaleString('cs-CZ') : '') + '</span></span></div>');
+  (t.historie || []).forEach(function(ev){ rows.push(_taskHistLine(ev)); });
+  box.innerHTML = rows.join('');
 }
 
 function editTask() {
@@ -16370,6 +16475,9 @@ function copyDiaryExport(){
       <span class="td-status" id="td-status">…</span>
     </div>
     <div class="td-info" id="td-info"></div>
+    <details id="td-history-wrap" style="margin:2px 0;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);font-weight:700;">📋 Průběh úkolu (kdo, kdy, komu)</summary>
+      <div class="td-history" id="td-history"></div>
+    </details>
     <div class="td-text" id="td-text"></div>
     <div class="td-photos" id="td-photos" style="display:none;"></div>
 
@@ -16381,12 +16489,40 @@ function copyDiaryExport(){
     </div>
 
     <div class="tm-buttons" style="flex-wrap:wrap;">
-      <button class="btn-success" id="td-btn-done" onclick="markTaskDone()">✅ Hotovo</button>
+      <button class="btn-primary" id="td-btn-take" onclick="takeTask()" style="display:none;">🙋 Převzít / Řeším</button>
+      <button class="btn-secondary" id="td-btn-reassign" onclick="openReassignModal()" style="display:none;">🔄 Předat</button>
+      <button class="btn-success" id="td-btn-done" onclick="openDoneModal()">✅ Hotovo</button>
       <button class="btn-secondary" id="td-btn-reopen" onclick="reopenTask()" style="display:none;">↩ Znovu otevřít</button>
       <button class="btn-secondary" onclick="editTask()">✏ Upravit</button>
       <button class="btn-danger" id="td-btn-del" onclick="deleteTaskConfirm()">🗑</button>
       <button class="btn-secondary" id="td-btn-map" onclick="showTaskOnMap()" style="display:none;">📍 Mapa</button>
       <button class="btn-secondary" onclick="closeTaskDetail()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: dokončení úkolu s nepovinnou poznámkou k výsledku -->
+<div id="task-done-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:6200;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(94vw,420px);box-shadow:0 8px 28px rgba(0,0,0,.5);">
+    <div style="font-weight:700;margin-bottom:6px;">✅ Dokončit úkol</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Můžeš připsat, jak to dopadlo / výsledek (nepovinné).</div>
+    <textarea id="task-done-note" rows="3" placeholder="Výsledek, poznámka… (nepovinné)" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px;font-size:14px;resize:vertical;"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn-secondary" onclick="closeDoneModal()">Zrušit</button>
+      <button class="btn-success" onclick="doneConfirm()">✅ Dokončit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: předat úkol jinému člověku (s historií) -->
+<div id="task-reassign-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:6200;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(94vw,420px);box-shadow:0 8px 28px rgba(0,0,0,.5);">
+    <div style="font-weight:700;margin-bottom:6px;">🔄 Předat úkol</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Vyber, komu úkol předáš. Zůstane zapsané v průběhu, kdo komu předal.</div>
+    <select id="task-reassign-pick" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px;font-size:14px;"><option value="">— vyber osobu —</option></select>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn-secondary" onclick="closeReassignModal()">Zrušit</button>
+      <button class="btn-primary" onclick="reassignConfirm()">🔄 Předat</button>
     </div>
   </div>
 </div>
@@ -16504,7 +16640,10 @@ function copyDiaryExport(){
           Název, detail, termín, profese, <b>SO objekt</b>, <b>📍 místo na mapě</b> a fotky (vyfotit / z telefonu / z galerie appky).<br>
           <b>Priorita = jak se upozorní:</b> 🔕 nízká (jen v appce) · 🔔 střední (push na telefon) · 🚨 vysoká (důrazné).<br>
           <b>⏰ Připomínka:</b> v určitý čas, před termínem, nebo <b>až budeš na stavbě</b> (geo).<br>
-          Komentáře k úkolu chodí přiřazeným jako upozornění.
+          Komentáře k úkolu chodí přiřazeným jako upozornění.<br>
+          <b>🙋 Převzít / Řeším:</b> ukáže ostatním, že úkol někdo aktivně řeší (a kdo) — ne jen že byl zadaný. Stav se přepne na 🔵 <b>V řešení</b>.<br>
+          <b>🔄 Předat:</b> předáš úkol jinému člověku (začne řešit jeden, přehodí na druhého). Nový řešitel dostane upozornění a v <b>📋 Průběhu</b> zůstane zapsané, kdo komu úkol předal.<br>
+          <b>✅ Hotovo:</b> při uzavírání můžeš připsat nepovinnou <b>poznámku k výsledku</b> (jak to dopadlo).
         </div>
       </details>
 
