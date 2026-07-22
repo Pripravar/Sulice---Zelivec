@@ -1299,6 +1299,13 @@ document.addEventListener('touchend', function(e){
     </div>
     <div style="font-size:11px;color:var(--text2);opacity:.75;margin-top:5px;">Zapni datum → na trase přibudou fialové body. Klik na bod = 360° snímek; šipkami (i přímo v obraze) jdeš dál.</div>
   </div>
+  <div data-perm="sondy">
+  <div class="layer-row">
+    <label>🕳️ Sondy (diagnostika 2019)</label>
+    <label class="toggle"><input type="checkbox" id="lyr-sondy" onchange="toggleLayer('sondy',this.checked)"><span class="toggle-slider"></span></label>
+  </div>
+  <div style="font-size:11px;color:var(--text2);opacity:.75;">19 sond z diagnostiky vozovky (ESLAB P36-2019). Klik = staničení této stavby + skladba vrstev.</div>
+  </div>
   <!-- data-perm-managed=1 → sekci odkrývá až kontrola, že overlay JSON existuje (viz níž) -->
   <div id="situace-section" style="display:none;padding:4px 0 2px;" data-perm="situace" data-perm-managed="1">
     <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">📐 Koordinační situace (DWG)</div>
@@ -2254,7 +2261,7 @@ var gpsActive = false;
 var gpsCentering = false;
 var gpxCumulative = [];
 var calibSorted = null;
-var layerGroups = {trasa:null, st100:null, st100sub:null, st20:null, st20sub:null, soSub:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null, drone:null, pano:null};
+var layerGroups = {trasa:null, st100:null, st100sub:null, st20:null, st20sub:null, soSub:null, pr:null, propustky:null, prikopy:null, etapy:null, etapa1:null, etapa2:null, etapa3:null, etapa4:null, so:null, so101_1:null, so101_2:null, so101_3:null, sanace:null, notes:null, notes0:null, notes1:null, notes2:null, notes3:null, notes4:null, notes5:null, notes6:null, mereni:null, drone:null, pano:null, sondy:null};
 
 // ── MATH ──────────────────────────────
 function haversine(lat1,lon1,lat2,lon2) {
@@ -3580,6 +3587,7 @@ function init() {
   loadDokumenty();
   loadDroneOverlays();
   loadPanorama360();
+  renderDiagSondy();
   loadCustomSO();
   // Situační vrstvy ukázat jen když existují data (overlay/situace_lines.json) – jinak skryté
   resolveFileUrl('overlay/situace_lines.json').then(function(u){ return fetch(u, {method:'HEAD'}).then(function(r){ return r.ok; }).catch(function(){ return true; }); }).then(function(ok){ if(ok){ var s=document.getElementById('situace-section'); if(s) s.style.display='block'; } });
@@ -5728,6 +5736,56 @@ document.addEventListener('keydown', function(e){
   else if(e.key === 'ArrowRight'){ panoStep(1); }
   else if(e.key === 'Escape'){ closePano360(); }
 });
+
+// ══════════════════════════════════════════════════════════════════
+// 🕳️ SONDY z diagnostiky vozovky (ESLAB, zpráva č. P36-2019, 2019)
+// Statická data (19 sond). „km" v PDF = průběžné staničení celé silnice
+// II/603; staničení TÉTO stavby se počítá z GPS přes gpsToKm (osa+kalibrace).
+// Poloha 4 sond (o:1) je odhad interpolací z km (v PDF chybí/špatná GPS).
+// v = tloušťky vrstev shora dolů [mm], horní = asfaltové souvrství (AC).
+// ══════════════════════════════════════════════════════════════════
+var DIAG_SONDY_2019 = [
+  {l:"1",s:"PS",rk:8.25,lat:49.934553,lon:14.558381,v:[107,125,55,120]},
+  {l:"2",s:"LS",rk:8.42,lat:49.933429,lon:14.559912,v:[128,60],o:1,n:"párová sonda – bez GPS"},
+  {l:"A",s:"LS",rk:8.42,lat:49.933429,lon:14.559912,v:[123,90,110,160,250],o:1,n:"párová sonda – bez GPS"},
+  {l:"B",s:"PS",rk:8.9,lat:49.930257,lon:14.564235,v:[80,130,95,350]},
+  {l:"3",s:"PS",rk:9.35,lat:49.927325,lon:14.568222,v:[188,120,90]},
+  {l:"C",s:"PS",rk:9.75,lat:49.924899,lon:14.571913,v:[163,100,60,150,110,150]},
+  {l:"4",s:"PS",rk:9.97,lat:49.92343,lon:14.574592,v:[205,190]},
+  {l:"5",s:"LS",rk:10.2,lat:49.922149,lon:14.577189,v:[357,100,40]},
+  {l:"6",s:"PS",rk:10.48,lat:49.9206839,lon:14.5798417,v:[125,250,100],n:"připojovací pruh TESCO"},
+  {l:"D",s:"LS",rk:10.7,lat:49.918744,lon:14.581266,v:[110,65,120,160,300]},
+  {l:"7",s:"PS",rk:10.9,lat:49.916996,lon:14.581501,v:[190,100]},
+  {l:"8",s:"LS",rk:11.15,lat:49.914818,lon:14.582268,v:[80,220]},
+  {l:"E",s:"LS",rk:11.15,lat:49.914821,lon:14.582274,v:[90,170,190,150]},
+  {l:"9",s:"PS",rk:11.4,lat:49.912645,lon:14.582798,v:[30,110,120]},
+  {l:"10",s:"LS",rk:11.8,lat:49.909938,lon:14.585159,v:[180,200]},
+  {l:"F",s:"PS",rk:11.98,lat:49.908621,lon:14.586653,v:[138,120,180,250],o:1,n:"GPS v PDF chybná – odhad z km"},
+  {l:"G",s:"PS",rk:12.35,lat:49.905913,lon:14.589723,v:[300,130,300,240]},
+  {l:"11",s:"PS",rk:12.65,lat:49.903901,lon:14.591283,v:[160,100]},
+  {l:"H",s:"PS",rk:12.8,lat:49.902513,lon:14.591917,v:[238,140,130,250]}
+];
+function renderDiagSondy(){
+  if(!layerGroups.sondy) layerGroups.sondy = L.layerGroup();   // default mimo mapu, zapne přepínač ve Vrstvách
+  layerGroups.sondy.clearLayers();
+  DIAG_SONDY_2019.forEach(function(s){
+    var km = (typeof gpsToKm === 'function') ? gpsToKm(s.lat, s.lon) : null;
+    var kmTxt = (km != null && typeof fmtKm === 'function') ? fmtKm(km) : (km != null ? km.toFixed(3) : '?');
+    var sum = s.v.reduce(function(a,b){ return a+b; }, 0);
+    var icon = L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
+      html:'<div style="width:24px;height:24px;border-radius:50%;background:'+(s.o?'#b45309':'#7c3aed')+';color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.6);">'+escapeHtml(s.l)+'</div>' });
+    var html = '<div style="min-width:190px;font-size:12px;line-height:1.5;">'
+      + '<b>🕳️ Sonda '+escapeHtml(s.l)+'</b> ('+escapeHtml(s.s)+')<br>'
+      + '<b>📍 Staničení stavby:</b> km '+kmTxt+'<br>'
+      + '<span style="color:#888;">(v PDF „km '+String(s.rk).replace('.',',')+'")</span><br>'
+      + '<b>Skladba shora dolů:</b> '+s.v.join(' / ')+' mm<br>'
+      + '<b>Celkem:</b> '+sum+' mm'
+      + (s.o ? ('<br><span style="color:#b45309;">⚠ '+escapeHtml(s.n||'odhad polohy')+'</span>') : '')
+      + '<br><span style="color:#888;font-size:11px;">Zdroj: diagnostika ESLAB, zpráva P36-2019 (horní vrstva = asfalt AC)</span>'
+      + '</div>';
+    L.marker([s.lat, s.lon], { icon:icon }).bindPopup(html).addTo(layerGroups.sondy);
+  });
+}
 
 function deleteDroneOverlay(key){
   var r = droneOverlaysData[key];
@@ -10018,6 +10076,7 @@ var FEATURES = [
   { key:'situace',    label:'🗺️ Vrstva: Koordinační situace (DWG)', btns:[] },
   { key:'orientace',  label:'🗺️ Vrstva: Orientační staničení/SO (pro subku)', btns:[] },
   { key:'pano',       label:'🗺️ Vrstva: 360° foto (procházka trasou)', btns:[] },
+  { key:'sondy',      label:'🗺️ Vrstva: Sondy (diagnostika 2019)', btns:[] },
   { key:'gps',        label:'🗺️ Vrstva: GPS poloha (nutná k focení!)', btns:['btn-gps'] }
 ];
 // Mapa vrstva → právo pro obecný toggleLayer(). Kde se id přepínače liší, viz LAYER_CB.
@@ -10026,7 +10085,7 @@ var LAYER_PERM = {
   propustky:'objekty', doplnky:'objekty', so:'objekty',
   notes0:'pripominky', notes1:'pripominky', notes2:'pripominky', notes3:'pripominky',
   notes4:'pripominky', notes5:'pripominky', notes6:'pripominky',
-  mereni:'mereni', zkousky:'zkousky'
+  mereni:'mereni', zkousky:'zkousky', sondy:'sondy'
 };
 var LAYER_CB = { propustky:'lyr-prop' };   // id přepínače ≠ 'lyr-'+name
 // Společný guard vrstvy: bez práva přepínač ODŠKRTNE a vrstvu nezapne (funguje i z konzole).
@@ -10311,6 +10370,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-22', verze:'v132', text:'🕳️ Nová vrstva „Sondy (diagnostika 2019)" – 19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019) na mapě. Klik na sondu ukáže staničení TÉTO stavby (dopočtené z GPS – v PDF bylo průběžné staničení celé silnice) a skladbu vrstev v mm. Zapneš ve ☰ Vrstvy.' },
   { datum:'2026-07-22', verze:'v131', text:'✅ Úkoly: 🙋 tlačítko „Převzít / Řeším" ukáže, že úkol někdo aktivně řeší (a kdo) – ne jen zaúkolovaný. 🔄 „Předat" úkol na jiného člověka, s historií kdo komu předal. 📋 U každého úkolu je „Průběh" (zadáno → převzato → předáno → hotovo, kdo a kdy). Při „Hotovo" jde připsat nepovinnou poznámku k výsledku.' },
   { datum:'2026-07-20', verze:'v130', text:'📷 Nová vrstva „360° foto (procházka trasou)" – jako Street View po stavbě (GoPro MAX2). Ve Vrstvách zapneš datum procházky (víc procházek = víc datumů, jako u dronu), na trase přibudou fialové body. Klik na bod = 360° snímek na celou obrazovku: prstem se rozhlédneš dokola a posuneš se dál buď šipkami ‹ ›, klávesami, nebo ťuknutím na šipku ▲ přímo v obraze (dopředu po cestě). První procházka: 18. 7. 2026.' },
   { datum:'2026-07-16', verze:'v128', text:'📞 Telefon je teď vidět i u rozbaleného řádku v šichtovce (na vlastním řádku, neořízne se). 🔍 Do „Lidé/firmy", „Spravovat stroje" i „Spravovat auta" přibylo hledání a řazení (abecedně / podle firmy / SO).' },
@@ -16696,6 +16756,13 @@ function copyDiaryExport(){
           Vlož letecký snímek na mapu. Máš-li <b>georeferencované ortofoto</b> (např. z WebODM), použij <b>📐 Přesné hranice</b> a vlož 4 čísla (sever, jih, východ, západ) — položí se přesně, bez tahání rohů.<br>
           Snímky se řadí do <b>vrstev podle data</b>. Datum jde kdykoli opravit tlačítkem <b>📅</b> (bez znovupasování).<br>
           ⚠️ Orientační podklad, ne geodetické zaměření.
+        </div>
+      </details>
+
+      <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🕳️ Sondy (diagnostika vozovky)</summary>
+        <div style="padding:6px 0 2px;color:var(--text2);">
+          19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019, 2019). Zapni ve <b>☰ Vrstvy → 🕳️ Sondy</b> — na trase se objeví očíslované body.<br>
+          Klik na sondu ukáže <b>staničení této stavby</b> (km) a <b>skladbu vrstev v mm</b> (shora dolů, nahoře asfalt). Pozn.: „km" ve zprávě je <b>průběžné staničení celé silnice II/603</b> (posun ≈ 8,24 km) — appka dopočítává reálné staničení z GPS sondy. Oranžové body = poloha odhadnutá (sonda bez GPS ve zprávě).
         </div>
       </details>
 
