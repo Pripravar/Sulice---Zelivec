@@ -5765,6 +5765,11 @@ var DIAG_SONDY_2019 = [
   {l:"11",s:"PS",rk:12.65,lat:49.903901,lon:14.591283,v:[160,100]},
   {l:"H",s:"PS",rk:12.8,lat:49.902513,lon:14.591917,v:[238,140,130,250]}
 ];
+// otevře plnou diagnostickou zprávu (EU Storage → nové okno)
+function openDiagReport(){
+  resolveFileUrl('pdf/diagnostika/zprava-P36-2019.pdf').then(function(u){ window.open(u, '_blank', 'noopener'); })
+    .catch(function(){ showToast('❌ Zprávu se nepodařilo otevřít', 2500); });
+}
 function renderDiagSondy(){
   if(!layerGroups.sondy) layerGroups.sondy = L.layerGroup();   // default mimo mapu, zapne přepínač ve Vrstvách
   layerGroups.sondy.clearLayers();
@@ -5781,7 +5786,8 @@ function renderDiagSondy(){
       + '<b>Skladba shora dolů:</b> '+s.v.join(' / ')+' mm<br>'
       + '<b>Celkem:</b> '+sum+' mm'
       + (s.o ? ('<br><span style="color:#b45309;">⚠ '+escapeHtml(s.n||'odhad polohy')+'</span>') : '')
-      + '<br><span style="color:#888;font-size:11px;">Zdroj: diagnostika ESLAB, zpráva P36-2019 (horní vrstva = asfalt AC)</span>'
+      + '<div style="margin-top:7px;"><button onclick="openDiagReport()" style="background:#0f3460;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;">📄 Otevřít zprávu P36-2019</button></div>'
+      + '<span style="color:#888;font-size:11px;">Zdroj: diagnostika ESLAB, zpráva P36-2019 (horní vrstva = asfalt AC)</span>'
       + '</div>';
     L.marker([s.lat, s.lon], { icon:icon }).bindPopup(html).addTo(layerGroups.sondy);
   });
@@ -10370,7 +10376,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
-  { datum:'2026-07-22', verze:'v132', text:'🕳️ Nová vrstva „Sondy (diagnostika 2019)" – 19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019) na mapě. Klik na sondu ukáže staničení TÉTO stavby (dopočtené z GPS – v PDF bylo průběžné staničení celé silnice) a skladbu vrstev v mm. Zapneš ve ☰ Vrstvy.' },
+  { datum:'2026-07-22', verze:'v132', text:'🕳️ Nová vrstva „Sondy (diagnostika 2019)" – 19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019) na mapě. Klik na sondu ukáže staničení TÉTO stavby (dopočtené z GPS – v PDF bylo průběžné staničení celé silnice), skladbu vrstev v mm a tlačítko 📄 na otevření celé zprávy. Zapneš ve ☰ Vrstvy.' },
   { datum:'2026-07-22', verze:'v131', text:'✅ Úkoly: 🙋 tlačítko „Převzít / Řeším" ukáže, že úkol někdo aktivně řeší (a kdo) – ne jen zaúkolovaný. 🔄 „Předat" úkol na jiného člověka, s historií kdo komu předal. 📋 U každého úkolu je „Průběh" (zadáno → převzato → předáno → hotovo, kdo a kdy). Při „Hotovo" jde připsat nepovinnou poznámku k výsledku.' },
   { datum:'2026-07-20', verze:'v130', text:'📷 Nová vrstva „360° foto (procházka trasou)" – jako Street View po stavbě (GoPro MAX2). Ve Vrstvách zapneš datum procházky (víc procházek = víc datumů, jako u dronu), na trase přibudou fialové body. Klik na bod = 360° snímek na celou obrazovku: prstem se rozhlédneš dokola a posuneš se dál buď šipkami ‹ ›, klávesami, nebo ťuknutím na šipku ▲ přímo v obraze (dopředu po cestě). První procházka: 18. 7. 2026.' },
   { datum:'2026-07-16', verze:'v128', text:'📞 Telefon je teď vidět i u rozbaleného řádku v šichtovce (na vlastním řádku, neořízne se). 🔍 Do „Lidé/firmy", „Spravovat stroje" i „Spravovat auta" přibylo hledání a řazení (abecedně / podle firmy / SO).' },
@@ -16762,7 +16768,7 @@ function copyDiaryExport(){
       <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🕳️ Sondy (diagnostika vozovky)</summary>
         <div style="padding:6px 0 2px;color:var(--text2);">
           19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019, 2019). Zapni ve <b>☰ Vrstvy → 🕳️ Sondy</b> — na trase se objeví očíslované body.<br>
-          Klik na sondu ukáže <b>staničení této stavby</b> (km) a <b>skladbu vrstev v mm</b> (shora dolů, nahoře asfalt). Pozn.: „km" ve zprávě je <b>průběžné staničení celé silnice II/603</b> (posun ≈ 8,24 km) — appka dopočítává reálné staničení z GPS sondy. Oranžové body = poloha odhadnutá (sonda bez GPS ve zprávě).
+          Klik na sondu ukáže <b>staničení této stavby</b> (km), <b>skladbu vrstev v mm</b> (shora dolů, nahoře asfalt) a tlačítko <b>📄 Otevřít zprávu P36-2019</b> (celá diagnostika). Pozn.: „km" ve zprávě je <b>průběžné staničení celé silnice II/603</b> (posun ≈ 8,24 km) — appka dopočítává reálné staničení z GPS sondy. Oranžové body = poloha odhadnutá (sonda bez GPS ve zprávě).
         </div>
       </details>
 
