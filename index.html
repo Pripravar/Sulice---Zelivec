@@ -9530,8 +9530,7 @@ function applyGalleryFilters(items){
   var dtOd = (document.getElementById('gfilt-date-od').value || '').trim();
   var dtDo = (document.getElementById('gfilt-date-do').value || '').trim();
   var aut  = (document.getElementById('gfilt-author').value || '').trim();
-  var soEl = document.getElementById('gfilt-so');
-  var soF  = soEl ? (soEl.value || '').trim() : '';
+  var soSel = window._gfiltSoSel || new Set();   // multi-výběr objektů (prázdné = libovolný)
   var subEl = document.getElementById('gfilt-sub');
   var subKind = subEl ? (subEl.value || '') : '';   // '' = vše, 'od' = od SUB, 'pro' = sdílené pro SUB
   var srchEl = document.getElementById('gfilt-search');
@@ -9543,7 +9542,7 @@ function applyGalleryFilters(items){
   var onlyZk = zkEl ? zkEl.checked : false;
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = srch || onlyKom || onlyZk || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soF || (subKind && !isSubOnly() && !isInvestorOnly());
+  var anyActive = srch || onlyKom || onlyZk || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soSel.size || (subKind && !isSubOnly() && !isInvestorOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   // Měsíční okno: bez filtru (a v ploché mřížce) ukaž jen posledních N měsíců (výkon u tisíců fotek).
@@ -9596,10 +9595,11 @@ function applyGalleryFilters(items){
       if(dtDo && d > dtDo) return false;
     }
     if(aut && (it.author || '').trim() !== aut) return false;
-    if(soF){
+    if(soSel.size){
       var sos = (it.soList && it.soList.length) ? it.soList : (it.so ? [it.so] : []);
-      if(soF === '__none__'){ if(sos.length) return false; }      // jen nezařazené
-      else if(sos.indexOf(soF) === -1) return false;
+      var soPass = (soSel.has('__none__') && !sos.length);        // nezařazené
+      for(var _si=0; _si<sos.length && !soPass; _si++){ if(soSel.has(sos[_si])) soPass = true; }   // patří do některého vybraného
+      if(!soPass) return false;
     }
     return true;
   });
@@ -9623,11 +9623,24 @@ function fillGalleryAuthorOptions(items){
     sel.appendChild(opt);
   });
 }
+// ── Filtr galerie podle objektu (SO) – MULTI-VÝBĚR (zaškrtávátka + vybrat vše) ──
+window._gfiltSoSel = window._gfiltSoSel || new Set();   // vybrané SO (prázdné = libovolný)
+window._gfiltSoSig = null;                              // podpis nabídky (přestav jen když se změní)
+function toggleGfiltSoList(){
+  var l = document.getElementById('gfilt-so-list'); if(!l) return;
+  l.style.display = (l.style.display === 'none' || !l.style.display) ? 'block' : 'none';
+}
+function _gfiltSoBtnLabel(total){
+  var btn = document.getElementById('gfilt-so-btn'); if(!btn) return;
+  var n = window._gfiltSoSel.size;
+  btn.textContent = (n === 0) ? '— libovolný — ▾'
+                 : (n >= total && total > 0) ? ('Vše ('+n+') ▾')
+                 : (n + ' vybráno ▾');
+}
 // Naplní filtr objektů (SO) hodnotami, které se ve fotkách reálně vyskytují. Řazeno SO čísla → text → vlastní.
 function fillGallerySoOptions(items){
-  var sel = document.getElementById('gfilt-so');
-  if(!sel) return;
-  var current = sel.value;
+  var list = document.getElementById('gfilt-so-list');
+  if(!list) return;
   var set = new Set(); var hasNone = false;
   items.forEach(function(it){
     var sos = (it.soList && it.soList.length) ? it.soList : (it.so ? [it.so] : []);
@@ -9635,19 +9648,40 @@ function fillGallerySoOptions(items){
     sos.forEach(function(s){ if(s) set.add(s); });
   });
   var arr = Array.from(set).sort(function(a,b){ return a.localeCompare(b, 'cs', {numeric:true}); });
-  sel.innerHTML = '<option value="">— libovolný —</option>';
-  arr.forEach(function(s){
-    var opt = document.createElement('option');
-    opt.value = s; opt.textContent = soLabel(s);
-    if(s === current) opt.selected = true;
-    sel.appendChild(opt);
+  var opts = (hasNone ? ['__none__'] : []).concat(arr);
+  // vyčisti z výběru objekty, které už v nabídce nejsou
+  Array.from(window._gfiltSoSel).forEach(function(v){ if(opts.indexOf(v) === -1) window._gfiltSoSel.delete(v); });
+  var total = opts.length;
+  var sig = opts.join('|');
+  if(sig === window._gfiltSoSig){ _gfiltSoBtnLabel(total); return; }   // nabídka beze změny → nepřestavuj (drží scroll/fokus)
+  window._gfiltSoSig = sig;
+  var html = '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;font-weight:700;cursor:pointer;border-bottom:1px solid var(--border);">'
+    + '<input type="checkbox" id="gfilt-so-all" onchange="_gfiltSoToggleAll(this.checked)" style="width:18px;height:18px;"> ☑ Vybrat / zrušit vše</label>';
+  opts.forEach(function(v){
+    var lbl = (v === '__none__') ? '⊘ Nezařazené' : soLabel(v);
+    var ck = window._gfiltSoSel.has(v) ? ' checked' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;cursor:pointer;">'
+      + '<input type="checkbox" class="gfilt-so-cb" value="'+escapeHtml(v)+'"'+ck+' onchange="_gfiltSoChanged()" style="width:18px;height:18px;"> '+escapeHtml(lbl)+'</label>';
   });
-  if(hasNone){
-    var o = document.createElement('option');
-    o.value = '__none__'; o.textContent = '⊘ Nezařazené';
-    if(current === '__none__') o.selected = true;
-    sel.appendChild(o);
-  }
+  if(!opts.length) html = '<div style="color:var(--text2);font-size:12px;padding:6px;">Žádné objekty ve fotkách</div>';
+  list.innerHTML = html;
+  var allCb = document.getElementById('gfilt-so-all');
+  if(allCb) allCb.checked = (total > 0 && window._gfiltSoSel.size >= total);
+  _gfiltSoBtnLabel(total);
+}
+function _gfiltSoChanged(){
+  var cbs = document.querySelectorAll('#gfilt-so-list .gfilt-so-cb');
+  window._gfiltSoSel = new Set();
+  cbs.forEach(function(cb){ if(cb.checked) window._gfiltSoSel.add(cb.value); });
+  var allCb = document.getElementById('gfilt-so-all');
+  if(allCb) allCb.checked = (cbs.length > 0 && window._gfiltSoSel.size >= cbs.length);
+  _gfiltSoBtnLabel(cbs.length);
+  renderGallery();
+}
+function _gfiltSoToggleAll(on){
+  var cbs = document.querySelectorAll('#gfilt-so-list .gfilt-so-cb');
+  cbs.forEach(function(cb){ cb.checked = on; });
+  _gfiltSoChanged();
 }
 
 function toggleGalleryFilter(){
@@ -9710,7 +9744,10 @@ function clearGalleryFilters(){
   document.getElementById('gfilt-date-od').value = '';
   document.getElementById('gfilt-date-do').value = '';
   document.getElementById('gfilt-author').value = '';
-  var soEl = document.getElementById('gfilt-so'); if(soEl) soEl.value = '';
+  window._gfiltSoSel = new Set(); window._gfiltSoSig = null;   // zruš výběr objektů (multi)
+  var soAll = document.getElementById('gfilt-so-all'); if(soAll) soAll.checked = false;
+  document.querySelectorAll('#gfilt-so-list .gfilt-so-cb').forEach(function(cb){ cb.checked = false; });
+  _gfiltSoBtnLabel(0);
   var subEl = document.getElementById('gfilt-sub'); if(subEl && !isSubOnly() && !isInvestorOnly()) subEl.value = '';
   var srchEl = document.getElementById('gfilt-search'); if(srchEl) srchEl.value = '';
   var komEl = document.getElementById('gfilt-komentar'); if(komEl) komEl.checked = false;
@@ -10376,6 +10413,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-22', verze:'v133', text:'🏗️ Filtr galerie podle objektu (SO) umí teď vybrat víc objektů najednou – zaškrtávátka + „Vybrat/zrušit vše" (vybereš vše a nepotřebné odškrtneš). 💬 @označení osob funguje i v poli „detail" u úkolu (napíšeš @ a vybereš) – označení dostanou upozornění.' },
   { datum:'2026-07-22', verze:'v132', text:'🕳️ Nová vrstva „Sondy (diagnostika 2019)" – 19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019) na mapě. Klik na sondu ukáže staničení TÉTO stavby (dopočtené z GPS – v PDF bylo průběžné staničení celé silnice), skladbu vrstev v mm a tlačítko 📄 na otevření celé zprávy. Zapneš ve ☰ Vrstvy.' },
   { datum:'2026-07-22', verze:'v131', text:'✅ Úkoly: 🙋 tlačítko „Převzít / Řeším" ukáže, že úkol někdo aktivně řeší (a kdo) – ne jen zaúkolovaný. 🔄 „Předat" úkol na jiného člověka, s historií kdo komu předal. 📋 U každého úkolu je „Průběh" (zadáno → převzato → předáno → hotovo, kdo a kdy). Při „Hotovo" jde připsat nepovinnou poznámku k výsledku.' },
   { datum:'2026-07-20', verze:'v130', text:'📷 Nová vrstva „360° foto (procházka trasou)" – jako Street View po stavbě (GoPro MAX2). Ve Vrstvách zapneš datum procházky (víc procházek = víc datumů, jako u dronu), na trase přibudou fialové body. Klik na bod = 360° snímek na celou obrazovku: prstem se rozhlédneš dokola a posuneš se dál buď šipkami ‹ ›, klávesami, nebo ťuknutím na šipku ▲ přímo v obraze (dopředu po cestě). První procházka: 18. 7. 2026.' },
@@ -11290,8 +11328,8 @@ function saveTaskToFirebase(task, cb) {
   db.ref('ukoly/' + task.id).set(task).then(function(){
     hideSync();
     showToast('✅ Úkol uložen', 1500);
-    // Notifikační záznam pro Cloud Function
-    sendTaskNotificationRequest(task, 'novy');
+    // Notifikační záznam pro Cloud Function (+ @zmínky z detailu dostanou push navíc)
+    sendTaskNotificationRequest(task, 'novy', (task.mentions && task.mentions.length) ? { mentions: task.mentions.map(function(m){ return m.uid; }), mentionBy: task.zadalName || '', mentionText: task.title || '' } : null);
     if(cb) cb();
   }).catch(function(e){
     console.error('Chyba uložení úkolu:', e);
@@ -11917,6 +11955,9 @@ function saveTaskFromForm() {
       task.lat = lat; task.lng = lng;
       if(!isNaN(km)) task.km = km;
     }
+    // @zmínky v poli „detail" – ulož a pošli jim upozornění (jako u komentářů)
+    var _tm = (typeof _extractMentions === 'function') ? _extractMentions(detail) : [];
+    if(_tm && _tm.length) task.mentions = _tm;
     saveTaskToFirebase(task, function(){
       if(!existing){
         var pro = (window.newTaskAssignees||[]).map(function(a){ return a.name; }).filter(Boolean).join(', ');
@@ -16250,13 +16291,12 @@ function copyDiaryExport(){
         <input type="date" id="gfilt-date-do" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
       </div>
     </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🏗️ Objekt (SO) — můžeš vybrat víc</div>
+      <button type="button" id="gfilt-so-btn" onclick="toggleGfiltSoList()" style="width:100%;text-align:left;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 9px;font-size:13px;cursor:pointer;">— libovolný — ▾</button>
+      <div id="gfilt-so-list" style="display:none;margin-top:4px;max-height:230px;overflow-y:auto;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:4px 6px;"></div>
+    </div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;">
-      <div style="flex:1;">
-        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🏗️ Objekt (SO)</div>
-        <select id="gfilt-so" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
-          <option value="">— libovolný —</option>
-        </select>
-      </div>
       <div style="flex:1;">
         <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">👤 Autor</div>
         <select id="gfilt-author" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
@@ -16453,7 +16493,7 @@ function copyDiaryExport(){
     <input type="text" class="task-field" id="tnm-text-title" placeholder="Krátký název (např. Vytyčit šachtu)" maxlength="80">
 
     <label>Detail (volitelně)</label>
-    <textarea class="task-field" id="tnm-text-detail" placeholder="Popis, kontext, čísla bodů…"></textarea>
+    <textarea class="task-field" id="tnm-text-detail" placeholder="Popis, kontext, čísla bodů… (@ = označit osobu)" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)"></textarea>
 
     <div class="tf-row">
       <div>
@@ -16694,7 +16734,7 @@ function copyDiaryExport(){
 
       <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🖼️ Galerie fotek</summary>
         <div style="padding:6px 0 2px;color:var(--text2);">
-          Ukazuje <b>poslední měsíc</b>; starší přes <b>„⬇️ Zobrazit starší"</b>. Filtry: km od–do, datum, autor, SO, jen s komentářem, SUB/investor fotky. Řazení a přepínač <b>„📁 Po objektech"</b>.<br>
+          Ukazuje <b>poslední měsíc</b>; starší přes <b>„⬇️ Zobrazit starší"</b>. Filtry: km od–do, datum, autor, SO, jen s komentářem, SUB/investor fotky. U filtru <b>🏗️ Objekt (SO)</b> jde vybrat <b>víc objektů najednou</b> (zaškrtávátka + „Vybrat/zrušit vše" – vybereš vše a nepotřebné odškrtneš). Řazení a přepínač <b>„📁 Po objektech"</b>.<br>
           Ťukni na fotku → celá obrazovka. Dole <b>⋯ Možnosti</b>: komentovat, sdílet subce/investorovi, stáhnout, <b>🗺️ ukázat v mapě</b>, přeřadit k SO, smazat.<br>
           <b>Stahování:</b> vybereš, co se má vypálit do fotky. <b>Název souboru je vždy plný</b> (SO · datum · čas · km · jméno), i když stahuješ bez razítka.<br>
           Rámečky: <span style="color:#1565c0;">modrý</span> = od SUB · <span style="color:#10b981;">zelený</span> = sdíleno subce · <span style="color:#8b5cf6;">fialový</span> = sdíleno investorovi.
@@ -16709,7 +16749,8 @@ function copyDiaryExport(){
           Komentáře k úkolu chodí přiřazeným jako upozornění.<br>
           <b>🙋 Převzít / Řeším:</b> ukáže ostatním, že úkol někdo aktivně řeší (a kdo) — ne jen že byl zadaný. Stav se přepne na 🔵 <b>V řešení</b>.<br>
           <b>🔄 Předat:</b> předáš úkol jinému člověku (začne řešit jeden, přehodí na druhého). Nový řešitel dostane upozornění a v <b>📋 Průběhu</b> zůstane zapsané, kdo komu úkol předal.<br>
-          <b>✅ Hotovo:</b> při uzavírání můžeš připsat nepovinnou <b>poznámku k výsledku</b> (jak to dopadlo).
+          <b>✅ Hotovo:</b> při uzavírání můžeš připsat nepovinnou <b>poznámku k výsledku</b> (jak to dopadlo).<br>
+          <b>@ označení osob:</b> v poli <b>detail</b> (i v komentářích) napiš <b>@</b> a vyber osobu – dostane upozornění.
         </div>
       </details>
 
