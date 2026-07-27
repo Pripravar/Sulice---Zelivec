@@ -6455,6 +6455,8 @@ function _renderFsItem(url, firebaseKey, item) {
   if(soBtn) soBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';   // přeřadit smí kdokoliv přihlášený
   var kmBtn = document.getElementById('photo-fs-kmedit');
   if(kmBtn) kmBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';
+  var dateBtn = document.getElementById('photo-fs-dateedit');
+  if(dateBtn) dateBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';
   // Popiska „kdo/kde/kdy" (aby bylo vždy vidět autora i bez razítka)
   var infoEl = document.getElementById('photo-fs-info');
   if(infoEl){
@@ -7495,6 +7497,90 @@ function editPhotoKm(){
     if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
     _restampPhotoNow(item, key);
   }).catch(function(){ showToast('❌ Chyba uložení', 2500); });
+}
+
+// 📍 HROMADNÉ přenastavení staničení (km) u vybraných fotek (all stejné km – jsou na stejném místě).
+function reassignKmSelectedGalleryPhotos(){
+  var items = Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
+  if(!items.length){ showToast('Vyber fotky z galerie', 2400); return; }
+  if(!window.currentUser){ showToast('Pro úpravu se přihlas', 2800); return; }
+  var kmNew = prompt('Staničení km pro ' + items.length + ' vybraných fotek – uprav, nebo nech PRÁZDNÉ = smazat km.\n(Zrušit = beze změny)', (items[0].km || ''));
+  if(kmNew === null) return;
+  kmNew = kmNew.trim();
+  var rk = kmNew ? parseKmStr(kmNew) : null;
+  var ll = (rk != null) ? realKmToLatLng(rk) : null;
+  var upd = { km: kmNew, restampOnDownload: true };
+  if(ll){ upd.lat = ll[0]; upd.lng = ll[1]; } else if(!kmNew){ upd.lat = null; upd.lng = null; }
+  showSync('📍 Přenastavuji 0/' + items.length + '…');
+  var done = 0, fail = 0;
+  var proms = items.map(function(it){
+    return db.ref('standalone_photos/' + it.fbKey).update(upd)
+      .then(function(){ it.km = upd.km; if('lat' in upd){ it.lat = upd.lat; it.lng = upd.lng; } it.restampOnDownload = true; done++; showSync('📍 Přenastavuji ' + done + '/' + items.length + '…'); })
+      .catch(function(){ fail++; done++; });
+  });
+  Promise.all(proms).then(function(){
+    hideSync();
+    showToast('📍 Staničení u ' + (items.length - fail) + ' fotek: ' + (kmNew ? ('km ' + kmNew) : 'smazáno') + (fail ? (' (' + fail + '× chyba)') : ''), 3200);
+    gallerySelectedKeys = {}; renderGallery();
+  });
+}
+
+// 📅 DATUM pořízení – solo i hromadně (modal s výběrem data). ts + date + time + restampOnDownload.
+var _photoDateTargets = [];
+function _photoDateUpdate(ymdStr, origTs){
+  var p = String(ymdStr).split('-');
+  var base = (origTs && !isNaN(origTs)) ? new Date(origTs) : null;   // zachovej čas pořízení, změň jen datum
+  var hh = base ? base.getHours() : 12, mi = base ? base.getMinutes() : 0, ss = base ? base.getSeconds() : 0;
+  var d = new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10), hh, mi, ss);
+  var ts = d.getTime();
+  return { ts: ts, date: d.toLocaleDateString('cs-CZ'), time: d.toLocaleString('cs-CZ'), restampOnDownload: true };
+}
+function editPhotoDate(){   // solo z fullscreen menu
+  var item = _photoFsItem, key = _photoFsKey;
+  if(!item || !key){ showToast('Tuhle fotku nelze upravit (jen fotky z galerie)', 2800); return; }
+  if(typeof closeFsMenu === 'function') closeFsMenu();
+  openPhotoDateModal([{ item:item, key:key }]);
+}
+function changeDateSelectedGalleryPhotos(){   // hromadně z lišty výběru
+  var items = Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
+  if(!items.length){ showToast('Vyber fotky z galerie', 2400); return; }
+  openPhotoDateModal(items.map(function(it){ return { item:it, key:it.fbKey }; }));
+}
+function openPhotoDateModal(targets){
+  if(!window.currentUser){ showToast('Pro úpravu se přihlas', 2800); return; }
+  if(!targets || !targets.length) return;
+  _photoDateTargets = targets;
+  var di = document.getElementById('photo-date-input');
+  if(di) di.value = itemDateYmd(targets[0].item) || _ymdToday();
+  var c = document.getElementById('photo-date-count');
+  if(c) c.textContent = (targets.length === 1) ? '1 fotka' : (targets.length + ' fotek');
+  document.getElementById('photo-date-modal').style.display = 'flex';
+}
+function closePhotoDateModal(){ var m = document.getElementById('photo-date-modal'); if(m) m.style.display = 'none'; _photoDateTargets = []; }
+function applyPhotoDate(){
+  var di = document.getElementById('photo-date-input');
+  var ymdStr = (di && di.value || '').trim();
+  if(!ymdStr){ showToast('Vyber datum', 2000); return; }
+  var targets = _photoDateTargets.slice();
+  if(!targets.length){ closePhotoDateModal(); return; }
+  showSync('📅 Nastavuji datum 0/' + targets.length + '…');
+  var done = 0, fail = 0;
+  var proms = targets.map(function(t){
+    var upd = _photoDateUpdate(ymdStr, t.item.ts);
+    return db.ref('standalone_photos/' + t.key).update(upd)
+      .then(function(){ t.item.ts = upd.ts; t.item.date = upd.date; t.item.time = upd.time; t.item.restampOnDownload = true; done++; showSync('📅 Nastavuji datum ' + done + '/' + targets.length + '…'); })
+      .catch(function(){ fail++; done++; });
+  });
+  Promise.all(proms).then(function(){
+    hideSync();
+    var dsp = _photoDateUpdate(ymdStr, Date.now()).date;
+    showToast('📅 Datum u ' + (targets.length - fail) + ' fotek → ' + dsp + (fail ? (' (' + fail + '× chyba)') : ''), 3000);
+    var solo = (targets.length === 1);
+    closePhotoDateModal();
+    if(solo){ _restampPhotoNow(targets[0].item, targets[0].key); }
+    else { gallerySelectedKeys = {}; }
+    renderGallery();
+  });
 }
 // Okamžité přerazítkování JEDNÉ fotky po přeřazení SO: vygeneruje orazítkovanou verzi z ČISTÉHO originálu
 // s novým SO, nahraje ji a nastaví jako viditelnou. Bez originálu (staré fotky) se nedělá – jinak by
@@ -10413,6 +10499,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-22', verze:'v134', text:'📍 U vybraných fotek jde teď přenastavit staničení (km) i HROMADNĚ (tlačítko „📍 Staničení" v liště výběru). 📅 Nově jde změnit datum pořízení fotky – jednotlivě (v možnostech fotky) i hromadně (tlačítko „📅 Datum"). Změna se přerazítkuje.' },
   { datum:'2026-07-22', verze:'v133', text:'🏗️ Filtr galerie podle objektu (SO) umí teď vybrat víc objektů najednou – zaškrtávátka + „Vybrat/zrušit vše" (vybereš vše a nepotřebné odškrtneš). 💬 @označení osob funguje i v poli „detail" u úkolu (napíšeš @ a vybereš) – označení dostanou upozornění.' },
   { datum:'2026-07-22', verze:'v132', text:'🕳️ Nová vrstva „Sondy (diagnostika 2019)" – 19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019) na mapě. Klik na sondu ukáže staničení TÉTO stavby (dopočtené z GPS – v PDF bylo průběžné staničení celé silnice), skladbu vrstev v mm a tlačítko 📄 na otevření celé zprávy. Zapneš ve ☰ Vrstvy.' },
   { datum:'2026-07-22', verze:'v131', text:'✅ Úkoly: 🙋 tlačítko „Převzít / Řeším" ukáže, že úkol někdo aktivně řeší (a kdo) – ne jen zaúkolovaný. 🔄 „Předat" úkol na jiného člověka, s historií kdo komu předal. 📋 U každého úkolu je „Průběh" (zadáno → převzato → předáno → hotovo, kdo a kdy). Při „Hotovo" jde připsat nepovinnou poznámku k výsledku.' },
@@ -16194,6 +16281,7 @@ function copyDiaryExport(){
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;text-decoration:none;font-size:15px;font-weight:700;min-height:48px;display:flex;align-items:center;">&#128247; Otevřít v prohlížeči</a>
     <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🏗️ Přeřadit (SO)</button>
     <button id="photo-fs-kmedit" onclick="editPhotoKm()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📍 Přeřadit / smazat staničení (km)</button>
+    <button id="photo-fs-dateedit" onclick="editPhotoDate()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📅 Změnit datum pořízení</button>
     <button id="photo-fs-delete" onclick="deleteStandalonePhoto()" style="display:none;text-align:left;background:rgba(233,69,96,0.15);color:#e94560;border:1px solid #e94560;padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">&#128465; Smazat</button>
   </div>
   <div id="photo-fs-bar" style="flex-shrink:0;width:100%;box-sizing:border-box;display:flex;gap:10px;justify-content:center;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:rgba(0,0,0,0.6);" onclick="event.stopPropagation()">
@@ -16338,9 +16426,24 @@ function copyDiaryExport(){
     <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
     <button onclick="reassignSelectedGalleryPhotos()" title="Přeřadit vybrané k objektu (SO)" style="background:#f5a623;color:#0f3460;">🏗️ Přeřadit</button>
+    <button onclick="reassignKmSelectedGalleryPhotos()" title="Hromadně přenastavit staničení (km)" style="background:#f5a623;color:#0f3460;">📍 Staničení</button>
+    <button onclick="changeDateSelectedGalleryPhotos()" title="Hromadně změnit datum pořízení" style="background:#f5a623;color:#0f3460;">📅 Datum</button>
     <button onclick="shareSelectedWithSub()" title="Sdílet vybrané fotky subce (uvidí je ve své galerii)" style="background:#0ea5e9;color:#fff;">📷 Pro SUB</button>
     <button onclick="shareSelectedWithInvestor()" title="Sdílet vybrané fotky investorovi (uvidí je ve své galerii)" style="background:#8b5cf6;color:#fff;">🟣 Pro investora</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
+  </div>
+</div>
+
+<!-- Modal: změna data pořízení fotek (solo i hromadně) -->
+<div id="photo-date-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:6200;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--panel);border-radius:14px;padding:18px;width:min(94vw,380px);box-shadow:0 8px 28px rgba(0,0,0,.5);">
+    <div style="font-weight:700;margin-bottom:4px;">📅 Změnit datum pořízení</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Nastaví se u: <b id="photo-date-count">—</b>. Čas se zachová, mění se jen datum. Do fotky se přerazítkuje.</div>
+    <input type="date" id="photo-date-input" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:15px;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn-secondary" onclick="closePhotoDateModal()" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;">Zrušit</button>
+      <button onclick="applyPhotoDate()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;">📅 Nastavit datum</button>
+    </div>
   </div>
 </div>
 
@@ -16735,6 +16838,7 @@ function copyDiaryExport(){
       <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🖼️ Galerie fotek</summary>
         <div style="padding:6px 0 2px;color:var(--text2);">
           Ukazuje <b>poslední měsíc</b>; starší přes <b>„⬇️ Zobrazit starší"</b>. Filtry: km od–do, datum, autor, SO, jen s komentářem, SUB/investor fotky. U filtru <b>🏗️ Objekt (SO)</b> jde vybrat <b>víc objektů najednou</b> (zaškrtávátka + „Vybrat/zrušit vše" – vybereš vše a nepotřebné odškrtneš). Řazení a přepínač <b>„📁 Po objektech"</b>.<br>
+          <b>Úpravy vybraných fotek</b> (lišta dole po označení): 🏗️ přeřadit k objektu (SO), <b>📍 staničení (km)</b> a <b>📅 datum pořízení</b> – vše i <b>hromadně</b>. Jednotlivě totéž najdeš v <b>⋯ Možnosti</b> u otevřené fotky. Změny se do fotky přerazítkují.<br>
           Ťukni na fotku → celá obrazovka. Dole <b>⋯ Možnosti</b>: komentovat, sdílet subce/investorovi, stáhnout, <b>🗺️ ukázat v mapě</b>, přeřadit k SO, smazat.<br>
           <b>Stahování:</b> vybereš, co se má vypálit do fotky. <b>Název souboru je vždy plný</b> (SO · datum · čas · km · jméno), i když stahuješ bez razítka.<br>
           Rámečky: <span style="color:#1565c0;">modrý</span> = od SUB · <span style="color:#10b981;">zelený</span> = sdíleno subce · <span style="color:#8b5cf6;">fialový</span> = sdíleno investorovi.
