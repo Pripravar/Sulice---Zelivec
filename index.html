@@ -10499,6 +10499,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-22', verze:'v135', text:'✅ Úkoly jde teď řadit (řadič „↕ Řadit" nad seznamem): datum vyřešení / zadání / 1. převzetí, nebo podle toho kdo zadal / vyřešil / komu je zadáno. Hotové úkoly se nově řadí podle data vyřešení (nejnovější nahoře) a v kartě je vidět datum dokončení – konec nepřehledné abecedy.' },
   { datum:'2026-07-22', verze:'v134', text:'📍 U vybraných fotek jde teď přenastavit staničení (km) i HROMADNĚ (tlačítko „📍 Staničení" v liště výběru). 📅 Nově jde změnit datum pořízení fotky – jednotlivě (v možnostech fotky) i hromadně (tlačítko „📅 Datum"). Změna se přerazítkuje.' },
   { datum:'2026-07-22', verze:'v133', text:'🏗️ Filtr galerie podle objektu (SO) umí teď vybrat víc objektů najednou – zaškrtávátka + „Vybrat/zrušit vše" (vybereš vše a nepotřebné odškrtneš). 💬 @označení osob funguje i v poli „detail" u úkolu (napíšeš @ a vybereš) – označení dostanou upozornění.' },
   { datum:'2026-07-22', verze:'v132', text:'🕳️ Nová vrstva „Sondy (diagnostika 2019)" – 19 sond z diagnostiky vozovky (ESLAB, zpráva P36-2019) na mapě. Klik na sondu ukáže staničení TÉTO stavby (dopočtené z GPS – v PDF bylo průběžné staničení celé silnice), skladbu vrstev v mm a tlačítko 📄 na otevření celé zprávy. Zapneš ve ☰ Vrstvy.' },
@@ -11512,6 +11513,40 @@ function filterTasksForTab(tab) {
   });
 }
 
+// Řazení úkolů – volitelné (výchozí „chytře": aktivní podle termínu, hotové podle data vyřešení nejnovější nahoře).
+window.taskSort = (function(){ try{ return localStorage.getItem('taskSort') || 'smart'; }catch(e){ return 'smart'; } })();
+function setTaskSort(v){
+  window.taskSort = v || 'smart';
+  try{ localStorage.setItem('taskSort', window.taskSort); }catch(e){}
+  renderTasksList();
+}
+function _taskFirstPrevzato(t){
+  var h = (t.historie||[]).filter(function(e){ return e && e.akce === 'prevzato'; });
+  return h.length ? (h[0].ts||0) : 0;   // nikdy nepřevzato → 0 (u „nejnovější" spadne dolů)
+}
+function _taskCmp(a, b){
+  var mode = window.taskSort || 'smart';
+  if(mode === 'smart'){
+    if(a.stav !== b.stav) return a.stav === 'done' ? 1 : -1;                 // nehotové nahoře
+    if(a.stav === 'done') return (b.hotovo||b.vytvoreno||0) - (a.hotovo||a.vytvoreno||0);  // hotové: dle vyřešení, nejnovější nahoře
+    var ta = a.termin ? new Date(a.termin).getTime() : Infinity;
+    var tb = b.termin ? new Date(b.termin).getTime() : Infinity;
+    if(ta !== tb) return ta - tb;
+    return (b.vytvoreno||0) - (a.vytvoreno||0);
+  }
+  var r = 0;
+  if(mode === 'hotovo-desc')      r = (b.hotovo||0) - (a.hotovo||0);
+  else if(mode === 'hotovo-asc')  r = (a.hotovo||Infinity) - (b.hotovo||Infinity);
+  else if(mode === 'vytvoreno-desc') r = (b.vytvoreno||0) - (a.vytvoreno||0);
+  else if(mode === 'vytvoreno-asc')  r = (a.vytvoreno||0) - (b.vytvoreno||0);
+  else if(mode === 'prevzato-desc')  r = _taskFirstPrevzato(b) - _taskFirstPrevzato(a);
+  else if(mode === 'zadal')     r = String(a.zadalName||'').localeCompare(String(b.zadalName||''), 'cs');
+  else if(mode === 'resitel')   r = String(a.hotovilName||a.resiName||'').localeCompare(String(b.hotovilName||b.resiName||''), 'cs');
+  else if(mode === 'prirazeno') r = String((a.prirazeno||[]).map(function(p){return p.name;}).join(', ')).localeCompare(String((b.prirazeno||[]).map(function(p){return p.name;}).join(', ')), 'cs');
+  if(r !== 0) return r;
+  return (b.vytvoreno||0) - (a.vytvoreno||0);   // stabilní druhotné řazení
+}
+
 function renderTasksList() {
   // Aktualizovat čísla u záložek
   ['moje','zadane','po-terminu','vsechny','hotove'].forEach(function(tab){
@@ -11523,14 +11558,9 @@ function renderTasksList() {
   var list = document.getElementById('tasks-list');
   if(!list) return;
   var items = filterTasksForTab(window.currentTaskTab);
-  // Třídění: po termínu nejdřív, pak podle termínu, pak podle data vytvoření
-  items.sort(function(a,b){
-    if(a.stav !== b.stav) return a.stav === 'done' ? 1 : -1;
-    var ta = a.termin ? new Date(a.termin).getTime() : Infinity;
-    var tb = b.termin ? new Date(b.termin).getTime() : Infinity;
-    if(ta !== tb) return ta - tb;
-    return (b.vytvoreno || 0) - (a.vytvoreno || 0);
-  });
+  // Řazení podle zvoleného režimu (řadič v liště) – viz _taskCmp / setTaskSort.
+  var _ss = document.getElementById('task-sort'); if(_ss && _ss.value !== window.taskSort) _ss.value = window.taskSort;
+  items.sort(_taskCmp);
   if(items.length === 0) {
     list.innerHTML = '<div id="tasks-empty">Žádné úkoly v této kategorii.</div>';
     return;
@@ -11549,11 +11579,13 @@ function renderTasksList() {
     var km = (t.km !== undefined && t.km !== null) ? ('km ' + (typeof fmtKm === 'function' ? fmtKm(t.km) : t.km.toFixed(3))) : '';
     var cmtCount = t.komentare ? Object.keys(t.komentare).length : 0;
     var stateHtml = (t.stav === 'inprogress') ? ('<span class="tc-prog">🔵 Řeší: ' + escapeHtml(t.resiName || '') + '</span>') : '';
+    var doneHtml = (t.stav === 'done' && t.hotovo) ? ('<span>✅ ' + new Date(t.hotovo).toLocaleDateString('cs-CZ') + (t.hotovilName ? (' · ' + escapeHtml(t.hotovilName)) : '') + '</span>') : '';
     return '<div class="' + cls + '" onclick="openTaskDetail(\'' + t.id + '\')">'
       + '<div class="tc-title">' + escapeHtml(t.title || '(bez názvu)') + '</div>'
       + '<div class="tc-meta">'
       +   profHtml
       +   stateHtml
+      +   doneHtml
       +   '<span>👥 ' + escapeHtml(prirazeno) + '</span>'
       +   (termin ? '<span>📅 ' + termin + '</span>' : '')
       +   (km ? '<span>📍 ' + km + '</span>' : '')
@@ -16580,6 +16612,20 @@ function copyDiaryExport(){
     <input type="text" id="tasks-filter-prof" placeholder="Filtr profese (např. geodet, beton…)" oninput="renderTasksList()">
     <button onclick="clearTaskFilter()">⌫</button>
   </div>
+  <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;">
+    <span style="font-size:12px;color:var(--text2);white-space:nowrap;">↕ Řadit:</span>
+    <select id="task-sort" onchange="setTaskSort(this.value)" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;">
+      <option value="smart">Chytře (výchozí – hotové dle vyřešení)</option>
+      <option value="hotovo-desc">📅 Datum vyřešení – nejnovější nahoře</option>
+      <option value="hotovo-asc">📅 Datum vyřešení – nejstarší nahoře</option>
+      <option value="vytvoreno-desc">🗓️ Datum zadání – nejnovější nahoře</option>
+      <option value="vytvoreno-asc">🗓️ Datum zadání – nejstarší nahoře</option>
+      <option value="prevzato-desc">🙋 Datum 1. převzetí – nejnovější</option>
+      <option value="zadal">👤 Kdo zadal (A–Z)</option>
+      <option value="resitel">🔧 Kdo vyřešil / řeší (A–Z)</option>
+      <option value="prirazeno">👥 Komu zadáno (A–Z)</option>
+    </select>
+  </div>
   <div id="tasks-list"></div>
 </div>
 
@@ -16854,7 +16900,8 @@ function copyDiaryExport(){
           <b>🙋 Převzít / Řeším:</b> ukáže ostatním, že úkol někdo aktivně řeší (a kdo) — ne jen že byl zadaný. Stav se přepne na 🔵 <b>V řešení</b>.<br>
           <b>🔄 Předat:</b> předáš úkol jinému člověku (začne řešit jeden, přehodí na druhého). Nový řešitel dostane upozornění a v <b>📋 Průběhu</b> zůstane zapsané, kdo komu úkol předal.<br>
           <b>✅ Hotovo:</b> při uzavírání můžeš připsat nepovinnou <b>poznámku k výsledku</b> (jak to dopadlo).<br>
-          <b>@ označení osob:</b> v poli <b>detail</b> (i v komentářích) napiš <b>@</b> a vyber osobu – dostane upozornění.
+          <b>@ označení osob:</b> v poli <b>detail</b> (i v komentářích) napiš <b>@</b> a vyber osobu – dostane upozornění.<br>
+          <b>↕ Řazení:</b> nad seznamem úkolů vybereš, podle čeho řadit (datum vyřešení / zadání / 1. převzetí, nebo kdo zadal / vyřešil / komu je zadáno). Hotové jedou ve výchozím podle data vyřešení, nejnovější nahoře.
         </div>
       </details>
 
