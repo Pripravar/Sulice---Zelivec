@@ -753,6 +753,8 @@ textarea.note-field { min-height:80px; resize:vertical; }
 .gallery-item.gallery-shared-inv img { outline:3px solid #8b5cf6; outline-offset:-3px; border-radius:6px; }
 .gallery-shared-badge { position:absolute; top:4px; right:4px; background:#10b981; color:#fff; font-size:9px; font-weight:800; letter-spacing:.3px; padding:2px 6px; border-radius:6px; z-index:3; box-shadow:0 1px 3px rgba(0,0,0,.4); }
 .gallery-shared-badge-inv { background:#8b5cf6; }
+.gallery-grid.selectmode { user-select:none; }
+.gallery-grid.selectmode .gallery-item img { -webkit-user-drag:none; user-drag:none; }
 .gallery-grid.selectmode .gallery-item .gsel-check { display:flex; }
 .gallery-grid.selectmode .gallery-item.selected .gsel-check { background:var(--accent2); border-color:#fff; color:#0f3460; }
 .gallery-grid.selectmode .gallery-item.selected img { outline:3px solid var(--accent2); outline-offset:-3px; border-radius:6px; }
@@ -7124,6 +7126,8 @@ function _updateGallerySelectionUI() {
   var n = Object.keys(gallerySelectedKeys).length;
   var c = document.getElementById('gab-count');
   if(c) c.textContent = 'Vybráno: ' + n;
+  var saBtn = document.getElementById('gallery-selectall-btn');
+  if(saBtn){ var tot = (galleryCurrentItems||[]).length; saBtn.textContent = 'Vše' + (tot ? (' ('+tot+')') : ''); }
   // Promítnout třídu .selected na DOM (plochá mřížka i „Po objektech")
   document.querySelectorAll('#gallery-body .gallery-item').forEach(function(div){
     var k = div.getAttribute('data-gk');
@@ -7150,6 +7154,61 @@ function clearGallerySelection() {
   gallerySelectedKeys = {};
   _updateGallerySelectionUI();
 }
+
+// ── Drag-select (guma) MYŠÍ: tažením přes fotky označíš víc najednou ──
+// Jen myš (dotek necháváme na scroll/tap). Když nejsi v režimu výběru, tah do něj přepne.
+var _gDrag = { active:false, moved:false, sx:0, sy:0, band:null, base:null, byKey:null };
+function _galleryDragDown(e){
+  if(e.pointerType && e.pointerType !== 'mouse') return;   // dotek → nech scroll/tap
+  if(e.button !== 0) return;
+  _gDrag.active = true; _gDrag.moved = false; _gDrag.sx = e.clientX; _gDrag.sy = e.clientY;
+  _gDrag.base = {}; _gDrag.byKey = {};
+  (galleryCurrentItems||[]).forEach(function(it){ _gDrag.byKey[_galleryItemKey(it)] = it; });
+}
+function _galleryDragMove(e){
+  if(!_gDrag.active) return;
+  var dx = Math.abs(e.clientX - _gDrag.sx), dy = Math.abs(e.clientY - _gDrag.sy);
+  if(!_gDrag.moved){
+    if(dx < 6 && dy < 6) return;                       // ještě není tah → prostý klik projde
+    _gDrag.moved = true;
+    if(!gallerySelectMode) toggleGallerySelectMode();  // tažením rovnou zapneme výběr
+    _gDrag.base = Object.assign({}, gallerySelectedKeys);
+    document.body.style.userSelect = 'none';
+    _gDrag.band = document.createElement('div');
+    _gDrag.band.style.cssText = 'position:fixed;z-index:6000;border:1.5px solid var(--accent2);background:rgba(80,150,255,.18);pointer-events:none;border-radius:3px;';
+    document.body.appendChild(_gDrag.band);
+  }
+  e.preventDefault();
+  var l = Math.min(e.clientX, _gDrag.sx), t = Math.min(e.clientY, _gDrag.sy);
+  var w = Math.abs(e.clientX - _gDrag.sx), h = Math.abs(e.clientY - _gDrag.sy);
+  _gDrag.band.style.left = l+'px'; _gDrag.band.style.top = t+'px'; _gDrag.band.style.width = w+'px'; _gDrag.band.style.height = h+'px';
+  var sel = Object.assign({}, _gDrag.base);            // původní výběr + dlaždice v gumě
+  document.querySelectorAll('#gallery-body .gallery-item').forEach(function(div){
+    var r = div.getBoundingClientRect();
+    if(!(r.right < l || r.left > l+w || r.bottom < t || r.top > t+h)){
+      var it = _gDrag.byKey[div.getAttribute('data-gk')];
+      if(it) sel[_galleryItemKey(it)] = it;
+    }
+  });
+  gallerySelectedKeys = sel;
+  _updateGallerySelectionUI();
+}
+function _galleryDragUp(){
+  if(!_gDrag.active) return;
+  var moved = _gDrag.moved;
+  _gDrag.active = false; _gDrag.moved = false;
+  document.body.style.userSelect = '';
+  if(_gDrag.band){ _gDrag.band.remove(); _gDrag.band = null; }
+  if(moved){ window._gJustDragged = true; setTimeout(function(){ window._gJustDragged = false; }, 60); }  // potlač klik po tahu
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var gb = document.getElementById('gallery-body');
+  if(!gb) return;
+  gb.addEventListener('pointerdown', _galleryDragDown);
+  document.addEventListener('pointermove', _galleryDragMove, { passive:false });
+  document.addEventListener('pointerup', _galleryDragUp);
+  gb.addEventListener('click', function(e){ if(window._gJustDragged){ e.stopPropagation(); e.preventDefault(); } }, true);
+});
 
 // Stáhne sekvenčně každou fotku zvlášť (poslední záchrana - neideální UX)
 function _sequentialDownloadFiles(files) {
@@ -10499,6 +10558,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-22', verze:'v136', text:'🖱️ V galerii jde označit fotky TAHEM MYŠI (guma) – na počítači stačí táhnout přes fotky. 📆 Na hromadné stažení (třeba za měsíc): ve filtru zadáš datum od–do (klidně + SO / autor), dáš „Vše (N)" a stáhneš ZIP. Tlačítko „Vše" teď ukazuje, kolik odfiltrovaných fotek vybere.' },
   { datum:'2026-07-22', verze:'v135', text:'✅ Úkoly jde teď řadit (řadič „↕ Řadit" nad seznamem): datum vyřešení / zadání / 1. převzetí, nebo podle toho kdo zadal / vyřešil / komu je zadáno. Hotové úkoly se nově řadí podle data vyřešení (nejnovější nahoře) a v kartě je vidět datum dokončení – konec nepřehledné abecedy.' },
   { datum:'2026-07-22', verze:'v134', text:'📍 U vybraných fotek jde teď přenastavit staničení (km) i HROMADNĚ (tlačítko „📍 Staničení" v liště výběru). 📅 Nově jde změnit datum pořízení fotky – jednotlivě (v možnostech fotky) i hromadně (tlačítko „📅 Datum"). Změna se přerazítkuje.' },
   { datum:'2026-07-22', verze:'v133', text:'🏗️ Filtr galerie podle objektu (SO) umí teď vybrat víc objektů najednou – zaškrtávátka + „Vybrat/zrušit vše" (vybereš vše a nepotřebné odškrtneš). 💬 @označení osob funguje i v poli „detail" u úkolu (napíšeš @ a vybereš) – označení dostanou upozornění.' },
@@ -16453,7 +16513,7 @@ function copyDiaryExport(){
   </div>
   <div id="gallery-actionbar">
     <span class="gab-count" id="gab-count">Vybráno: 0</span>
-    <button class="secondary" onclick="selectAllVisibleGallery()">Vše</button>
+    <button class="secondary" id="gallery-selectall-btn" onclick="selectAllVisibleGallery()" title="Vybrat všechny odfiltrované fotky">Vše</button>
     <button class="secondary" onclick="clearGallerySelection()">−</button>
     <button onclick="downloadSelectedGalleryPhotosShare()" title="Uložit do Fotek na mobilu">📲 Mobil</button>
     <button onclick="downloadSelectedGalleryPhotosZip()" title="Stáhnout jako ZIP na PC">💻 ZIP</button>
@@ -16884,6 +16944,7 @@ function copyDiaryExport(){
       <details style="border-bottom:1px solid var(--border);padding:7px 0;"><summary style="cursor:pointer;font-weight:700;">🖼️ Galerie fotek</summary>
         <div style="padding:6px 0 2px;color:var(--text2);">
           Ukazuje <b>poslední měsíc</b>; starší přes <b>„⬇️ Zobrazit starší"</b>. Filtry: km od–do, datum, autor, SO, jen s komentářem, SUB/investor fotky. U filtru <b>🏗️ Objekt (SO)</b> jde vybrat <b>víc objektů najednou</b> (zaškrtávátka + „Vybrat/zrušit vše" – vybereš vše a nepotřebné odškrtneš). Řazení a přepínač <b>„📁 Po objektech"</b>.<br>
+          <b>Výběr fotek:</b> tlačítko <b>☑️ Vybrat</b> → ťukni fotky, nebo na počítači <b>táhni myší přes fotky</b> (guma). <b>Hromadné stažení (např. za měsíc):</b> ve filtru zadej <b>datum od–do</b> (klidně + SO / autor), pak <b>„Vše (N)"</b> a <b>💻 ZIP</b> / <b>📲 Mobil</b>.<br>
           <b>Úpravy vybraných fotek</b> (lišta dole po označení): 🏗️ přeřadit k objektu (SO), <b>📍 staničení (km)</b> a <b>📅 datum pořízení</b> – vše i <b>hromadně</b>. Jednotlivě totéž najdeš v <b>⋯ Možnosti</b> u otevřené fotky. Změny se do fotky přerazítkují.<br>
           Ťukni na fotku → celá obrazovka. Dole <b>⋯ Možnosti</b>: komentovat, sdílet subce/investorovi, stáhnout, <b>🗺️ ukázat v mapě</b>, přeřadit k SO, smazat.<br>
           <b>Stahování:</b> vybereš, co se má vypálit do fotky. <b>Název souboru je vždy plný</b> (SO · datum · čas · km · jméno), i když stahuješ bez razítka.<br>
