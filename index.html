@@ -4421,6 +4421,7 @@ function confirmMeasureSave(){
   db.ref('mereni').push(rec).then(function(){
     closeMeasureSave();
     showToast('✅ Měření uloženo pro tým', 2000);
+    trackEvent('mereni_ulozeno');   // body: skutečné uložení měření (ne otevření měřáku)
     logActivity('📏', 'uložil/a měření „' + name + '"', {k:'mereni'});
     measureClear();
   }).catch(function(e){ status.textContent = '❌ '+(e && e.message || 'chyba ukládání'); });
@@ -9339,6 +9340,7 @@ function _processPhotoQueue(){
           function saveEntry(){
             db.ref('standalone_photos/' + t).set(entry).then(function(){
               _tagPhoto(t);   // AI popis obsahu na pozadí (pro vyhledávání)
+              trackEvent('foto_ulozeno');   // body: skutečně uložená fotka (ne stisk tlačítka)
               photoPending = Math.max(0, photoPending-1); _photoBadge();
               _logPhotoActivity(entry.soList && entry.soList.length ? entry.soList.join(', ') : (entry.so||''));
               setTimeout(_processPhotoQueue, 400);
@@ -10518,21 +10520,24 @@ function trackEvent(key){
 // Vyhlášení vítěze = reuse logActivity (feed aktivity). M - SILNICE = flag tym
 // NEBO firma obsahuje „silnice". Admin řídí přes Správu uživatelů.
 // ══════════════════════════════════════════════════════════════════
-var SCORE_WEIGHTS = { ukol_hotovo:10, denik:5, ukol_prevzato:3, mereni:3, pin:2, foto:1, foto_komentar:0.5 };
+// DŮLEŽITÉ: skóruje se jen SKUTEČNÉ DOKONČENÍ akce (uložení), NE otevření panelu.
+// Proto vlastní klíče (foto_ulozeno/mereni_ulozeno/denik_zapis) fired v místě zápisu,
+// oddělené od statistiky používání (trackEvent 'foto'/'mereni'/'denik' = jen otevření).
+var SCORE_WEIGHTS = { ukol_hotovo:10, denik_zapis:5, ukol_prevzato:3, mereni_ulozeno:3, pin:2, foto_ulozeno:1, foto_komentar:0.5 };
 var SCORE_LABELS = {
-  ukol_hotovo:{e:'✅',t:'dokončené úkoly'}, denik:{e:'📒',t:'zápisy v deníku'},
-  ukol_prevzato:{e:'🙋',t:'převzaté úkoly'}, mereni:{e:'📐',t:'měření'},
-  pin:{e:'📝',t:'poznámky/úkoly'}, foto:{e:'📷',t:'fotky'}, foto_komentar:{e:'💬',t:'komentáře'}
+  ukol_hotovo:{e:'✅',t:'dokončené úkoly'}, denik_zapis:{e:'📒',t:'vyplněné dny v deníku'},
+  ukol_prevzato:{e:'🙋',t:'převzaté úkoly'}, mereni_ulozeno:{e:'📐',t:'uložená měření'},
+  pin:{e:'📝',t:'poznámky/úkoly'}, foto_ulozeno:{e:'📷',t:'fotky'}, foto_komentar:{e:'💬',t:'komentáře'}
 };
 var SCORE_FOTO_CAP = 250;   // strop scórovaných fotek/měsíc (proti farmení)
 var BODY_BADGES = [
   {key:'ukol_hotovo', need:10,  e:'🥉', label:'10 úkolů'},
   {key:'ukol_hotovo', need:50,  e:'🥈', label:'50 úkolů'},
   {key:'ukol_hotovo', need:200, e:'🥇', label:'200 úkolů'},
-  {key:'foto',        need:100, e:'📷', label:'100 fotek'},
-  {key:'foto',        need:500, e:'📸', label:'500 fotek'},
-  {key:'denik',       need:30,  e:'📒', label:'30 zápisů deníku'},
-  {key:'mereni',      need:50,  e:'📐', label:'50 měření'}
+  {key:'foto_ulozeno',   need:100, e:'📷', label:'100 fotek'},
+  {key:'foto_ulozeno',   need:500, e:'📸', label:'500 fotek'},
+  {key:'denik_zapis',    need:30,  e:'📒', label:'30 vyplněných dnů'},
+  {key:'mereni_ulozeno', need:50,  e:'📐', label:'50 měření'}
 ];
 var _statsAll = {};
 var _CZ_MONTHS = ['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
@@ -14466,7 +14471,10 @@ function diarySaveDay(){
   _diarySaveTimer = setTimeout(function(){
     showSync('⏳ Ukládám deník…');
     db.ref('denik/' + window.diaryCurrentDate).set(window.diaryCurrentData)
-      .then(function(){ hideSync(); })
+      .then(function(){ hideSync();
+        // body: max 1× za dokumentovaný den (ne za každou editaci, ne za otevření deníku)
+        try{ var _dk='denikScored_'+window.diaryCurrentDate; if(window.currentUser && !localStorage.getItem(_dk)){ localStorage.setItem(_dk,'1'); trackEvent('denik_zapis'); } }catch(_e){}
+      })
       .catch(function(e){ hideSync(); console.error('Diary save err:', e); showToast('❌ Chyba uložení', 2500); });
   }, 500);
 }
