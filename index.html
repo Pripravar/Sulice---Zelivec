@@ -1214,6 +1214,21 @@ document.addEventListener('touchend', function(e){
   </div>
 </div>
 
+<!-- 🏆 Žebříček aktivity (soutěž M - SILNICE) -->
+<div id="body-modal" style="display:none;position:fixed;inset:0;z-index:5200;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 8px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🏆 Žebříček aktivity</div>
+      <button onclick="closeBody()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="body-list" style="padding:10px 14px;overflow-y:auto;flex:1;"></div>
+  </div>
+</div>
+<!-- 🏆 Měsíční souhrn (vyskakovací, jednou za měsíc) -->
+<div id="recap-modal" style="display:none;position:fixed;inset:0;z-index:5400;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:20px;">
+  <div id="recap-body" style="background:var(--panel);border-radius:16px;max-width:360px;width:100%;border:1px solid var(--border);padding:22px;"></div>
+</div>
+
 <!-- iPhone instalační hint -->
 <div id="ios-install-hint">
   <span class="close" onclick="dismissIosHint()">✕</span>
@@ -1225,6 +1240,7 @@ document.addEventListener('touchend', function(e){
   <div id="km-display">km –</div>
   <button id="btn-help" onclick="openHelp()" title="Nápověda – co appka umí a jak se ovládá" style="background:var(--panel2);border:1px solid var(--accent2);border-radius:8px;color:var(--accent2);padding:6px 10px;font-size:15px;font-weight:700;cursor:pointer;">❓</button>
   <button id="btn-activity" onclick="openActivity()" title="Co se děje – aktivita v aplikaci" style="position:relative;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📢<span class="task-badge" id="activity-badge" style="display:none;">0</span></button>
+  <button id="btn-body" onclick="openBody()" title="Žebříček aktivity – soutěž M - SILNICE" style="position:relative;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🏆<span class="task-badge" id="body-badge" style="display:none;background:#f5a623;color:#0f3460;min-width:16px;">0</span></button>
   <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
   <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
   <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
@@ -10256,6 +10272,7 @@ var FEATURES = [
   { key:'zkousky',    label:'Zkoušky na stavbě',  btns:['btn-zkousky'] },
   { key:'dokumenty',  label:'Dokumenty (KZP/TePř/protokoly)', btns:['btn-dokumenty'] },
   { key:'inzsite',    label:'Inženýrské sítě',    btns:['btn-is'] },
+  { key:'body',       label:'🏆 Žebříček aktivity (soutěž M - SILNICE)', btns:['btn-body'] },
   // ── Vrstvy v mapě – KAŽDÁ ZVLÁŠŤ ──
   { key:'fotomapa',   label:'🗺️ Vrstva: Fotky v mapě', btns:[] },      // ⚠ NIKDY pod 'galerie'
   { key:'katastr',    label:'🗺️ Vrstva: Katastr (KN)', btns:[] },
@@ -10483,8 +10500,198 @@ function trackEvent(key){
     if(uid){
       db.ref('statistiky_uzivatele/'+uid).update({ n: SV.increment(1), last: SV.TIMESTAMP }).catch(function(){});
       db.ref('statistiky_uzivatele/'+uid+'/akce/'+key).set(SV.increment(1)).catch(function(){});
+      // Měsíční + denní rozpad pro žebříček aktivity (fire-and-forget, stejná pravidla $other).
+      // mesic/{YYYY-MM}/{key} = počet akcí v měsíci · dny/{YYYYMMDD}=true = pro sérii (streak).
+      var _d = new Date();
+      var _ym  = _d.getFullYear()+'-'+('0'+(_d.getMonth()+1)).slice(-2);
+      var _ymd = ''+_d.getFullYear()+('0'+(_d.getMonth()+1)).slice(-2)+('0'+_d.getDate()).slice(-2);
+      db.ref('statistiky_uzivatele/'+uid+'/mesic/'+_ym+'/'+key).set(SV.increment(1)).catch(function(){});
+      db.ref('statistiky_uzivatele/'+uid+'/dny/'+_ymd).set(true).catch(function(){});
     }
   }catch(e){}
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 🏆 ŽEBŘÍČEK AKTIVITY – měsíční soutěž (jen tým M - SILNICE)
+// Body se počítají z /statistiky_uzivatele (měsíční rozpad doplňuje trackEvent).
+// Váhy jsou v JS → nic se nemigruje. Žádná nová pravidla ($other auth!=null).
+// Vyhlášení vítěze = reuse logActivity (feed aktivity). M - SILNICE = flag tym
+// NEBO firma obsahuje „silnice". Admin řídí přes Správu uživatelů.
+// ══════════════════════════════════════════════════════════════════
+var SCORE_WEIGHTS = { ukol_hotovo:10, denik:5, ukol_prevzato:3, mereni:3, pin:2, foto:1, foto_komentar:0.5 };
+var SCORE_LABELS = {
+  ukol_hotovo:{e:'✅',t:'dokončené úkoly'}, denik:{e:'📒',t:'zápisy v deníku'},
+  ukol_prevzato:{e:'🙋',t:'převzaté úkoly'}, mereni:{e:'📐',t:'měření'},
+  pin:{e:'📝',t:'poznámky/úkoly'}, foto:{e:'📷',t:'fotky'}, foto_komentar:{e:'💬',t:'komentáře'}
+};
+var SCORE_FOTO_CAP = 250;   // strop scórovaných fotek/měsíc (proti farmení)
+var BODY_BADGES = [
+  {key:'ukol_hotovo', need:10,  e:'🥉', label:'10 úkolů'},
+  {key:'ukol_hotovo', need:50,  e:'🥈', label:'50 úkolů'},
+  {key:'ukol_hotovo', need:200, e:'🥇', label:'200 úkolů'},
+  {key:'foto',        need:100, e:'📷', label:'100 fotek'},
+  {key:'foto',        need:500, e:'📸', label:'500 fotek'},
+  {key:'denik',       need:30,  e:'📒', label:'30 zápisů deníku'},
+  {key:'mereni',      need:50,  e:'📐', label:'50 měření'}
+];
+var _statsAll = {};
+var _CZ_MONTHS = ['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
+function _ym(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
+function _ymNow(){ return _ym(new Date()); }
+function _ymPrev(){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return _ym(d); }
+function _ymLabel(ym){ var p=(ym||'').split('-'); if(p.length<2) return ym||''; return _CZ_MONTHS[(+p[1])-1]+' '+p[0]; }
+function _isTeamUser(uid){
+  var u=(window.allUsers||{})[uid]; if(!u||!u.name) return false;
+  if(u.tym===true) return true; if(u.tym===false) return false;
+  return ((u.firma||'').toLowerCase().indexOf('silnice')!==-1);   // M - SILNICE a.s. dle firmy
+}
+function _monthScore(uid, ym){
+  var s=_statsAll[uid]; var m=(s&&s.mesic&&s.mesic[ym])||null;
+  if(!m) return {body:0, akce:{}};
+  var total=0, akce={};
+  for(var k in SCORE_WEIGHTS){ if(!SCORE_WEIGHTS.hasOwnProperty(k)) continue;
+    var n=+m[k]||0; if(!n) continue;
+    if(k==='foto') n=Math.min(n, SCORE_FOTO_CAP);
+    akce[k]=n; total += n*SCORE_WEIGHTS[k];
+  }
+  return {body:Math.round(total), akce:akce};
+}
+function _streakDays(uid){
+  var s=_statsAll[uid]; var dny=(s&&s.dny)||null; if(!dny) return 0;
+  var d=new Date(), cnt=0;
+  for(var i=0;i<420;i++){
+    var key=''+d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);
+    if(dny[key]){ cnt++; d.setDate(d.getDate()-1); }
+    else if(i===0){ d.setDate(d.getDate()-1); }   // dnešek ještě nemusí být hotový → série se kvůli němu nezruší
+    else break;
+  }
+  return cnt;
+}
+function _leaderboard(ym){
+  var rows=[], seen={}; var us=window.allUsers||{};
+  for(var uid in _statsAll){ if(!_statsAll.hasOwnProperty(uid)) continue;
+    if(!_isTeamUser(uid)) continue;
+    var sc=_monthScore(uid, ym); var u=us[uid]||{};
+    rows.push({uid:uid, name:u.name||'?', photo:u.photo, body:sc.body, streak:_streakDays(uid)}); seen[uid]=1;
+  }
+  for(var uid2 in us){ if(!us.hasOwnProperty(uid2)||seen[uid2]) continue;   // i členové bez záznamu (0 b)
+    if(!_isTeamUser(uid2)) continue;
+    rows.push({uid:uid2, name:(us[uid2].name||'?'), photo:us[uid2].photo, body:0, streak:0});
+  }
+  rows.sort(function(a,b){ return b.body-a.body || (a.name||'').localeCompare(b.name||''); });
+  return rows;
+}
+function _userBadges(uid){
+  var s=_statsAll[uid]||{}, ak=s.akce||{}, out=[];
+  BODY_BADGES.forEach(function(b){ if((+ak[b.key]||0)>=b.need) out.push(b); });
+  var st=_streakDays(uid);
+  if(st>=30) out.push({e:'🔥',label:'30denní série'});
+  else if(st>=7) out.push({e:'🔥',label:'7denní série'});
+  return out;
+}
+function _medal(i){ return i===0?'🥇':i===1?'🥈':i===2?'🥉':((i+1)+'.'); }
+
+function updateBodyBadge(){
+  var badge=document.getElementById('body-badge'); if(!badge) return;
+  var me=window.currentUser&&window.currentUser.uid;
+  if(!me){ badge.style.display='none'; return; }
+  var rows=_leaderboard(_ymNow()); var idx=-1;
+  for(var i=0;i<rows.length;i++){ if(rows[i].uid===me){ idx=i; break; } }
+  if(idx<0 || !rows[idx].body){ badge.style.display='none'; return; }
+  badge.textContent=_medal(idx); badge.style.display='';
+}
+function openBody(){
+  if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
+  if(typeof hasPerm==='function' && !hasPerm('body')){ showToast('🏆 Žebříček Ti admin nepovolil', 3000); return; }
+  document.getElementById('body-modal').style.display='flex';
+  renderBody();
+}
+function closeBody(){ var m=document.getElementById('body-modal'); if(m) m.style.display='none'; }
+function renderBody(){
+  var box=document.getElementById('body-list'); if(!box) return;
+  var ym=_ymNow(), rows=_leaderboard(ym), me=window.currentUser&&window.currentUser.uid, h='';
+  h+='<div style="font-size:13px;color:var(--text2);margin:2px 0 10px;">Soutěž '+_ymLabel(ym)+' · body za dokumentaci a řešení úkolů</div>';
+  if(!rows.length){
+    h+='<div style="text-align:center;color:var(--text2);padding:22px;font-size:13px;">Zatím nikdo v soutěži.<br>Admin zařadí lidi z M - SILNICE ve „Správě uživatelů" (🏆) nebo doplněním firmy.</div>';
+  } else {
+    rows.forEach(function(r,i){
+      var meRow=(r.uid===me);
+      var av=(r.photo&&/^https?:\/\//.test(r.photo))
+        ? '<img src="'+escapeHtml(r.photo)+'" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
+        : '<div style="width:34px;height:34px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">👤</div>';
+      var bdg=_userBadges(r.uid).map(function(b){ return '<span title="'+escapeHtml(b.label)+'">'+b.e+'</span>'; }).join('');
+      h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;'+(meRow?'background:rgba(34,211,238,.10);border-radius:10px;':'')+'border-bottom:1px solid var(--border);">'+
+        '<div style="font-size:17px;min-width:30px;text-align:center;font-weight:800;">'+_medal(i)+'</div>'+ av+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(r.name)+(meRow?' <span style="font-size:11px;color:#22d3ee;">(ty)</span>':'')+' '+bdg+'</div>'+
+          (r.streak>0?'<div style="font-size:11px;color:var(--text2);">🔥 '+r.streak+' dní v řadě</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;"><div style="font-weight:800;font-size:16px;color:var(--accent);">'+r.body+'</div><div style="font-size:10px;color:var(--text2);">bodů</div></div>'+
+      '</div>';
+    });
+  }
+  var prow=_leaderboard(_ymPrev());
+  if(prow.length && prow[0].body){
+    h+='<div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--panel2);">'+
+      '<div style="font-size:12px;color:var(--text2);">🏆 Vítěz – '+_ymLabel(_ymPrev())+'</div>'+
+      '<div style="font-weight:800;font-size:15px;margin-top:2px;">'+escapeHtml(prow[0].name)+' · '+prow[0].body+' bodů</div>'+
+      ((typeof isAdmin==='function'&&isAdmin())?'<button onclick="announceWinner()" style="margin-top:8px;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;">📢 Vyhlásit v aktivitě</button>':'')+
+    '</div>';
+  }
+  h+='<details style="margin-top:12px;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">Jak se počítají body</summary><div style="font-size:12px;color:var(--text2);padding:8px 2px;line-height:1.8;">';
+  for(var k in SCORE_WEIGHTS){ if(!SCORE_WEIGHTS.hasOwnProperty(k)) continue; var L=SCORE_LABELS[k]||{e:'•',t:k}; h+=L.e+' '+L.t+' – <b>'+SCORE_WEIGHTS[k]+'</b> b<br>'; }
+  h+='<span style="opacity:.7;">Fotky se počítají do stropu '+SCORE_FOTO_CAP+'/měsíc (proti farmení). Soutěží jen tým M - SILNICE.</span></div></details>';
+  box.innerHTML=h;
+}
+function announceWinner(){
+  if(typeof isAdmin!=='function' || !isAdmin()) return;
+  var ym=_ymPrev(), rows=_leaderboard(ym);
+  if(!rows.length || !rows[0].body){ showToast('Minulý měsíc nemá vítěze', 2500); return; }
+  var w=rows[0];
+  if(!confirm('Vyhlásit vítěze za '+_ymLabel(ym)+': '+w.name+' ('+w.body+' bodů)?')) return;
+  if(typeof logActivity==='function') logActivity('🏆', 'vyhlásil/a vítěze soutěže za '+_ymLabel(ym)+': '+w.name+' – '+w.body+' bodů! 🎉');
+  showToast('🏆 Vyhlášeno v aktivitě', 2200);
+}
+function maybeShowMonthlyRecap(){
+  try{
+    var me=window.currentUser&&window.currentUser.uid; if(!me) return;
+    if(typeof hasPerm==='function' && !hasPerm('body')) return;
+    var ym=_ymPrev();
+    if(localStorage.getItem('bodyRecapShown')===ym) return;
+    var rows=_leaderboard(ym);
+    localStorage.setItem('bodyRecapShown', ym);        // ukázat max 1× za měsíc i kdyby data nebyla
+    if(!rows.length || !rows[0].body) return;
+    var myIdx=-1; for(var i=0;i<rows.length;i++){ if(rows[i].uid===me){ myIdx=i; break; } }
+    var w=rows[0];
+    var h='<div style="font-size:22px;font-weight:800;text-align:center;">🏆 Souhrn měsíce</div>'+
+      '<div style="text-align:center;color:var(--text2);font-size:13px;margin:2px 0 14px;">'+_ymLabel(ym)+'</div>'+
+      '<div style="text-align:center;font-size:15px;margin-bottom:12px;">Vítěz: <b>'+escapeHtml(w.name)+'</b><br><span style="color:var(--accent);font-weight:800;font-size:20px;">'+w.body+' bodů</span></div>';
+    if(myIdx>=0){
+      h+='<div style="text-align:center;background:var(--panel2);border-radius:10px;padding:10px;font-size:14px;">Ty ses umístil/a <b>'+_medal(myIdx)+'</b> · '+rows[myIdx].body+' bodů'+(rows[myIdx].streak>0?(' · 🔥 '+rows[myIdx].streak+' dní'):'')+'</div>';
+    }
+    h+='<button onclick="closeRecap()" style="margin-top:16px;width:100%;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:12px;font-size:15px;font-weight:700;cursor:pointer;">Super, jdeme dál 🚀</button>';
+    document.getElementById('recap-body').innerHTML=h;
+    document.getElementById('recap-modal').style.display='flex';
+  }catch(e){}
+}
+function closeRecap(){ var m=document.getElementById('recap-modal'); if(m) m.style.display='none'; }
+function initBodySystem(){
+  if(window._bodyInited || !window.db) return; window._bodyInited=true;
+  try{
+    db.ref('statistiky_uzivatele').on('value', function(snap){
+      _statsAll = snap.val() || {};
+      updateBodyBadge();
+      var m=document.getElementById('body-modal');
+      if(m && m.style.display==='flex') renderBody();
+    });
+  }catch(e){}
+  setTimeout(maybeShowMonthlyRecap, 2600);
+}
+function toggleUserTeam(uid, on){
+  if(typeof isAdmin!=='function' || !isAdmin()) return;
+  db.ref('uzivatele/'+uid+'/tym').set(on?true:false)
+    .then(function(){ showToast(on?'🏆 Zařazen do soutěže':'Vyřazen ze soutěže', 1600); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 
 // ── FEED AKTIVITY („co se děje") – jeden centrální log /aktivita, čte ho každý přihlášený ──
@@ -10558,6 +10765,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-07-30', verze:'v137', text:'🏆 Nové: Žebříček aktivity (tlačítko 🏆 v hlavičce). Za dokumentaci a řešení úkolů (dokončený úkol, deník, fotky, měření…) sbíráš body – měsíční soutěž jen mezi lidmi z M - SILNICE. Máš sérii dní 🔥 i odznaky za milníky, ikona nahoře ukazuje tvé pořadí a začátkem měsíce vyskočí souhrn s vítězem. Admin zařazuje soutěžící ve Správě uživatelů (🏆).' },
   { datum:'2026-07-22', verze:'v136', text:'🖱️ V galerii jde označit fotky TAHEM MYŠI (guma) – na počítači stačí táhnout přes fotky. 📆 Na hromadné stažení (třeba za měsíc): ve filtru zadáš datum od–do (klidně + SO / autor), dáš „Vše (N)" a stáhneš ZIP. Tlačítko „Vše" teď ukazuje, kolik odfiltrovaných fotek vybere.' },
   { datum:'2026-07-22', verze:'v135', text:'✅ Úkoly jde teď řadit (řadič „↕ Řadit" nad seznamem): datum vyřešení / zadání / 1. převzetí, nebo podle toho kdo zadal / vyřešil / komu je zadáno. Hotové úkoly se nově řadí podle data vyřešení (nejnovější nahoře) a v kartě je vidět datum dokončení – konec nepřehledné abecedy.' },
   { datum:'2026-07-22', verze:'v134', text:'📍 U vybraných fotek jde teď přenastavit staničení (km) i HROMADNĚ (tlačítko „📍 Staničení" v liště výběru). 📅 Nově jde změnit datum pořízení fotky – jednotlivě (v možnostech fotky) i hromadně (tlačítko „📅 Datum"). Změna se přerazítkuje.' },
@@ -10841,6 +11049,11 @@ function _renderUserAdmin(){
         '<span style="font-size:12px;color:var(--text2);">🏢 Firma:</span>'+
         '<input type="text" list="firma-list" value="'+escapeHtml(u.firma||'')+'" placeholder="(nevyplněno)" onchange="setUserFirma(\''+uid+'\',this.value)" style="font-size:12px;flex:1;min-width:120px;background:var(--panel2);color:var(--text);border:1px solid '+((u.firma||'').trim()?'var(--border)':'#f5a623')+';border-radius:6px;padding:5px 8px;">'+
       '</div>'+
+      // 🏆 Zařazení do soutěže M - SILNICE (žebříček aktivity). Sebe nechává dle firmy.
+      (self?'' :
+        '<div style="margin:6px 0 0 48px;"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;">'+
+          '<input type="checkbox" '+(_isTeamUser(uid)?'checked':'')+' onchange="toggleUserTeam(\''+uid+'\',this.checked)" style="width:16px;height:16px;"> 🏆 M - SILNICE (soutěží v žebříčku aktivity)'+
+        '</label></div>')+
       // Per-funkce práva (admin má vždy vše → u admina skryj)
       (adm ? '' : '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 2px 48px;">'+
         FEATURES.map(function(f){
@@ -11092,6 +11305,7 @@ function _enterApp(displayName){
   loadCategoryPerms();
   loadMjList();
   loadActivity();
+  initBodySystem();
   loadTasks();
   loadPracovnici();
   loadStroje();
@@ -11419,6 +11633,7 @@ function loadAllUsers() {
       return;
     }
     applyPermsToUI();   // živě promítni změnu práv (admin zapnul/vypnul funkci)
+    if(typeof updateBodyBadge==='function') updateBodyBadge();   // žebříček: změna týmu/členů
     // Pokud je otevřený admin panel, obnov ho
     var am = document.getElementById('user-admin-modal');
     if(am && am.style.display === 'flex') _renderUserAdmin();
@@ -12271,6 +12486,7 @@ function takeTask(){
     stav:'inprogress', resiUid:me.uid, resiName:me.name, prevzatoTs:Date.now(), historie:hist
   }).then(function(){
     showToast('🙋 Převzal/a jsi úkol – je v řešení', 1600);
+    trackEvent('ukol_prevzato');
     logActivity('🙋', 'začal/a řešit úkol „' + (t.title||'') + '"', {k:'task', id:t.id});
   });
 }
@@ -12332,6 +12548,7 @@ function doneConfirm(){
     closeDoneModal();
     Object.assign(t, upd);   // aktuální data i pro notifikaci
     showToast('✅ Úkol označen jako hotový', 1500);
+    trackEvent('ukol_hotovo');
     sendTaskNotificationRequest(t, 'hotovo');
     logActivity('🎉', 'dokončil/a úkol „' + (t.title||'') + '"' + (note ? (' – ' + note) : ''), {k:'task', id:t.id});
   });
