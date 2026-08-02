@@ -5724,10 +5724,12 @@ function _panoShow(idx){
     try {
       _panoViewer = pannellum.viewer('pano-fs-view', {
         type:'equirectangular', panorama:u, autoLoad:true,
-        yaw: PANO_INIT_YAW, hfov:110, minHfov:50, maxHfov:120,
+        yaw: PANO_INIT_YAW, pitch:0, hfov:110, minHfov:50, maxHfov:120,
         crossOrigin:'anonymous', showControls:false,
         compass:false, autoRotate:0
       });
+      // Pannellum občas počáteční yaw z configu ignoruje (nastartuje na středu snímku) → vynuť po načtení.
+      try { _panoViewer.on('load', function(){ try { _panoViewer.setYaw(PANO_INIT_YAW, false); _panoViewer.setPitch(0, false); } catch(e){} }); } catch(e){}
     } catch(e){ if(mount) mount.innerHTML = '<div style="color:#fff;padding:20px;">❌ Snímek se nepodařilo zobrazit</div>'; }
   }).catch(function(){ if(mount) mount.innerHTML = '<div style="color:#fff;padding:20px;">❌ Nepodařilo se načíst snímek</div>'; });
   // přednačti URL sousedů do cache → další je pak hned
