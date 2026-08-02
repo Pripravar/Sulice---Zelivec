@@ -5622,10 +5622,10 @@ var _panoList = [];         // seřazeno podle poradi (pro listování)
 var _panoIdx = -1;          // aktuálně zobrazený index v _panoList
 var _panoViewer = null;     // instance Pannellum
 var panoActiveDate = null;  // právě zobrazená procházka (datum) – přepíná se chipy jako u dronu
-// Výchozí natočení panoramatu při otevření (aby koukalo PO SILNICI, ne do pole).
-// GoPro na této stavbě ukládá střed snímku jinak → -45 = 45° doleva. Jedno místo k doladění:
-// -45 doleva · 45 doprava · -90/90 kolmo · 180 dozadu.
-var PANO_INIT_YAW = -45;
+// Výchozí natočení panoramatu při otevření (aby koukalo PO SILNICI dopředu, ne do pole/stranou).
+// Doladěno vizuálně na této stavbě = 45 (posun doprava o 90° oproti výchozím -45). Jedno místo k doladění:
+// záporně doleva · kladně doprava · ±90 kolmo · 180 dozadu.
+var PANO_INIT_YAW = 45;
 
 function loadPanorama360(){
   try {
