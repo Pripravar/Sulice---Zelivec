@@ -148,14 +148,11 @@ body.fab-open #btn-blok    { opacity:1; pointer-events:auto; transform:translate
 #btn-home-fab { position:fixed; bottom:24px; left:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
 /* 🗂️ „Vše" – radiální carousel všech panelů z horní lišty (listovatelný půlkruh, malé náhledy na krajích) */
 #fabgrid-trigger { position:fixed; bottom:204px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
-body.grid-open #btn-gps, body.grid-open #btn-foto-fab, body.grid-open #btn-fabmore, body.grid-open #btn-home-fab, body.grid-open #fabgrid-trigger { opacity:0; pointer-events:none; }
-#fabgrid { display:none; position:fixed; inset:0; z-index:1650; touch-action:none; }
-#fabgrid.open { display:block; }
-#fabgrid-backdrop { position:absolute; inset:0; background:rgba(0,0,0,.42); }
-#fabgrid-close { position:absolute; top:calc(12px + env(safe-area-inset-top)); right:16px; width:46px; height:46px; border-radius:50%; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.25); color:#fff; font-size:22px; cursor:pointer; z-index:2; }
-#fabgrid-hint { position:absolute; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); color:#fff; opacity:.8; font-size:12px; text-shadow:0 1px 3px #000; pointer-events:none; }
-.fabgrid-item { position:absolute; width:54px; height:54px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:25px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.5); transition:left .2s cubic-bezier(.2,.7,.3,1), top .2s cubic-bezier(.2,.7,.3,1), opacity .2s; }
-#fabgrid-name { position:absolute; color:#fff; font-size:13px; font-weight:700; text-shadow:0 1px 4px #000,0 0 6px #000; pointer-events:none; white-space:nowrap; z-index:2; transform:translate(-50%,0); }
+/* Když je dial otevřený, schovej ostatní pravé FABy (aby se malé ikony vějíře nepraly), trigger nech. */
+body.grid-open #btn-gps, body.grid-open #btn-foto-fab, body.grid-open #btn-fabmore, body.grid-open #btn-home-fab { opacity:0; pointer-events:none; }
+body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accent2); }
+/* Dial „Vše" – MALÉ ikony (stejné jako ⋯ vějíř) na půlkruhu kolem triggeru; listuje se jak ciferník. */
+.fabgrid-item { position:fixed; right:16px; bottom:204px; width:46px; height:46px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:21px; cursor:pointer; z-index:1501; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.45); opacity:0; transform:translate(0,0) scale(.4); transition:transform .2s cubic-bezier(.2,.7,.3,1), opacity .18s; }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
 #measure-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#22d3ee; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #measure-crosshair.open { display:block; }
@@ -1315,10 +1312,10 @@ document.addEventListener('touchend', function(e){
   </div>
   <h3>🗺️ Podklady</h3>
   <div id="basemap-row">
-    <button class="bm-btn" onclick="setBasemap('outdoor',this)">Outdoor</button>
+    <button class="bm-btn active" id="outdoor-btn" onclick="setBasemap('outdoor',this)">Outdoor</button>
     <button class="bm-btn" onclick="setBasemap('basic',this)">Basic</button>
     <button class="bm-btn" onclick="setBasemap('aerial',this)">Letecká</button>
-    <button class="bm-btn active" id="osm-btn" onclick="setBasemap('osm',this)">OSM</button>
+    <button class="bm-btn" id="osm-btn" onclick="setBasemap('osm',this)">OSM</button>
   </div>
   <div data-perm="katastr">
   <div class="layer-row">
@@ -1542,13 +1539,8 @@ document.addEventListener('touchend', function(e){
 <button id="btn-measure" onclick="closeFabMore();toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
 <button id="btn-blok" onclick="closeFabMore();openBlok()" title="Poznámkový blok">📝</button>
 <button id="btn-home-fab" onclick="resetMapView()" title="Domů – reset pohledu">⌂</button>
-<button id="fabgrid-trigger" onclick="openFabGrid()" title="Vše – všechny panely z lišty">🗂️</button>
-<div id="fabgrid">
-  <div id="fabgrid-backdrop" onclick="closeFabGrid()"></div>
-  <button id="fabgrid-close" onclick="closeFabGrid()" title="Zavřít">✕</button>
-  <div id="fabgrid-name"></div>
-  <div id="fabgrid-hint">listuj tažením ↑ ↓ · malé ikony = víc</div>
-</div>
+<button id="fabgrid-trigger" onclick="toggleFabGrid()" title="Vše – panely z lišty (listuj jak ciferník)">🗂️</button>
+<div id="fabgrid"></div>
 <div id="place-crosshair">✛</div>
 <div id="place-bar">
   <span id="place-hint">Najeď křížkem na místo</span>
@@ -2440,9 +2432,11 @@ function initMap() {
   baseLayers.aerial =L.tileLayer(mUrl('aerial'), {maxZoom:23,maxNativeZoom:20,attribution:'© Mapy.cz'});
   baseLayers.osm    =L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     {maxZoom:23,maxNativeZoom:19,attribution:'© OpenStreetMap'});
-  // OSM jako výchozí – Mapy.cz vyžaduje registraci domény na api.mapy.cz
-  baseLayers.osm.addTo(map);
-  currentBasemap='osm';
+  // VÝCHOZÍ podklad = Mapy.com OUTDOOR (jednotné pro všechny appky). Vyžaduje registraci
+  // domény nasazení na api.mapy.cz (na localhostu se dlaždice nemusí načíst – v provozu OK).
+  // OSM zůstává jako záložní volba v přepínači Podklady.
+  baseLayers.outdoor.addTo(map);
+  currentBasemap='outdoor';
 
   // Katastrální mapa ČÚZK - WMS overlay
   baseLayers.katastr = L.tileLayer.wms('https://services.cuzk.cz/wms/wms.asp', {
@@ -10801,66 +10795,57 @@ function _fabgridItems(){
   }
   return out;
 }
+// „Vše" DIAL: malé ikony (jako ⋯ vějíř) na půlkruhu kolem triggeru; listuje se jak ciferník (wrap).
+var _FABGRID_POS = [ [0,-84], [-59,-59], [-84,0], [-59,59], [0,84] ];   // 5 slotů: nahoře → doleva → dole
+function toggleFabGrid(){ if(document.body.classList.contains('grid-open')) closeFabGrid(); else openFabGrid(); }
 function openFabGrid(){
+  if(typeof closeFabMore==='function') closeFabMore();   // ať nejsou oba vějíře naráz
   document.body.classList.add('grid-open');
-  var g=document.getElementById('fabgrid'); if(g) g.classList.add('open');
-  _gridCenter = 0;
+  _gridCenter = 2;   // začni od začátku seznamu (položky 0..4 vidět, bez počátečního wrapu)
   renderFabGrid();
 }
 function closeFabGrid(){
   document.body.classList.remove('grid-open');
-  var g=document.getElementById('fabgrid'); if(g) g.classList.remove('open');
+  var g=document.getElementById('fabgrid'); if(g){ var o=g.querySelectorAll('.fabgrid-item'); for(var q=0;q<o.length;q++) o[q].remove(); }
 }
 function renderFabGrid(){
   var g=document.getElementById('fabgrid'); if(!g) return;
   var old=g.querySelectorAll('.fabgrid-item'); for(var q=0;q<old.length;q++) old[q].remove();
-  var items=_fabgridItems(), M=items.length;
-  var nameEl=document.getElementById('fabgrid-name'); if(nameEl) nameEl.textContent='';
-  var hintEl=document.getElementById('fabgrid-hint'); if(hintEl) hintEl.style.display = (M>5?'':'none');
-  if(!M) return;
-  if(_gridCenter<0) _gridCenter=0; if(_gridCenter>M-1) _gridCenter=M-1;
-  var W=window.innerWidth, H=window.innerHeight;
-  var ax=W-26, ay=H*0.5;
-  var R=Math.min(W*0.72, H*0.42, 230);
-  var SLOTS=7, C=3, HALF=82, SC=[.5,.68,.84,1,.84,.68,.5];
-  for(var k=0;k<SLOTS;k++){
-    var idx=_gridCenter+(k-C);
-    if(idx<0 || idx>=M) continue;
-    var it=items[idx];
-    var ang=((k-C)/C)*HALF*Math.PI/180;
-    var x=ax - R*Math.cos(ang);
-    var y=ay + R*Math.sin(ang);
-    var s=SC[k];
-    var edge=(k===0 || k===SLOTS-1);
-    var el=document.createElement('button');
-    el.className='fabgrid-item';
-    el.textContent=it.ico;
-    el.style.left=x+'px'; el.style.top=y+'px';
-    el.style.width=(54*s)+'px'; el.style.height=(54*s)+'px';
-    el.style.marginLeft=(-27*s)+'px'; el.style.marginTop=(-27*s)+'px';
-    el.style.fontSize=(25*s)+'px';
-    el.style.opacity = edge ? '0.6' : '1';
-    el.title=it.label;
-    (function(item, isEdge, dir){
-      el.onclick=function(ev){ ev.stopPropagation();
-        if(isEdge){ _gridCenter+=dir; renderFabGrid(); return; }   // malá ikona na kraji = listovat tím směrem
-        closeFabGrid(); if(item.btn) item.btn.click();
-      };
-    })(it, edge, k<C?-1:1);
+  var items=_fabgridItems(), M=items.length; if(!M) return;
+  var dialing = M>5, count = dialing?5:M, CEN=2;
+  var start = dialing ? 0 : Math.floor((5-count)/2);   // malé sady vycentruj mezi 5 pozic
+  for(var k=0;k<count;k++){
+    var slot = dialing ? k : (start+k);
+    var pos = _FABGRID_POS[slot];
+    var idx = dialing ? (((_gridCenter+(k-CEN))%M+M)%M) : k;
+    var it = items[idx];
+    var edge = dialing && (k===0 || k===count-1);   // krajní malé = „listovat tím směrem"
+    var el = document.createElement('button');
+    el.className='fabgrid-item'; el.textContent=it.ico; el.title=it.label;
     g.appendChild(el);
-    if(k===C && nameEl){ nameEl.textContent=it.label; nameEl.style.left=x+'px'; nameEl.style.top=(y+38)+'px'; }
+    (function(item, isEdge, dir, DX, DY, elm){
+      requestAnimationFrame(function(){ elm.style.opacity = isEdge ? '0.5' : '1'; elm.style.transform = 'translate('+DX+'px,'+DY+'px) scale(1)'; });
+      elm.onclick = function(ev){ ev.stopPropagation();
+        if(isEdge){ _gridCenter = ((_gridCenter+dir)%M+M)%M; renderFabGrid(); }
+        else { closeFabGrid(); if(item.btn) item.btn.click(); }
+      };
+    })(it, edge, k<CEN?-1:1, pos[0], pos[1], el);
   }
 }
+function _fabgridDial(d){ var M=_fabgridItems().length; if(M>5){ _gridCenter=((_gridCenter+d)%M+M)%M; renderFabGrid(); window._gridSwiped=true; setTimeout(function(){ window._gridSwiped=false; }, 320); } }
 (function(){
-  function bind(){
-    var g=document.getElementById('fabgrid'); if(!g || g._bound) return; g._bound=true;
-    var sy=null;
-    g.addEventListener('touchstart', function(e){ sy=e.touches[0].clientY; }, {passive:true});
-    g.addEventListener('touchend', function(e){ if(sy===null) return; var dy=e.changedTouches[0].clientY - sy; if(Math.abs(dy)>26){ _gridCenter += (dy<0?1:-1); renderFabGrid(); } sy=null; }, {passive:true});
-    g.addEventListener('wheel', function(e){ e.preventDefault(); _gridCenter += (e.deltaY>0?1:-1); renderFabGrid(); }, {passive:false});
-    window.addEventListener('resize', function(){ if(g.classList.contains('open')) renderFabGrid(); });
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+  var sy=null;
+  document.addEventListener('touchstart', function(e){ if(document.body.classList.contains('grid-open')) sy=e.touches[0].clientY; }, {passive:true});
+  document.addEventListener('touchend', function(e){ if(sy===null) return; var dy=e.changedTouches[0].clientY-sy; sy=null; if(document.body.classList.contains('grid-open') && Math.abs(dy)>24) _fabgridDial(dy<0?1:-1); }, {passive:true});
+  document.addEventListener('wheel', function(e){ if(!document.body.classList.contains('grid-open')) return; e.preventDefault(); _fabgridDial(e.deltaY>0?1:-1); }, {passive:false});
+  document.addEventListener('click', function(e){
+    if(!document.body.classList.contains('grid-open')) return;
+    if(window._gridSwiped) return;   // po listování prstem nezavírat
+    var t=e.target;
+    if(t && t.closest && (t.closest('.fabgrid-item') || t.closest('#fabgrid-trigger'))) return;
+    closeFabGrid();
+  }, true);
+  window.addEventListener('resize', function(){ if(document.body.classList.contains('grid-open')) renderFabGrid(); });
 })();
 function addBlok(){
   var ta=document.getElementById('blok-new-text'); var v=(ta&&ta.value||'').trim();
