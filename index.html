@@ -10801,11 +10801,13 @@ function toggleFabGrid(){ if(document.body.classList.contains('grid-open')) clos
 function openFabGrid(){
   if(typeof closeFabMore==='function') closeFabMore();   // ať nejsou oba vějíře naráz
   document.body.classList.add('grid-open');
+  try { if(window.map && map.dragging) map.dragging.disable(); } catch(e){}   // ať kroužení nepohne mapou
   _gridCenter = 2;   // začni od začátku seznamu (položky 0..4 vidět, bez počátečního wrapu)
   renderFabGrid();
 }
 function closeFabGrid(){
   document.body.classList.remove('grid-open');
+  try { if(window.map && map.dragging) map.dragging.enable(); } catch(e){}
   var g=document.getElementById('fabgrid'); if(g){ var o=g.querySelectorAll('.fabgrid-item'); for(var q=0;q<o.length;q++) o[q].remove(); }
 }
 function renderFabGrid(){
@@ -10826,21 +10828,40 @@ function renderFabGrid(){
     (function(item, isEdge, dir, DX, DY, elm){
       requestAnimationFrame(function(){ elm.style.opacity = isEdge ? '0.5' : '1'; elm.style.transform = 'translate('+DX+'px,'+DY+'px) scale(1)'; });
       elm.onclick = function(ev){ ev.stopPropagation();
+        if(window._gridSwiped) return;   // po kroužení/tažení neaktivovat položku
         if(isEdge){ _gridCenter = ((_gridCenter+dir)%M+M)%M; renderFabGrid(); }
         else { closeFabGrid(); if(item.btn) item.btn.click(); }
       };
     })(it, edge, k<CEN?-1:1, pos[0], pos[1], el);
   }
 }
-function _fabgridDial(d){ var M=_fabgridItems().length; if(M>5){ _gridCenter=((_gridCenter+d)%M+M)%M; renderFabGrid(); window._gridSwiped=true; setTimeout(function(){ window._gridSwiped=false; }, 320); } }
+function _fabgridDial(d){ var M=_fabgridItems().length; if(M>5){ _gridCenter=((_gridCenter+d)%M+M)%M; renderFabGrid(); } }
 (function(){
-  var sy=null;
-  document.addEventListener('touchstart', function(e){ if(document.body.classList.contains('grid-open')) sy=e.touches[0].clientY; }, {passive:true});
-  document.addEventListener('touchend', function(e){ if(sy===null) return; var dy=e.changedTouches[0].clientY-sy; sy=null; if(document.body.classList.contains('grid-open') && Math.abs(dy)>24) _fabgridDial(dy<0?1:-1); }, {passive:true});
+  // Víc způsobů listování: (1) KROUŽENÍ prstem/myší kolem dialu (jako knoflík), (2) tah nahoru/dolů,
+  // (3) kolečko myši, (4) ťuk na krajní vybledlou ikonu, (5) tap prostřední = spustit.
+  var dragging=false, lastAng=0, acc=0, cx=0, cy=0, moved=0;
+  function centerXY(){ var t=document.getElementById('fabgrid-trigger'); if(t){ var r=t.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2]; } return [window.innerWidth-40, window.innerHeight-228]; }
+  function angleAt(x,y){ return Math.atan2(y-cy, x-cx)*180/Math.PI; }
+  function norm(d){ while(d>180)d-=360; while(d<-180)d+=360; return d; }
+  document.addEventListener('pointerdown', function(e){
+    if(!document.body.classList.contains('grid-open')) return;
+    var c=centerXY(); cx=c[0]; cy=c[1];
+    lastAng=angleAt(e.clientX,e.clientY); acc=0; moved=0; dragging=true; window._gridSwiped=false;
+  }, true);
+  document.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    var a=angleAt(e.clientX,e.clientY), d=norm(a-lastAng); lastAng=a; acc+=d; moved+=Math.abs(d);
+    var STEP=40;   // ~40° otočení kolem dialu = posun o 1 položku (ciferník)
+    while(acc>=STEP){ _fabgridDial(1);  acc-=STEP; }
+    while(acc<=-STEP){ _fabgridDial(-1); acc+=STEP; }
+    if(moved>10) window._gridSwiped=true;   // byl to tah/kroužení → tap nespustí položku ani nezavře
+  }, true);
+  document.addEventListener('pointerup', function(){ dragging=false; if(window._gridSwiped) setTimeout(function(){ window._gridSwiped=false; }, 80); }, true);
+  document.addEventListener('pointercancel', function(){ dragging=false; }, true);
   document.addEventListener('wheel', function(e){ if(!document.body.classList.contains('grid-open')) return; e.preventDefault(); _fabgridDial(e.deltaY>0?1:-1); }, {passive:false});
   document.addEventListener('click', function(e){
     if(!document.body.classList.contains('grid-open')) return;
-    if(window._gridSwiped) return;   // po listování prstem nezavírat
+    if(window._gridSwiped) return;   // po kroužení/tažení nezavírat
     var t=e.target;
     if(t && t.closest && (t.closest('.fabgrid-item') || t.closest('#fabgrid-trigger'))) return;
     closeFabGrid();
@@ -10962,7 +10983,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
-  { datum:'2026-08-06', verze:'v145', text:'🗂️ Vpravo dole přibylo tlačítko „Vše" (🗂️) – rozbalí půlkruh se VŠEMI panely z horní lišty (úkoly, deník, galerie, dokumenty, zkoušky…). Listuješ tažením nahoru/dolů, uprostřed je velká ikona, na krajích malé = ukazují, kam ještě listovat. ⌂ Domů je teď i vlevo dole (hned po ruce). Vrstvy, odhlášení a foto/domeček v tom „Vše" nejsou (mají svoje místo).' },
+  { datum:'2026-08-06', verze:'v147', text:'🗺️ Výchozí mapa je teď Mapy.com Outdoor (turistická). Ostatní podklady (Basic, Letecká, OSM) zůstávají v ☰ Vrstvy → Podklady. 🗂️ Vpravo dole je tlačítko „Vše" – rozbalí malý půlkruh (jako ⋯) s panely z horní lišty a listuješ v něm jak ciferníkem: nově i KROUŽENÍM prstem kolem něj (jako knoflíkem), nebo tažením nahoru/dolů, kolečkem myši či ťuknutím na krajní vybledlou ikonu. ⌂ Domů je nově i vlevo dole (hned po ruce).' },
   { datum:'2026-08-06', verze:'v144', text:'🔘 Vpravo dole je nově pořádek: samostatně 📍 poloha a 📷 foťák (rychlé focení), a tlačítko ⋯, které se po ťuknutí rozbalí do půlkola a nabídne ➕ poznámku/úkol, 📏 měření a 📝 zápisník. 🔒 Úkoly: v zadání zaškrtneš „Jen můj úkol" – vidíš ho JEN ty (v seznamu, na mapě, nikde jinde), ostatním se neplete a nikomu nechodí upozornění. 📝 Poznámkový blok (v ⋯) – osobní zápisník; poznámky jsou defaultně soukromé, po zaškrtnutí „veřejná" je uvidí všichni.' },
   { datum:'2026-07-30', verze:'v138', text:'📷 360° prohlížeč má novou navigaci: svislé šipky na střed obrazovky – NAHORU jedeš po silnici dopředu, DOLŮ zpět. Dvojšipky ⏫/⏬ na krajích skáčou rychle (o 4 fotky), jednoduché ▲/▼ po jedné. Boční šipky i šipky v obraze jsme zrušili (u 360° pletly). Na klávesnici ↑/↓ (se Shiftem rychle), Esc zavře.' },
   { datum:'2026-07-30', verze:'v137', text:'🏆 Nové: Žebříček aktivity (tlačítko 🏆 v hlavičce). Za dokumentaci a řešení úkolů (dokončený úkol, deník, fotky, měření…) sbíráš body – měsíční soutěž jen mezi lidmi z M - SILNICE. Máš sérii dní 🔥 i odznaky za milníky, ikona nahoře ukazuje tvé pořadí a začátkem měsíce vyskočí souhrn s vítězem. Admin zařazuje soutěžící ve Správě uživatelů (🏆).' },
