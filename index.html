@@ -134,6 +134,8 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 /* ── Měření vzdálenosti a plochy (obecný nástroj, nezávislý na drone) ── */
 #btn-measure { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
 #btn-measure.active { background:#0e7490; border-color:#22d3ee; color:#fff; box-shadow:0 0 16px rgba(34,211,238,.5); }
+#btn-foto-fab { position:fixed; bottom:204px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+#btn-blok { position:fixed; bottom:264px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
 #measure-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#22d3ee; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #measure-crosshair.open { display:block; }
@@ -1234,6 +1236,24 @@ document.addEventListener('touchend', function(e){
   <div id="recap-body" style="background:var(--panel);border-radius:16px;max-width:360px;width:100%;border:1px solid var(--border);padding:22px;"></div>
 </div>
 
+<!-- 📝 Poznámkový blok – osobní zápisník (veřejné/soukromé) -->
+<div id="blok-panel" style="display:none;position:fixed;inset:0;z-index:3600;background:var(--bg);flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">📝 Poznámkový blok</div>
+    <button onclick="closeBlok()" title="Zavřít" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+  </div>
+  <div style="padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <textarea id="blok-new-text" rows="3" placeholder="Napiš poznámku… (jen pro tebe, dokud nezaškrtneš „veřejná")" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px;font-size:14px;resize:vertical;"></textarea>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;flex:1;">
+        <input type="checkbox" id="blok-new-public" style="width:18px;height:18px;"> 🌐 Veřejná (uvidí všichni)
+      </label>
+      <button onclick="addBlok()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer;">Přidat</button>
+    </div>
+  </div>
+  <div id="blok-list" style="padding:12px 14px;overflow-y:auto;flex:1;"></div>
+</div>
+
 <!-- iPhone instalační hint -->
 <div id="ios-install-hint">
   <span class="close" onclick="dismissIosHint()">✕</span>
@@ -1498,6 +1518,8 @@ document.addEventListener('touchend', function(e){
 <button id="btn-gps" onclick="toggleGpsBtn()" title="GPS zapnout/vypnout / centrovat">📍</button>
 <button id="btn-place" onclick="startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
 <button id="btn-measure" onclick="toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
+<button id="btn-foto-fab" onclick="takeStandalonePhoto()" title="Vyfotit (rychlý přístup)">📷</button>
+<button id="btn-blok" onclick="openBlok()" title="Poznámkový blok">📝</button>
 <div id="place-crosshair">✛</div>
 <div id="place-bar">
   <span id="place-hint">Najeď křížkem na místo</span>
@@ -10260,7 +10282,7 @@ function categoryAllows(cat, feature){
 var FEATURES = [
   // ── Funkce (tlačítka / panely) ──
   { key:'pdf',        label:'Prohlížení výkresů (PDF)', btns:[] },
-  { key:'foto',       label:'Focení',            btns:['btn-standalone-foto'] },
+  { key:'foto',       label:'Focení',            btns:['btn-standalone-foto','btn-foto-fab'] },
   { key:'galerie',    label:'Galerie fotek',     btns:['btn-gallery'] },
   { key:'komentare',  label:'Komentování fotek', btns:[] },
   { key:'vykresy',    label:'Nahrávání výkresů',  btns:['btn-add-vykres'] },
@@ -10274,6 +10296,7 @@ var FEATURES = [
   { key:'dokumenty',  label:'Dokumenty (KZP/TePř/protokoly)', btns:['btn-dokumenty'] },
   { key:'inzsite',    label:'Inženýrské sítě',    btns:['btn-is'] },
   { key:'body',       label:'🏆 Žebříček aktivity (soutěž M - SILNICE)', btns:['btn-body'] },
+  { key:'blok',       label:'📝 Poznámkový blok (osobní zápisník)', btns:['btn-blok'] },
   // ── Vrstvy v mapě – KAŽDÁ ZVLÁŠŤ ──
   { key:'fotomapa',   label:'🗺️ Vrstva: Fotky v mapě', btns:[] },      // ⚠ NIKDY pod 'galerie'
   { key:'katastr',    label:'🗺️ Vrstva: Katastr (KN)', btns:[] },
@@ -10698,6 +10721,72 @@ function toggleUserTeam(uid, on){
     .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 📝 POZNÁMKOVÝ BLOK – osobní zápisník (veřejné / soukromé)
+// /blok_poznamky/{id} = {text, uid, author, ts, verejne}. Default SOUKROMÉ (vidí jen autor).
+// verejne:true → vidí všichni. Viditelnost je klient-side (jako soukromé úkoly) – pro odhlučnění,
+// ne tvrdá bezpečnost. Spadá pod $other (auth!=null) → beze změny Firebase pravidel.
+// ══════════════════════════════════════════════════════════════════
+window.blokData = {};
+function loadBlok(){
+  try{
+    db.ref('blok_poznamky').on('value', function(snap){
+      window.blokData = snap.val() || {};
+      var p=document.getElementById('blok-panel'); if(p && p.style.display==='flex') renderBlok();
+    }, function(e){ console.warn('loadBlok:', e&&e.message); });
+  }catch(e){}
+}
+function openBlok(){
+  if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
+  if(typeof hasPerm==='function' && !hasPerm('blok')){ showToast('📝 Poznámkový blok Ti admin nepovolil', 3000); return; }
+  document.getElementById('blok-panel').style.display='flex';
+  renderBlok();
+}
+function closeBlok(){ var p=document.getElementById('blok-panel'); if(p) p.style.display='none'; }
+function addBlok(){
+  var ta=document.getElementById('blok-new-text'); var v=(ta&&ta.value||'').trim();
+  if(!v){ showToast('Napiš text poznámky', 1800); return; }
+  if(!window.currentUser) return;
+  var pub=!!((document.getElementById('blok-new-public')||{}).checked);
+  var id='b_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  db.ref('blok_poznamky/'+id).set({ text:v, uid:window.currentUser.uid, author:window.currentUser.name||'', ts:Date.now(), verejne:pub })
+    .then(function(){ ta.value=''; var c=document.getElementById('blok-new-public'); if(c) c.checked=false; showToast(pub?'🌐 Uloženo (veřejná)':'🔒 Uloženo (soukromá)', 1600); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
+}
+function toggleBlokPublic(id){
+  var n=window.blokData[id]; if(!n || !window.currentUser || n.uid!==window.currentUser.uid) return;
+  db.ref('blok_poznamky/'+id+'/verejne').set(!n.verejne)
+    .then(function(){ showToast(!n.verejne?'🌐 Zveřejněno':'🔒 Skryto', 1400); });
+}
+function deleteBlok(id){
+  var n=window.blokData[id]; if(!n || !window.currentUser || n.uid!==window.currentUser.uid){ showToast('Smazat můžeš jen svoje', 2000); return; }
+  if(!confirm('Smazat tuhle poznámku?')) return;
+  db.ref('blok_poznamky/'+id).remove().then(function(){ showToast('🗑️ Smazáno', 1400); });
+}
+function renderBlok(){
+  var box=document.getElementById('blok-list'); if(!box) return;
+  var me=window.currentUser&&window.currentUser.uid;
+  var arr=Object.keys(window.blokData).map(function(k){ var n=window.blokData[k]; if(n) n._id=k; return n; })
+    .filter(function(n){ return n && (n.uid===me || n.verejne===true); })
+    .sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  if(!arr.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">Zatím žádné poznámky – napiš první nahoře.<br>Soukromé vidíš jen ty, po zaškrtnutí „veřejná" je uvidí všichni.</div>'; return; }
+  box.innerHTML=arr.map(function(n){
+    var mine=(n.uid===me);
+    var when=new Date(n.ts||0).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+    var tag = n.verejne ? '<span style="color:#48bb78;">🌐 veřejná</span>' : '<span>🔒 soukromá</span>';
+    return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel);">'+
+      '<div style="white-space:pre-wrap;word-break:break-word;font-size:14px;color:var(--text);">'+escapeHtml(n.text||'')+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--text2);">'+
+        tag+'<span>'+escapeHtml(when)+'</span>'+(mine?'':('<span>· '+escapeHtml(n.author||'')+'</span>'))+
+        (mine?('<span style="flex:1;min-width:8px;"></span>'+
+          '<button onclick="toggleBlokPublic(\''+n._id+'\')" style="background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:5px 9px;font-size:12px;cursor:pointer;">'+(n.verejne?'🔒 Skrýt':'🌐 Zveřejnit')+'</button>'+
+          '<button onclick="deleteBlok(\''+n._id+'\')" style="background:var(--panel2);border:1px solid #e57373;border-radius:7px;color:#e57373;padding:5px 9px;font-size:12px;cursor:pointer;">🗑️</button>')
+          :'')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
 // ── FEED AKTIVITY („co se děje") – jeden centrální log /aktivita, čte ho každý přihlášený ──
 // logActivity(emoji, text, target) zapíše krátký řádek. Text je věta bez jména (jméno = kdo).
 // target (volitelně) = kam proklik vede, např. {k:'task', id:'...'} / {k:'photo', id:'...'} /
@@ -10769,6 +10858,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-06', verze:'v143', text:'📷 Foťák je teď i vpravo dole (plovoucí tlačítko u 📍➕📏) – rychlejší focení, v horní liště zůstává taky. 🔒 Úkoly: v zadání můžeš zaškrtnout „Jen můj úkol" – takový vidíš JEN ty (v seznamu, na mapě, nikde jinde), ostatním se neplete. 📝 Nový Poznámkový blok (tlačítko 📝 vpravo dole) – tvůj osobní zápisník. Poznámky jsou defaultně soukromé (vidíš je jen ty); když zaškrtneš „veřejná", uvidí je všichni.' },
   { datum:'2026-07-30', verze:'v138', text:'📷 360° prohlížeč má novou navigaci: svislé šipky na střed obrazovky – NAHORU jedeš po silnici dopředu, DOLŮ zpět. Dvojšipky ⏫/⏬ na krajích skáčou rychle (o 4 fotky), jednoduché ▲/▼ po jedné. Boční šipky i šipky v obraze jsme zrušili (u 360° pletly). Na klávesnici ↑/↓ (se Shiftem rychle), Esc zavře.' },
   { datum:'2026-07-30', verze:'v137', text:'🏆 Nové: Žebříček aktivity (tlačítko 🏆 v hlavičce). Za dokumentaci a řešení úkolů (dokončený úkol, deník, fotky, měření…) sbíráš body – měsíční soutěž jen mezi lidmi z M - SILNICE. Máš sérii dní 🔥 i odznaky za milníky, ikona nahoře ukazuje tvé pořadí a začátkem měsíce vyskočí souhrn s vítězem. Admin zařazuje soutěžící ve Správě uživatelů (🏆).' },
   { datum:'2026-07-22', verze:'v136', text:'🖱️ V galerii jde označit fotky TAHEM MYŠI (guma) – na počítači stačí táhnout přes fotky. 📆 Na hromadné stažení (třeba za měsíc): ve filtru zadáš datum od–do (klidně + SO / autor), dáš „Vše (N)" a stáhneš ZIP. Tlačítko „Vše" teď ukazuje, kolik odfiltrovaných fotek vybere.' },
@@ -11311,6 +11401,7 @@ function _enterApp(displayName){
   loadMjList();
   loadActivity();
   initBodySystem();
+  loadBlok();
   loadTasks();
   loadPracovnici();
   loadStroje();
@@ -11696,8 +11787,9 @@ function saveTaskToFirebase(task, cb) {
   db.ref('ukoly/' + task.id).set(task).then(function(){
     hideSync();
     showToast('✅ Úkol uložen', 1500);
-    // Notifikační záznam pro Cloud Function (+ @zmínky z detailu dostanou push navíc)
-    sendTaskNotificationRequest(task, 'novy', (task.mentions && task.mentions.length) ? { mentions: task.mentions.map(function(m){ return m.uid; }), mentionBy: task.zadalName || '', mentionText: task.title || '' } : null);
+    // Notifikační záznam pro Cloud Function (+ @zmínky z detailu dostanou push navíc).
+    // Soukromý úkol (jen pro sebe) NEnotifikuje nikoho.
+    if(!task.soukromy) sendTaskNotificationRequest(task, 'novy', (task.mentions && task.mentions.length) ? { mentions: task.mentions.map(function(m){ return m.uid; }), mentionBy: task.zadalName || '', mentionText: task.title || '' } : null);
     if(cb) cb();
   }).catch(function(e){
     console.error('Chyba uložení úkolu:', e);
@@ -11763,12 +11855,19 @@ function clearTaskFilter() {
   renderTasksList();
 }
 
+// 🔒 Soukromý úkol vidí jen jeho zadavatel (klient-side skrytí – ať se ostatním nepletou).
+function _taskVisible(t){
+  if(!t || !t.soukromy) return true;
+  var uid = window.currentUser ? window.currentUser.uid : null;
+  return !!uid && t.zadalUid === uid;
+}
 function filterTasksForTab(tab) {
   var uid = window.currentUser ? window.currentUser.uid : null;
   var profFilter = (document.getElementById('tasks-filter-prof') || {}).value || '';
   profFilter = profFilter.trim().toLowerCase();
   var now = Date.now();
   return window.allTasks.filter(function(t) {
+    if(!_taskVisible(t)) return false;   // 🔒 soukromý úkol jen pro zadavatele
     if(profFilter && (!t.profese || t.profese.toLowerCase().indexOf(profFilter) === -1)) return false;
     if(tab === 'moje') {
       if(t.stav === 'done') return false;
@@ -11861,7 +11960,7 @@ function renderTasksList() {
     var stateHtml = (t.stav === 'inprogress') ? ('<span class="tc-prog">🔵 Řeší: ' + escapeHtml(t.resiName || '') + '</span>') : '';
     var doneHtml = (t.stav === 'done' && t.hotovo) ? ('<span>✅ ' + new Date(t.hotovo).toLocaleDateString('cs-CZ') + (t.hotovilName ? (' · ' + escapeHtml(t.hotovilName)) : '') + '</span>') : '';
     return '<div class="' + cls + '" onclick="openTaskDetail(\'' + t.id + '\')">'
-      + '<div class="tc-title">' + escapeHtml(t.title || '(bez názvu)') + '</div>'
+      + '<div class="tc-title">' + (t.soukromy?'🔒 ':'') + escapeHtml(t.title || '(bez názvu)') + '</div>'
       + '<div class="tc-meta">'
       +   profHtml
       +   stateHtml
@@ -11880,7 +11979,7 @@ function updateTaskBadge() {
   var uid = window.currentUser ? window.currentUser.uid : null;
   if(!uid) return;
   var mine = window.allTasks.filter(function(t){
-    return t.stav !== 'done' && Array.isArray(t.prirazeno) && t.prirazeno.some(function(p){ return p.uid === uid; });
+    return _taskVisible(t) && t.stav !== 'done' && Array.isArray(t.prirazeno) && t.prirazeno.some(function(p){ return p.uid === uid; });
   }).length;
   var badge = document.getElementById('task-badge');
   if(!badge) return;
@@ -11922,6 +12021,7 @@ function openNewTaskModal(lat, lng, km) {
   document.getElementById('tnm-text-detail').value = '';
   document.getElementById('tnm-deadline').value = '';
   document.getElementById('tnm-priority').value = 'normalni'; _updatePrioHint();
+  var sk0=document.getElementById('tnm-soukromy'); if(sk0) sk0.checked = false;
   var rt=document.getElementById('tnm-remind-typ'); if(rt){ rt.value=''; } var ra=document.getElementById('tnm-remind-at'); if(ra) ra.value=''; _updateRemindUI();
   document.getElementById('tnm-prof').value = '';
   var soEl0=document.getElementById('tnm-so'); if(soEl0) soEl0.value=''; _fillTaskSoDatalist();
@@ -12315,6 +12415,7 @@ function saveTaskFromForm() {
   var priority = document.getElementById('tnm-priority').value || 'normalni';
   var profese = document.getElementById('tnm-prof').value.trim();
   var soVal = (document.getElementById('tnm-so').value || '').trim();
+  var soukromy = !!((document.getElementById('tnm-soukromy')||{}).checked);
   var lat = parseFloat(document.getElementById('tnm-lat').value);
   var lng = parseFloat(document.getElementById('tnm-lng').value);
   var km  = parseFloat(document.getElementById('tnm-km').value);
@@ -12344,6 +12445,7 @@ function saveTaskFromForm() {
       profese:    profese,
       so:         soVal || null,
       stav:       existing ? existing.stav : 'open',
+      soukromy:   soukromy || false,   // 🔒 jen zadavatel vidí (klient-side skrytí)
       vytvoreno:  existing ? existing.vytvoreno : Date.now(),
       upraveno:   Date.now(),
       komentare:  existing ? (existing.komentare || null) : null,
@@ -12358,7 +12460,7 @@ function saveTaskFromForm() {
     var _tm = (typeof _extractMentions === 'function') ? _extractMentions(detail) : [];
     if(_tm && _tm.length) task.mentions = _tm;
     saveTaskToFirebase(task, function(){
-      if(!existing){
+      if(!existing && !soukromy){   // soukromý úkol se do veřejného feedu nepíše
         var pro = (window.newTaskAssignees||[]).map(function(a){ return a.name; }).filter(Boolean).join(', ');
         logActivity('✅', 'zadal/a úkol „' + title + '"' + (pro?(' pro '+pro):'') + (soVal?(' · '+soVal):''), {k:'task', id:id});
       }
@@ -12398,6 +12500,7 @@ window.openTaskId = null;
 function openTaskDetail(id) {
   var t = window.allTasks.filter(function(x){ return x.id === id; })[0];
   if(!t) return;
+  if(!_taskVisible(t)){ showToast('Tenhle úkol je soukromý', 2000); return; }   // 🔒 obrana i přes přímý odkaz
   window.openTaskId = id;
   renderTaskDetail(t);
   document.getElementById('task-detail').classList.add('open');
@@ -12611,6 +12714,7 @@ function editTask() {
   document.getElementById('tnm-text-detail').value = t.text || '';
   document.getElementById('tnm-deadline').value = t.termin || '';
   document.getElementById('tnm-priority').value = t.priorita || 'normalni'; _updatePrioHint();
+  var skE=document.getElementById('tnm-soukromy'); if(skE) skE.checked = !!t.soukromy;
   _fillPripominka(t.pripominka);
   document.getElementById('tnm-prof').value = t.profese || '';
   _fillTaskSoDatalist(); var soElE=document.getElementById('tnm-so'); if(soElE) soElE.value = t.so || '';
@@ -12762,6 +12866,7 @@ function renderTasksOnMap() {
   window.tasksLayer.clearLayers();
   var now = Date.now();
   window.allTasks.forEach(function(t){
+    if(!_taskVisible(t)) return;   // 🔒 soukromý úkol se cizím na mapě nezobrazí
     if(t.lat === undefined || t.lat === null) return;
     var isDone = t.stav === 'done';
     if(isDone && !window.taskSubLayers.done) return;
@@ -16947,6 +17052,11 @@ function copyDiaryExport(){
       </div>
     </div>
     <div id="tnm-prio-hint" style="font-size:11px;color:var(--text2);line-height:1.4;margin:-4px 0 4px;"></div>
+
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:8px 0 2px;font-weight:400;">
+      <input type="checkbox" id="tnm-soukromy" style="width:18px;height:18px;flex-shrink:0;"> 🔒 Jen můj úkol (soukromý)
+    </label>
+    <div style="font-size:11px;color:var(--text2);line-height:1.4;margin:0 0 4px;">Uvidíš ho jen ty – neobjeví se ostatním v seznamu, na mapě ani v aktivitě a nikomu nechodí upozornění.</div>
 
     <label>⏰ Připomínka (volitelně – ať to na Tebe skočí znovu)</label>
     <select class="task-field" id="tnm-remind-typ" onchange="_updateRemindUI()">
