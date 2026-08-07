@@ -121,8 +121,8 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #btn-gps { position:fixed; bottom:24px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
 #btn-gps.active { border-color:var(--green); color:var(--green); box-shadow:0 0 16px rgba(72,187,120,.4); }
 
-/* Vkládání poznámky/úkolu přes tlačítko + křížek (spolehlivější než držení prstu) */
-#btn-place { position:fixed; bottom:84px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent); border:2px solid var(--border); color:#fff; font-size:24px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); }
+/* Vkládání poznámky/úkolu – sub-tlačítko radiálního FAB (rozbaluje se z ⋯ triggeru na bottom:144) */
+#btn-place { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent); border:2px solid var(--border); color:#fff; font-size:24px; cursor:pointer; z-index:1501; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); opacity:0; transform:scale(.4); pointer-events:none; transition:transform .22s cubic-bezier(.2,.7,.3,1), opacity .18s; }
 #btn-place.active { background:var(--accent2); color:#0f3460; }
 #place-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#fff; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #place-crosshair.open { display:block; }
@@ -131,11 +131,19 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui
 #place-bar #place-hint, #task-loc-bar span { font-size:13px; color:var(--text); }
 #place-bar button, #task-loc-bar button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
 
-/* ── Měření vzdálenosti a plochy (obecný nástroj, nezávislý na drone) ── */
-#btn-measure { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+/* ── Měření vzdálenosti a plochy – sub-tlačítko radiálního FAB ── */
+#btn-measure { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1501; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); opacity:0; transform:scale(.4); pointer-events:none; transition:transform .22s cubic-bezier(.2,.7,.3,1), opacity .18s; }
 #btn-measure.active { background:#0e7490; border-color:#22d3ee; color:#fff; box-shadow:0 0 16px rgba(34,211,238,.5); }
-#btn-foto-fab { position:fixed; bottom:204px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
-#btn-blok { position:fixed; bottom:264px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+/* 📷 foťák – samostatný FAB (bottom:84, hned nad polohou) */
+#btn-foto-fab { position:fixed; bottom:84px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+/* 📝 zápisník – sub-tlačítko radiálního FAB */
+#btn-blok { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1501; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); opacity:0; transform:scale(.4); pointer-events:none; transition:transform .22s cubic-bezier(.2,.7,.3,1), opacity .18s; }
+/* ⋯ trigger + rozbalení do půlkola (nahoru / nahoru-doleva / doleva) */
+#btn-fabmore { position:fixed; bottom:144px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:26px; cursor:pointer; z-index:1502; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:transform .22s, border-color .2s, color .2s; }
+body.fab-open #btn-fabmore { transform:rotate(90deg); border-color:var(--accent2); color:var(--accent2); }
+body.fab-open #btn-place   { opacity:1; pointer-events:auto; transform:translate(0,-80px) scale(1); }
+body.fab-open #btn-measure { opacity:1; pointer-events:auto; transform:translate(-57px,-57px) scale(1); }
+body.fab-open #btn-blok    { opacity:1; pointer-events:auto; transform:translate(-80px,0) scale(1); }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
 #measure-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#22d3ee; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #measure-crosshair.open { display:block; }
@@ -1516,10 +1524,11 @@ document.addEventListener('touchend', function(e){
 </div>
 
 <button id="btn-gps" onclick="toggleGpsBtn()" title="GPS zapnout/vypnout / centrovat">📍</button>
-<button id="btn-place" onclick="startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
-<button id="btn-measure" onclick="toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
 <button id="btn-foto-fab" onclick="takeStandalonePhoto()" title="Vyfotit (rychlý přístup)">📷</button>
-<button id="btn-blok" onclick="openBlok()" title="Poznámkový blok">📝</button>
+<button id="btn-fabmore" onclick="toggleFabMore()" title="Další nástroje – poznámka/úkol, měření, zápisník">⋯</button>
+<button id="btn-place" onclick="closeFabMore();startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
+<button id="btn-measure" onclick="closeFabMore();toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
+<button id="btn-blok" onclick="closeFabMore();openBlok()" title="Poznámkový blok">📝</button>
 <div id="place-crosshair">✛</div>
 <div id="place-bar">
   <span id="place-hint">Najeď křížkem na místo</span>
@@ -10743,6 +10752,16 @@ function openBlok(){
   renderBlok();
 }
 function closeBlok(){ var p=document.getElementById('blok-panel'); if(p) p.style.display='none'; }
+
+// Radiální FAB (⋯): rozbalí ➕ / 📏 / 📝 do půlkola. Výběr položky i klik mimo = zavřít.
+function toggleFabMore(){ document.body.classList.toggle('fab-open'); }
+function closeFabMore(){ document.body.classList.remove('fab-open'); }
+document.addEventListener('click', function(e){
+  if(!document.body.classList.contains('fab-open')) return;
+  var t = e.target;
+  if(t && t.closest && (t.closest('#btn-fabmore') || t.closest('#btn-place') || t.closest('#btn-measure') || t.closest('#btn-blok'))) return;
+  closeFabMore();
+}, true);
 function addBlok(){
   var ta=document.getElementById('blok-new-text'); var v=(ta&&ta.value||'').trim();
   if(!v){ showToast('Napiš text poznámky', 1800); return; }
@@ -10858,7 +10877,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
-  { datum:'2026-08-06', verze:'v143', text:'📷 Foťák je teď i vpravo dole (plovoucí tlačítko u 📍➕📏) – rychlejší focení, v horní liště zůstává taky. 🔒 Úkoly: v zadání můžeš zaškrtnout „Jen můj úkol" – takový vidíš JEN ty (v seznamu, na mapě, nikde jinde), ostatním se neplete. 📝 Nový Poznámkový blok (tlačítko 📝 vpravo dole) – tvůj osobní zápisník. Poznámky jsou defaultně soukromé (vidíš je jen ty); když zaškrtneš „veřejná", uvidí je všichni.' },
+  { datum:'2026-08-06', verze:'v144', text:'🔘 Vpravo dole je nově pořádek: samostatně 📍 poloha a 📷 foťák (rychlé focení), a tlačítko ⋯, které se po ťuknutí rozbalí do půlkola a nabídne ➕ poznámku/úkol, 📏 měření a 📝 zápisník. 🔒 Úkoly: v zadání zaškrtneš „Jen můj úkol" – vidíš ho JEN ty (v seznamu, na mapě, nikde jinde), ostatním se neplete a nikomu nechodí upozornění. 📝 Poznámkový blok (v ⋯) – osobní zápisník; poznámky jsou defaultně soukromé, po zaškrtnutí „veřejná" je uvidí všichni.' },
   { datum:'2026-07-30', verze:'v138', text:'📷 360° prohlížeč má novou navigaci: svislé šipky na střed obrazovky – NAHORU jedeš po silnici dopředu, DOLŮ zpět. Dvojšipky ⏫/⏬ na krajích skáčou rychle (o 4 fotky), jednoduché ▲/▼ po jedné. Boční šipky i šipky v obraze jsme zrušili (u 360° pletly). Na klávesnici ↑/↓ (se Shiftem rychle), Esc zavře.' },
   { datum:'2026-07-30', verze:'v137', text:'🏆 Nové: Žebříček aktivity (tlačítko 🏆 v hlavičce). Za dokumentaci a řešení úkolů (dokončený úkol, deník, fotky, měření…) sbíráš body – měsíční soutěž jen mezi lidmi z M - SILNICE. Máš sérii dní 🔥 i odznaky za milníky, ikona nahoře ukazuje tvé pořadí a začátkem měsíce vyskočí souhrn s vítězem. Admin zařazuje soutěžící ve Správě uživatelů (🏆).' },
   { datum:'2026-07-22', verze:'v136', text:'🖱️ V galerii jde označit fotky TAHEM MYŠI (guma) – na počítači stačí táhnout přes fotky. 📆 Na hromadné stažení (třeba za měsíc): ve filtru zadáš datum od–do (klidně + SO / autor), dáš „Vše (N)" a stáhneš ZIP. Tlačítko „Vše" teď ukazuje, kolik odfiltrovaných fotek vybere.' },
