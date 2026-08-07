@@ -144,6 +144,18 @@ body.fab-open #btn-fabmore { transform:rotate(90deg); border-color:var(--accent2
 body.fab-open #btn-place   { opacity:1; pointer-events:auto; transform:translate(0,-80px) scale(1); }
 body.fab-open #btn-measure { opacity:1; pointer-events:auto; transform:translate(-57px,-57px) scale(1); }
 body.fab-open #btn-blok    { opacity:1; pointer-events:auto; transform:translate(-80px,0) scale(1); }
+/* ⌂ Domů – samostatný FAB vlevo dole (hned po ruce) */
+#btn-home-fab { position:fixed; bottom:24px; left:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+/* 🗂️ „Vše" – radiální carousel všech panelů z horní lišty (listovatelný půlkruh, malé náhledy na krajích) */
+#fabgrid-trigger { position:fixed; bottom:204px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:22px; cursor:pointer; z-index:1500; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.4); transition:all .2s; }
+body.grid-open #btn-gps, body.grid-open #btn-foto-fab, body.grid-open #btn-fabmore, body.grid-open #btn-home-fab, body.grid-open #fabgrid-trigger { opacity:0; pointer-events:none; }
+#fabgrid { display:none; position:fixed; inset:0; z-index:1650; touch-action:none; }
+#fabgrid.open { display:block; }
+#fabgrid-backdrop { position:absolute; inset:0; background:rgba(0,0,0,.42); }
+#fabgrid-close { position:absolute; top:calc(12px + env(safe-area-inset-top)); right:16px; width:46px; height:46px; border-radius:50%; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.25); color:#fff; font-size:22px; cursor:pointer; z-index:2; }
+#fabgrid-hint { position:absolute; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); color:#fff; opacity:.8; font-size:12px; text-shadow:0 1px 3px #000; pointer-events:none; }
+.fabgrid-item { position:absolute; width:54px; height:54px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:25px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.5); transition:left .2s cubic-bezier(.2,.7,.3,1), top .2s cubic-bezier(.2,.7,.3,1), opacity .2s; }
+#fabgrid-name { position:absolute; color:#fff; font-size:13px; font-weight:700; text-shadow:0 1px 4px #000,0 0 6px #000; pointer-events:none; white-space:nowrap; z-index:2; transform:translate(-50%,0); }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
 #measure-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#22d3ee; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #measure-crosshair.open { display:block; }
@@ -1529,6 +1541,14 @@ document.addEventListener('touchend', function(e){
 <button id="btn-place" onclick="closeFabMore();startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
 <button id="btn-measure" onclick="closeFabMore();toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
 <button id="btn-blok" onclick="closeFabMore();openBlok()" title="Poznámkový blok">📝</button>
+<button id="btn-home-fab" onclick="resetMapView()" title="Domů – reset pohledu">⌂</button>
+<button id="fabgrid-trigger" onclick="openFabGrid()" title="Vše – všechny panely z lišty">🗂️</button>
+<div id="fabgrid">
+  <div id="fabgrid-backdrop" onclick="closeFabGrid()"></div>
+  <button id="fabgrid-close" onclick="closeFabGrid()" title="Zavřít">✕</button>
+  <div id="fabgrid-name"></div>
+  <div id="fabgrid-hint">listuj tažením ↑ ↓ · malé ikony = víc</div>
+</div>
 <div id="place-crosshair">✛</div>
 <div id="place-bar">
   <span id="place-hint">Najeď křížkem na místo</span>
@@ -10762,6 +10782,86 @@ document.addEventListener('click', function(e){
   if(t && t.closest && (t.closest('#btn-fabmore') || t.closest('#btn-place') || t.closest('#btn-measure') || t.closest('#btn-blok'))) return;
   closeFabMore();
 }, true);
+
+// 🗂️ „Vše" – listovatelný půlkruh se VŠEMI panely z horní lišty (kromě foto/domečku/vrstev/odhlášení).
+// Staví se přímo z tlačítek #header → automaticky respektuje práva (applyPermsToUI je skryje) i budoucí přírůstky.
+var _gridCenter = 0;
+var _FABGRID_SKIP = { 'btn-standalone-foto':1, 'btn-reset-view':1, 'btn-layers':1 };  // foto=FAB, ⌂=vlevo dole, Vrstvy zvlášť
+function _fabgridItems(){
+  var out = [];
+  var btns = document.querySelectorAll('#header button');
+  for(var i=0;i<btns.length;i++){
+    var b = btns[i];
+    if(_FABGRID_SKIP[b.id]) continue;
+    try { if(getComputedStyle(b).display === 'none') continue; } catch(e){}   // skryté právem
+    var ico = '';
+    for(var j=0;j<b.childNodes.length;j++){ var n=b.childNodes[j]; if(n.nodeType===3 && n.nodeValue.trim()){ ico=n.nodeValue.trim(); break; } }
+    if(!ico) ico = (b.textContent||'').replace(/[0-9]/g,'').trim();
+    out.push({ ico:ico, label:b.title||'', btn:b });
+  }
+  return out;
+}
+function openFabGrid(){
+  document.body.classList.add('grid-open');
+  var g=document.getElementById('fabgrid'); if(g) g.classList.add('open');
+  _gridCenter = 0;
+  renderFabGrid();
+}
+function closeFabGrid(){
+  document.body.classList.remove('grid-open');
+  var g=document.getElementById('fabgrid'); if(g) g.classList.remove('open');
+}
+function renderFabGrid(){
+  var g=document.getElementById('fabgrid'); if(!g) return;
+  var old=g.querySelectorAll('.fabgrid-item'); for(var q=0;q<old.length;q++) old[q].remove();
+  var items=_fabgridItems(), M=items.length;
+  var nameEl=document.getElementById('fabgrid-name'); if(nameEl) nameEl.textContent='';
+  var hintEl=document.getElementById('fabgrid-hint'); if(hintEl) hintEl.style.display = (M>5?'':'none');
+  if(!M) return;
+  if(_gridCenter<0) _gridCenter=0; if(_gridCenter>M-1) _gridCenter=M-1;
+  var W=window.innerWidth, H=window.innerHeight;
+  var ax=W-26, ay=H*0.5;
+  var R=Math.min(W*0.72, H*0.42, 230);
+  var SLOTS=7, C=3, HALF=82, SC=[.5,.68,.84,1,.84,.68,.5];
+  for(var k=0;k<SLOTS;k++){
+    var idx=_gridCenter+(k-C);
+    if(idx<0 || idx>=M) continue;
+    var it=items[idx];
+    var ang=((k-C)/C)*HALF*Math.PI/180;
+    var x=ax - R*Math.cos(ang);
+    var y=ay + R*Math.sin(ang);
+    var s=SC[k];
+    var edge=(k===0 || k===SLOTS-1);
+    var el=document.createElement('button');
+    el.className='fabgrid-item';
+    el.textContent=it.ico;
+    el.style.left=x+'px'; el.style.top=y+'px';
+    el.style.width=(54*s)+'px'; el.style.height=(54*s)+'px';
+    el.style.marginLeft=(-27*s)+'px'; el.style.marginTop=(-27*s)+'px';
+    el.style.fontSize=(25*s)+'px';
+    el.style.opacity = edge ? '0.6' : '1';
+    el.title=it.label;
+    (function(item, isEdge, dir){
+      el.onclick=function(ev){ ev.stopPropagation();
+        if(isEdge){ _gridCenter+=dir; renderFabGrid(); return; }   // malá ikona na kraji = listovat tím směrem
+        closeFabGrid(); if(item.btn) item.btn.click();
+      };
+    })(it, edge, k<C?-1:1);
+    g.appendChild(el);
+    if(k===C && nameEl){ nameEl.textContent=it.label; nameEl.style.left=x+'px'; nameEl.style.top=(y+38)+'px'; }
+  }
+}
+(function(){
+  function bind(){
+    var g=document.getElementById('fabgrid'); if(!g || g._bound) return; g._bound=true;
+    var sy=null;
+    g.addEventListener('touchstart', function(e){ sy=e.touches[0].clientY; }, {passive:true});
+    g.addEventListener('touchend', function(e){ if(sy===null) return; var dy=e.changedTouches[0].clientY - sy; if(Math.abs(dy)>26){ _gridCenter += (dy<0?1:-1); renderFabGrid(); } sy=null; }, {passive:true});
+    g.addEventListener('wheel', function(e){ e.preventDefault(); _gridCenter += (e.deltaY>0?1:-1); renderFabGrid(); }, {passive:false});
+    window.addEventListener('resize', function(){ if(g.classList.contains('open')) renderFabGrid(); });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+})();
 function addBlok(){
   var ta=document.getElementById('blok-new-text'); var v=(ta&&ta.value||'').trim();
   if(!v){ showToast('Napiš text poznámky', 1800); return; }
@@ -10877,6 +10977,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-06', verze:'v145', text:'🗂️ Vpravo dole přibylo tlačítko „Vše" (🗂️) – rozbalí půlkruh se VŠEMI panely z horní lišty (úkoly, deník, galerie, dokumenty, zkoušky…). Listuješ tažením nahoru/dolů, uprostřed je velká ikona, na krajích malé = ukazují, kam ještě listovat. ⌂ Domů je teď i vlevo dole (hned po ruce). Vrstvy, odhlášení a foto/domeček v tom „Vše" nejsou (mají svoje místo).' },
   { datum:'2026-08-06', verze:'v144', text:'🔘 Vpravo dole je nově pořádek: samostatně 📍 poloha a 📷 foťák (rychlé focení), a tlačítko ⋯, které se po ťuknutí rozbalí do půlkola a nabídne ➕ poznámku/úkol, 📏 měření a 📝 zápisník. 🔒 Úkoly: v zadání zaškrtneš „Jen můj úkol" – vidíš ho JEN ty (v seznamu, na mapě, nikde jinde), ostatním se neplete a nikomu nechodí upozornění. 📝 Poznámkový blok (v ⋯) – osobní zápisník; poznámky jsou defaultně soukromé, po zaškrtnutí „veřejná" je uvidí všichni.' },
   { datum:'2026-07-30', verze:'v138', text:'📷 360° prohlížeč má novou navigaci: svislé šipky na střed obrazovky – NAHORU jedeš po silnici dopředu, DOLŮ zpět. Dvojšipky ⏫/⏬ na krajích skáčou rychle (o 4 fotky), jednoduché ▲/▼ po jedné. Boční šipky i šipky v obraze jsme zrušili (u 360° pletly). Na klávesnici ↑/↓ (se Shiftem rychle), Esc zavře.' },
   { datum:'2026-07-30', verze:'v137', text:'🏆 Nové: Žebříček aktivity (tlačítko 🏆 v hlavičce). Za dokumentaci a řešení úkolů (dokončený úkol, deník, fotky, měření…) sbíráš body – měsíční soutěž jen mezi lidmi z M - SILNICE. Máš sérii dní 🔥 i odznaky za milníky, ikona nahoře ukazuje tvé pořadí a začátkem měsíce vyskočí souhrn s vítězem. Admin zařazuje soutěžící ve Správě uživatelů (🏆).' },
