@@ -406,6 +406,9 @@ textarea.note-field { min-height:80px; resize:vertical; }
   justify-content:center; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .pano-btn:hover{ background:rgba(0,0,0,.68); }
 #pano-fast-fwd{ top:7%; } #pano-next{ top:23%; } #pano-prev{ bottom:23%; } #pano-fast-back{ bottom:7%; }
+/* Minimapka v rohu 360° prohlížeče (poloha + kužel směru pohledu, jako Street View) */
+#pano-minimap { position:absolute; left:12px; bottom:calc(14px + env(safe-area-inset-bottom)); width:150px; height:150px; border-radius:12px; overflow:hidden; border:2px solid rgba(255,255,255,.65); box-shadow:0 3px 14px rgba(0,0,0,.6); z-index:7020; background:#243; }
+@media (max-width:420px){ #pano-minimap{ width:118px; height:118px; } }
 #photo-fs.open { display:flex; }
 #photo-fs-stage { flex:1 1 auto; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 #photo-fs #photo-fs-img { max-width:100%; max-height:100%; object-fit:contain; }
@@ -5822,6 +5825,7 @@ function _panoShow(idx){
   if(idx < 0 || idx >= _panoList.length) return;
   _panoIdx = idx;
   var r = _panoList[idx];
+  try { _panoMiniInit(); _panoMiniUpdate(r); _panoMiniStartCompass(r); } catch(e){}
   var km = '';
   try { if(typeof gpsToKm === 'function'){ var k = gpsToKm(r.lat, r.lon); if(k!=null && !isNaN(k)) km = ' · ' + fmtKm(k); } } catch(e){}
   var inf = document.getElementById('pano-fs-info');
@@ -5858,9 +5862,50 @@ function panoNav(delta){
   if(n !== _panoIdx) _panoShow(n);
 }
 function closePano360(){
+  try { _panoMiniStopCompass(); } catch(e){}
   try { if(_panoViewer){ _panoViewer.destroy(); _panoViewer = null; } } catch(e){}
   var el = document.getElementById('pano-fs'); if(el) el.style.display = 'none';
 }
+// ── Minimapka v rohu 360° (poloha + kužel směru pohledu, jako Street View) ──
+var _panoMiniMap=null, _panoMiniMarker=null, _panoMiniLine=null, _panoMiniRAF=null;
+function _panoMiniInit(){
+  if(_panoMiniMap || typeof L==='undefined') return;
+  try{
+    _panoMiniMap = L.map('pano-minimap', { zoomControl:false, attributionControl:false, dragging:false, scrollWheelZoom:false, doubleClickZoom:false, boxZoom:false, keyboard:false, touchZoom:false, tap:false });
+    L.tileLayer('https://api.mapy.cz/v1/maptiles/outdoor/256/{z}/{x}/{y}?apikey='+MAPY_API_KEY, { maxZoom:20, maxNativeZoom:19 }).addTo(_panoMiniMap);
+    _panoMiniLine = L.polyline([], { color:'#a855f7', weight:3, opacity:.8 }).addTo(_panoMiniMap);
+    var icon = L.divIcon({ className:'', iconSize:[46,46], iconAnchor:[23,23], html:
+      '<svg width="46" height="46" viewBox="-23 -23 46 46" style="overflow:visible;">'+
+        '<path id="pano-mini-cone" d="M0,0 L-12,-30 A32,32 0 0,1 12,-30 Z" fill="rgba(66,165,245,.4)" stroke="rgba(66,165,245,.9)" stroke-width="1.2"/>'+
+        '<circle r="5" fill="#1e88e5" stroke="#fff" stroke-width="2.5"/>'+
+      '</svg>' });
+    _panoMiniMarker = L.marker([0,0], { icon:icon, interactive:false, keyboard:false, zIndexOffset:1000 }).addTo(_panoMiniMap);
+  }catch(e){ console.warn('minimap init:', e && e.message); }
+}
+function _panoMiniUpdate(r){
+  if(!_panoMiniMap || !r || r.lat==null) return;
+  try{
+    _panoMiniMap.invalidateSize();
+    var pts=(_panoList||[]).filter(function(p){ return p && p.lat!=null && p.lon!=null; }).map(function(p){ return [p.lat, p.lon]; });
+    if(_panoMiniLine) _panoMiniLine.setLatLngs(pts);
+    if(_panoMiniMarker) _panoMiniMarker.setLatLng([r.lat, r.lon]);
+    _panoMiniMap.setView([r.lat, r.lon], 17, { animate:false });
+  }catch(e){}
+}
+function _panoMiniStartCompass(r){
+  _panoMiniStopCompass();
+  var az = (r && r.azimut!=null) ? r.azimut : 0;
+  function tick(){
+    var fs=document.getElementById('pano-fs');
+    if(!fs || fs.style.display!=='flex'){ _panoMiniRAF=null; return; }
+    var yaw=0; try{ if(_panoViewer && _panoViewer.getYaw) yaw=_panoViewer.getYaw(); }catch(e){}
+    var bearing = az + (yaw - PANO_INIT_YAW);   // absolutní směr pohledu (kompas)
+    var cone=document.getElementById('pano-mini-cone'); if(cone) cone.setAttribute('transform','rotate('+bearing+')');
+    _panoMiniRAF = requestAnimationFrame(tick);
+  }
+  tick();
+}
+function _panoMiniStopCompass(){ if(_panoMiniRAF){ cancelAnimationFrame(_panoMiniRAF); _panoMiniRAF=null; } }
 // klávesy: ↑ = vpřed, ↓ = zpět (±1); se Shiftem ±4; Esc zavře. (↔ jako alternativa k ↕.)
 document.addEventListener('keydown', function(e){
   var fs = document.getElementById('pano-fs');
@@ -6549,6 +6594,30 @@ function closeNoteDetail() {
 
 var _photoFsKey = null;
 var _photoFsItem = null;  // celá meta fotky (kvůli datu pořízení při stahování)
+// Otáčení fotky ve fullscreenu (na výšku/šířku bokem). Ukládá se rotace (0/90/180/270),
+// promítá se do zobrazení (CSS) i do STAŽENÍ (canvas se otočí, razítko pak sedí).
+function _applyFsRotation(){
+  var img=document.getElementById('photo-fs-img'); if(!img) return;
+  var deg=(((_photoFsItem&&_photoFsItem.rotace)||0)%360+360)%360;
+  if(!deg){ img.style.transform=''; return; }
+  if(deg===90 || deg===270){
+    var st=document.getElementById('photo-fs-stage')||img.parentElement;
+    var cw=(st&&st.clientWidth)||window.innerWidth, ch=(st&&st.clientHeight)||window.innerHeight;
+    var iw=img.naturalWidth||img.width||1, ih=img.naturalHeight||img.height||1;
+    var disp=Math.min(cw/iw, ch/ih), dw=iw*disp, dh=ih*disp;   // velikost při contain
+    var scale=Math.min(cw/dh, ch/dw) || 1;                     // po otočení o 90° se vejde
+    img.style.transform='rotate('+deg+'deg) scale('+scale+')';
+  } else { img.style.transform='rotate('+deg+'deg)'; }
+}
+function rotatePhoto(dir){
+  if(!_photoFsItem) return;
+  var deg=((((_photoFsItem.rotace||0) + (dir>0?90:-90))%360)+360)%360;
+  _photoFsItem.rotace=deg;
+  _applyFsRotation();
+  if(_photoFsKey && window.currentUser && canDelete((_photoFsItem||{}).uid)){
+    db.ref('standalone_photos/'+_photoFsKey).update({ rotace: deg||null, restampOnDownload:true }).catch(function(){});
+  }
+}
 var _fsIndex = -1;        // pozice v galleryCurrentItems (procházení tažením), -1 = mimo galerii
 
 function openPhotoFs(src, firebaseKey, item) {
@@ -6576,8 +6645,10 @@ function _renderFsItem(url, firebaseKey, item) {
   closeFsMenu();
   if(typeof _closePhotoCmtBox === 'function') _closePhotoCmtBox();   // zavři rozepsané komentářové pole při přepnutí fotky
   resolveFileUrl(url).then(function(u){
-    document.getElementById('photo-fs-img').src = u;
+    var _img=document.getElementById('photo-fs-img');
+    if(_img){ _img.onload=_applyFsRotation; _img.src = u; }
     var ob = document.getElementById('photo-fs-open'); if(ob) ob.href = u;
+    _applyFsRotation();
   });
   _photoFsKey = firebaseKey || null;
   _photoFsItem = item || { url: url };
@@ -6585,6 +6656,9 @@ function _renderFsItem(url, firebaseKey, item) {
   var canEd = (_photoFsKey && canDelete((_photoFsItem||{}).uid));
   var delBtn = document.getElementById('photo-fs-delete');
   if(delBtn) delBtn.style.display = canEd ? 'inline-block' : 'none';
+  var rotBox = document.getElementById('photo-fs-rotate');
+  if(rotBox) rotBox.style.display = canEd ? 'flex' : 'none';   // otáčení smí autor/koordinátor
+  _applyFsRotation();
   var soBtn = document.getElementById('photo-fs-soedit');
   if(soBtn) soBtn.style.display = (_photoFsKey && window.currentUser) ? 'inline-block' : 'none';   // přeřadit smí kdokoliv přihlášený
   var kmBtn = document.getElementById('photo-fs-kmedit');
@@ -7089,7 +7163,7 @@ function preparePhotoBlobForDownload(item, opts) {
         return new Promise(function(resolve){
           burnInMetadataWithDate(dataUrl, item.km || '-', item.author || '', d, function(stampedDataUrl){
             resolve(continueWithExif(stampedDataUrl));
-          }, (item.soList && item.soList.length ? item.soList : item.so), fields);
+          }, (item.soList && item.soList.length ? item.soList : item.so), fields, (item.rotace||0));
         });
       }
       return continueWithExif(dataUrl);
@@ -7101,14 +7175,18 @@ function preparePhotoBlobForDownload(item, opts) {
 function srcOrDataUrl(x) { return x; }
 
 // Varianta burnInMetadata s explicitním datem (ne new Date()). Razítko ukáže datum pořízení.
-function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so, fields) {
+function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so, fields, rot) {
   fields = fields || { so:true, km:true, datum:true, jmeno:true };
+  rot = ((rot||0)%360+360)%360;
   var img = new Image();
   img.onload = function() {
     var canvas = document.createElement('canvas');
-    canvas.width = img.width; canvas.height = img.height;
+    var swap = (rot===90 || rot===270);
+    canvas.width  = swap ? img.height : img.width;
+    canvas.height = swap ? img.width  : img.height;
     var ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+    if(rot){ ctx.save(); ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(rot*Math.PI/180); ctx.drawImage(img, -img.width/2, -img.height/2); ctx.restore(); }
+    else { ctx.drawImage(img, 0, 0); }
     var dStr = dateObj.toLocaleDateString('cs-CZ');
     var tStr = dateObj.toLocaleTimeString('cs-CZ', {hour:'2-digit', minute:'2-digit'});
     var dtStr = (fields.datum && fields.cas) ? (dStr + ' ' + tStr) : (fields.datum ? dStr : (fields.cas ? tStr : ''));
@@ -7120,7 +7198,7 @@ function burnInMetadataWithDate(dataUrl, km, author, dateObj, callback, so, fiel
     if(dtStr)               mid.push(dtStr);
     if(mid.length) lines.push({ t: mid.join('   •   '), bold: true });
     if(fields.jmeno && author) lines.push({ t: author, bold: false });
-    if(lines.length) _drawStampBox(ctx, img, lines);   // nic vybráno → bez razítka
+    if(lines.length) _drawStampBox(ctx, canvas, lines);   // pozice dle canvasu (po rotaci správně), razítko vždy nahoru
     callback(canvas.toDataURL('image/jpeg', 0.9));
   };
   img.onerror = function(){ callback(dataUrl); }; // při selhání vrátí beze změny
@@ -11362,6 +11440,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-06', verze:'v155', text:'🧭 Při procházení 360° fotek je vlevo dole malá mapka s tvojí polohou a kuželem, kam se zrovna díváš (jako Street View – otáčí se, jak se rozhlížíš). 🔄 U fotek přibyla tlačítka na otočení (↺ ↻ vpravo nahoře) – když je fotka na výšku bokem, otočíš ji; uloží se to a stáhne se pak správně orientovaná i s razítkem.' },
   { datum:'2026-08-06', verze:'v154', text:'🗒️ Poznámkový blok má novou ikonu (aby se nepletl s evidencí poznámek) a je i nahoře v liště. Přibylo v něm 🔍 hledání (hledá v nadpisu i textu VŠECH poznámek), filtr (soukromé/veřejné) a řazení (nejnovější/nejstarší/A–Z). 🐞 V přijatých hlášeních (beruška) je taky filtr (typ, stav) a řazení.' },
   { datum:'2026-08-06', verze:'v152', text:'🐞 Nahlašování chyb/vylepšení je teď na DVOU místech: v berušce (vlevo) i v Rozhlasu jako 3. záložka „Hlášení". Svá hlášení a hlavně JAK a KDY byla vyřešená vidíš i ty jako obyčejný uživatel – i subka a investor (mají na to právo). Na berušce svítí číslo (adminovi kolik je nevyřešených, tobě kolik tvých bylo nově vyřešeno). Admin při „Vyřešeno" napíše jak, a autor to uvidí. 👁 Admin navíc vidí i cizí soukromé poznámky/úkoly a tlačítkem „Vidím vše / Jako ostatní" si je může skrýt.' },
   { datum:'2026-08-06', verze:'v151', text:'📥 Koordinátor (admin) má schránku hlášení – v okně 🐞 „Nahlásit" je tlačítko „Přijatá hlášení": seznam chyb i návrhů (kdo, kde, kdy), jde označit „vyřešeno" nebo smazat. ✏️ Sledování změn funguje teď i u ÚKOLŮ: při úpravě detailu můžeš zaškrtnout „Zaznamenat jako revizi" a v detailu úkolu je pak vidět, co se změnilo (tlačítkem „👁 Editované").' },
@@ -17218,6 +17297,7 @@ function copyDiaryExport(){
 <!-- 📷 360° foto fullscreen (Pannellum equirektangulární prohlížeč) -->
 <div id="pano-fs" style="display:none;position:fixed;inset:0;background:#000;z-index:5200;flex-direction:column;">
   <div id="pano-fs-view" style="flex:1;width:100%;height:100%;"></div>
+  <div id="pano-minimap"></div>
   <div id="pano-fs-info" style="position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;max-width:70%;background:rgba(0,0,0,0.6);color:#fff;font-size:13px;line-height:1.35;padding:6px 12px;border-radius:12px;z-index:5;pointer-events:none;"></div>
   <button onclick="closePano360()" title="Zavřít" style="position:absolute;top:calc(8px + env(safe-area-inset-top));right:10px;width:44px;height:44px;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:10px;font-size:22px;cursor:pointer;z-index:6;">✕</button>
   <!-- Svislá navigace na střed: nahoru = vpřed po silnici, dolů = zpět. Dvojšipky = skok o 4. -->
@@ -17228,6 +17308,10 @@ function copyDiaryExport(){
 </div>
 <div id="photo-fs" ontouchstart="_fsTouchStart(event)" ontouchend="_fsTouchEnd(event)" onclick="_fsBackdropClick(event)">
   <div id="photo-fs-stage"><img id="photo-fs-img" src=""></div>
+  <div id="photo-fs-rotate" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));right:10px;gap:6px;z-index:8;">
+    <button onclick="event.stopPropagation();rotatePhoto(-1)" title="Otočit doleva" style="width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:20px;cursor:pointer;">↺</button>
+    <button onclick="event.stopPropagation();rotatePhoto(1)" title="Otočit doprava" style="width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:20px;cursor:pointer;">↻</button>
+  </div>
   <div id="photo-fs-count" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);color:#fff;font-size:13px;font-weight:600;padding:4px 12px;border-radius:14px;pointer-events:none;z-index:7;"></div>
   <div id="photo-fs-info" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;max-width:66%;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;line-height:1.35;padding:6px 12px;border-radius:12px;z-index:7;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
