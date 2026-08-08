@@ -1262,10 +1262,17 @@ document.addEventListener('touchend', function(e){
 <!-- 📝 Poznámkový blok – osobní zápisník (veřejné/soukromé) -->
 <div id="blok-panel" style="display:none;position:fixed;inset:0;z-index:3600;background:var(--bg);flex-direction:column;">
   <div style="display:flex;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
-    <div style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">📝 Poznámkový blok</div>
+    <div style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">🗒️ Poznámkový blok</div>
     <button id="blok-admin-view" onclick="toggleAdminViewAsOthers()" title="Přepnout: vidět vše (admin) / vidět jako ostatní" style="display:none;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;cursor:pointer;">👁 Vidím vše</button>
     <button onclick="openBlokDetail('')" title="Nová poznámka" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer;">➕ Nová</button>
     <button onclick="closeBlok()" title="Zavřít" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+  </div>
+  <div style="padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <input type="text" id="blok-search" oninput="renderBlokList()" placeholder="🔍 Hledat v poznámkách (nadpis i text)…" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;margin-bottom:6px;">
+    <div style="display:flex;gap:6px;">
+      <select id="blok-filter" onchange="renderBlokList()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px;"><option value="vse">Vše</option><option value="soukroma">🔒 Soukromé</option><option value="verejna">🌐 Veřejné</option></select>
+      <select id="blok-sort" onchange="renderBlokList()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px;"><option value="new">🕒 Nejnovější</option><option value="old">Nejstarší</option><option value="az">A–Z (nadpis)</option></select>
+    </div>
   </div>
   <div id="blok-list" style="padding:12px 14px;overflow-y:auto;flex:1;"></div>
 </div>
@@ -1320,6 +1327,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
   <button id="btn-drone" onclick="startDroneOverlay()" title="Vložit foto z dronu na mapu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🛰️</button>
   <button id="btn-notes-evidence" onclick="openNotesEvidence()" title="Evidence poznámek" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📝</button>
+  <button id="btn-blok-hdr" onclick="openBlok()" title="Poznámkový blok (osobní zápisník)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🗒️</button>
   <button id="btn-mereni-evidence" onclick="openMereniEvidence()" title="Evidence měření" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📐</button>
   <button id="btn-is" onclick="openInzenyrskeSite()" title="Inženýrské sítě (vyjádření správců)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔌</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
@@ -1565,7 +1573,7 @@ document.addEventListener('touchend', function(e){
 <button id="btn-fabmore" onclick="toggleFabMore()" title="Další nástroje – poznámka/úkol, měření, zápisník">⋯</button>
 <button id="btn-place" onclick="closeFabMore();startPlacingMode()" title="Vložit poznámku/úkol na mapu">➕</button>
 <button id="btn-measure" onclick="closeFabMore();toggleMeasureMode()" title="Měřit vzdálenost a plochu">📏</button>
-<button id="btn-blok" onclick="closeFabMore();openBlok()" title="Poznámkový blok">📝</button>
+<button id="btn-blok" onclick="closeFabMore();openBlok()" title="Poznámkový blok">🗒️</button>
 <button id="btn-home-fab" onclick="resetMapView()" title="Domů – reset pohledu">⌂</button>
 <button id="fabgrid-trigger" onclick="toggleFabGrid()" title="Vše – panely z lišty (listuj jak ciferník)">🗂️</button>
 <div id="fabgrid"></div>
@@ -1596,6 +1604,11 @@ document.addEventListener('touchend', function(e){
   <div style="display:flex;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
     <div style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">📥 Přijatá hlášení</div>
     <button onclick="closeHlaseniInbox()" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+  </div>
+  <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex-shrink:0;">
+    <select id="hl-f-typ" onchange="_hlSetFilter()" style="flex:1;min-width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px;"><option value="vse">Typ: vše</option><option value="chyba">🐞 Chyby</option><option value="vylepseni">💡 Vylepšení</option></select>
+    <select id="hl-f-stav" onchange="_hlSetFilter()" style="flex:1;min-width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px;"><option value="vse">Stav: vše</option><option value="nove">⏳ Nevyřešené</option><option value="vyreseno">✓ Vyřešené</option></select>
+    <select id="hl-sort" onchange="_hlSetFilter()" style="flex:1;min-width:120px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:12px;"><option value="stav">⏳ Nevyřešené první</option><option value="new">🕒 Nejnovější</option><option value="old">Nejstarší</option></select>
   </div>
   <div id="hlaseni-list" style="padding:12px 14px;overflow-y:auto;flex:1;"></div>
 </div>
@@ -10377,7 +10390,7 @@ var FEATURES = [
   { key:'dokumenty',  label:'Dokumenty (KZP/TePř/protokoly)', btns:['btn-dokumenty'] },
   { key:'inzsite',    label:'Inženýrské sítě',    btns:['btn-is'] },
   { key:'body',       label:'🏆 Žebříček aktivity (soutěž M - SILNICE)', btns:['btn-body'] },
-  { key:'blok',       label:'📝 Poznámkový blok (osobní zápisník)', btns:['btn-blok'] },
+  { key:'blok',       label:'🗒️ Poznámkový blok (osobní zápisník)', btns:['btn-blok','btn-blok-hdr'] },
   { key:'beruska',    label:'🐞 Nahlásit chybu/vylepšení (i SUB/investor)', btns:['btn-report'] },
   // ── Vrstvy v mapě – KAŽDÁ ZVLÁŠŤ ──
   { key:'fotomapa',   label:'🗺️ Vrstva: Fotky v mapě', btns:[] },      // ⚠ NIKDY pod 'galerie'
@@ -10954,10 +10967,23 @@ function _blokVisible(n, me){ return !!(n && (n.uid===me || n.verejne===true || 
 function renderBlokList(){
   var box=document.getElementById('blok-list'); if(!box) return;
   var me=window.currentUser&&window.currentUser.uid;
-  var arr=Object.keys(window.blokData||{}).map(function(k){ var n=window.blokData[k]; if(n) n._id=k; return n; })
-    .filter(function(n){ return _blokVisible(n, me); })
-    .sort(function(a,b){ return (b.updated||b.ts||0)-(a.updated||a.ts||0); });
-  if(!arr.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">Zatím žádné poznámky.<br>Ťukni <b>➕ Nová</b> nahoře. Poznámka je defaultně soukromá; kdykoli ji otevřeš a dopíšeš/upravíš.</div>'; return; }
+  var q=(((document.getElementById('blok-search')||{}).value)||'').trim().toLowerCase();
+  var filt=((document.getElementById('blok-filter')||{}).value)||'vse';
+  var sort=((document.getElementById('blok-sort')||{}).value)||'new';
+  var vis=Object.keys(window.blokData||{}).map(function(k){ var n=window.blokData[k]; if(n) n._id=k; return n; })
+    .filter(function(n){ return _blokVisible(n, me); });
+  var arr=vis.filter(function(n){
+    if(filt==='soukroma' && n.verejne) return false;
+    if(filt==='verejna' && !n.verejne) return false;
+    if(q){ var hay=((n.title||'')+' '+(n.text||'')).toLowerCase(); if(hay.indexOf(q)===-1) return false; }
+    return true;
+  });
+  arr.sort(function(a,b){
+    if(sort==='old') return (a.updated||a.ts||0)-(b.updated||b.ts||0);
+    if(sort==='az') return String((a.title||a.text||'').trim()).localeCompare(String((b.title||b.text||'').trim()),'cs');
+    return (b.updated||b.ts||0)-(a.updated||a.ts||0);
+  });
+  if(!arr.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">'+((q||filt!=='vse')?'Nic neodpovídá hledání/filtru.':'Zatím žádné poznámky.<br>Ťukni <b>➕ Nová</b> nahoře. Poznámka je defaultně soukromá; kdykoli ji otevřeš a dopíšeš/upravíš.')+'</div>'; return; }
   box.innerHTML=arr.map(function(n){
     var mine=(n.uid===me);
     var when=new Date(n.updated||n.ts||0).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -11190,15 +11216,39 @@ function _updateReportBadge(){
   b.textContent=n; b.style.display = n>0 ? 'flex' : 'none';
 }
 // Řádky hlášení – ADMIN vidí všechna (+ vyřešit/smazat), BĚŽNÝ uživatel jen svoje (+ stav vyřešení „jak/kdy").
-function _hlaseniRowsHtml(){
+window._hlFilterTyp='vse'; window._hlFilterStav='vse'; window._hlSort='stav';
+function _hlSetFilter(){
+  window._hlFilterTyp=((document.getElementById('hl-f-typ')||{}).value)||'vse';
+  window._hlFilterStav=((document.getElementById('hl-f-stav')||{}).value)||'vse';
+  window._hlSort=((document.getElementById('hl-sort')||{}).value)||'stav';
+  renderHlaseni();
+}
+// useFilters=true (beruška inbox) aplikuje filtr typ/stav + řazení; false (Rozhlas) ukáže vše výchozím řazením.
+function _hlaseniRowsHtml(useFilters){
   var me=window.currentUser&&window.currentUser.uid, admin=(typeof isAdmin==='function'&&isAdmin());
-  var arr=Object.keys(window._hlaseniData||{}).map(function(k){ var r=window._hlaseniData[k]; if(r) r._id=k; return r; }).filter(Boolean)
-    .filter(function(r){ return admin || r.uid===me; })
-    .sort(function(a,b){ var an=(a.stav==='vyreseno')?1:0, bn=(b.stav==='vyreseno')?1:0; if(an!==bn) return an-bn; return (b.ts||0)-(a.ts||0); });
-  if(!arr.length) return '<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">'+(admin?'Zatím žádná hlášení.':'Zatím jsi nic nenahlásil.<br>Přes 🐞 (vlevo) nahlásíš chybu/návrh – a tady uvidíš, až to bude vyřešené.')+'</div>';
+  var role=Object.keys(window._hlaseniData||{}).map(function(k){ var r=window._hlaseniData[k]; if(r) r._id=k; return r; }).filter(Boolean)
+    .filter(function(r){ return admin || r.uid===me; });
+  if(!role.length) return '<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">'+(admin?'Zatím žádná hlášení.':'Zatím jsi nic nenahlásil.<br>Přes 🐞 (vlevo) nahlásíš chybu/návrh – a tady uvidíš, až to bude vyřešené.')+'</div>';
+  var arr=role.slice();
+  if(useFilters){
+    var ft=window._hlFilterTyp||'vse', fs=window._hlFilterStav||'vse';
+    arr=arr.filter(function(r){
+      if(ft!=='vse' && r.typ!==ft) return false;
+      if(fs==='nove' && r.stav==='vyreseno') return false;
+      if(fs==='vyreseno' && r.stav!=='vyreseno') return false;
+      return true;
+    });
+  }
+  var sort=(useFilters?window._hlSort:'stav')||'stav';
+  arr.sort(function(a,b){
+    if(sort==='new') return (b.ts||0)-(a.ts||0);
+    if(sort==='old') return (a.ts||0)-(b.ts||0);
+    var an=(a.stav==='vyreseno')?1:0, bn=(b.stav==='vyreseno')?1:0; if(an!==bn) return an-bn; return (b.ts||0)-(a.ts||0);
+  });
   var head='';
-  if(admin){ var nevyr=arr.filter(function(r){return r.stav!=='vyreseno';}).length; var seen=_hlaseniSeenTs(); var novy=arr.filter(function(r){return (r.ts||0)>seen;}).length;
-    head='<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">🆕 '+novy+' nových &nbsp;·&nbsp; ⏳ '+nevyr+' nevyřešených &nbsp;·&nbsp; '+arr.length+' celkem</div>'; }
+  if(admin){ var nevyr=role.filter(function(r){return r.stav!=='vyreseno';}).length; var seen=_hlaseniSeenTs(); var novy=role.filter(function(r){return (r.ts||0)>seen;}).length;
+    head='<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">🆕 '+novy+' nových &nbsp;·&nbsp; ⏳ '+nevyr+' nevyřešených &nbsp;·&nbsp; '+role.length+' celkem'+(useFilters&&arr.length!==role.length?(' &nbsp;·&nbsp; <span style="color:#22d3ee;">'+arr.length+' zobrazeno</span>'):'')+'</div>'; }
+  if(!arr.length) return head+'<div style="text-align:center;color:var(--text2);padding:18px;font-size:13px;">Nic neodpovídá filtru.</div>';
   return head + arr.map(function(r){
     var done=r.stav==='vyreseno', ico=r.typ==='vylepseni'?'💡':'🐞';
     var when=new Date(r.ts||0).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -11217,7 +11267,7 @@ function _hlaseniRowsHtml(){
     '</div>';
   }).join('');
 }
-function renderHlaseni(){ var box=document.getElementById('hlaseni-list'); if(box) box.innerHTML=_hlaseniRowsHtml(); }
+function renderHlaseni(){ var box=document.getElementById('hlaseni-list'); if(box) box.innerHTML=_hlaseniRowsHtml(true); }
 function openHlaseniInbox(){
   if(typeof isAdmin!=='function' || !isAdmin()){ showToast('Jen pro administrátora', 2200); return; }
   loadHlaseni();
@@ -11312,6 +11362,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-06', verze:'v154', text:'🗒️ Poznámkový blok má novou ikonu (aby se nepletl s evidencí poznámek) a je i nahoře v liště. Přibylo v něm 🔍 hledání (hledá v nadpisu i textu VŠECH poznámek), filtr (soukromé/veřejné) a řazení (nejnovější/nejstarší/A–Z). 🐞 V přijatých hlášeních (beruška) je taky filtr (typ, stav) a řazení.' },
   { datum:'2026-08-06', verze:'v152', text:'🐞 Nahlašování chyb/vylepšení je teď na DVOU místech: v berušce (vlevo) i v Rozhlasu jako 3. záložka „Hlášení". Svá hlášení a hlavně JAK a KDY byla vyřešená vidíš i ty jako obyčejný uživatel – i subka a investor (mají na to právo). Na berušce svítí číslo (adminovi kolik je nevyřešených, tobě kolik tvých bylo nově vyřešeno). Admin při „Vyřešeno" napíše jak, a autor to uvidí. 👁 Admin navíc vidí i cizí soukromé poznámky/úkoly a tlačítkem „Vidím vše / Jako ostatní" si je může skrýt.' },
   { datum:'2026-08-06', verze:'v151', text:'📥 Koordinátor (admin) má schránku hlášení – v okně 🐞 „Nahlásit" je tlačítko „Přijatá hlášení": seznam chyb i návrhů (kdo, kde, kdy), jde označit „vyřešeno" nebo smazat. ✏️ Sledování změn funguje teď i u ÚKOLŮ: při úpravě detailu můžeš zaškrtnout „Zaznamenat jako revizi" a v detailu úkolu je pak vidět, co se změnilo (tlačítkem „👁 Editované").' },
   { datum:'2026-08-06', verze:'v150', text:'✏️ Poznámky umí sledování změn (jako revize smlouvy): když poznámku upravíš, můžeš zaškrtnout „Zaznamenat úpravu jako revizi" – pak je vidět, co se změnilo (přidané zeleně, smazané přeškrtnuté). Nezaškrtneš = tichá oprava (překlepy), nikdo změnu nevidí. Tlačítkem „👁 Editované" si zvýraznění kdokoli zapne/vypne; „✓ Přijmout změny" revize sloučí do čistého textu. Skvělé na zápisy z porad – vidíš, co ode všech přibylo/vyřešilo.' },
@@ -11399,7 +11450,7 @@ function _renderActivity(){
   if(thh) thh.style.display = canBer ? '' : 'none';
   styleTab(thh, window._activityTab==='hlaseni');
   if(window._activityTab==='hlaseni' && !canBer) window._activityTab='novinky';
-  if(window._activityTab === 'hlaseni'){ box.innerHTML=_hlaseniRowsHtml(); _markHlaseniSeen(); return; }
+  if(window._activityTab === 'hlaseni'){ box.innerHTML=_hlaseniRowsHtml(false); _markHlaseniSeen(); return; }
   if(window._activityTab === 'novinky'){
     box.innerHTML = APP_NOVINKY.map(function(x){
       return '<div style="padding:9px 2px;border-bottom:1px solid var(--border);">'
