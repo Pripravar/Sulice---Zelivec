@@ -153,6 +153,11 @@ body.grid-open #btn-gps, body.grid-open #btn-foto-fab, body.grid-open #btn-fabmo
 body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accent2); }
 /* Dial „Vše" – MALÉ ikony (stejné jako ⋯ vějíř) na půlkruhu kolem triggeru; listuje se jak ciferník. */
 .fabgrid-item { position:fixed; right:16px; bottom:204px; width:46px; height:46px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:21px; cursor:pointer; z-index:1501; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.45); opacity:0; transform:translate(0,0) scale(.4); transition:transform .2s cubic-bezier(.2,.7,.3,1), opacity .18s; }
+/* 🐞 Nahlásit chybu/vylepšení – VŽDY viditelné (i přes panely), fixní na levém okraji uprostřed */
+#btn-report { position:fixed; left:6px; top:50%; transform:translateY(-50%); z-index:9600; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:19px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:.72; }
+#btn-report:hover { opacity:1; }
+.rep-tbtn { flex:1; padding:11px; border-radius:9px; border:2px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; }
+.rep-tbtn.active { border-color:var(--accent2); color:var(--accent2); }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
 #measure-crosshair { display:none; position:fixed; z-index:1600; pointer-events:none; transform:translate(-50%,-50%); font-size:40px; color:#22d3ee; text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000; line-height:1; }
 #measure-crosshair.open { display:block; }
@@ -1257,18 +1262,31 @@ document.addEventListener('touchend', function(e){
 <div id="blok-panel" style="display:none;position:fixed;inset:0;z-index:3600;background:var(--bg);flex-direction:column;">
   <div style="display:flex;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
     <div style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">📝 Poznámkový blok</div>
+    <button onclick="openBlokDetail('')" title="Nová poznámka" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer;">➕ Nová</button>
     <button onclick="closeBlok()" title="Zavřít" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
   </div>
-  <div style="padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
-    <textarea id="blok-new-text" rows="3" placeholder="Napiš poznámku… (jen pro tebe, dokud nezaškrtneš „veřejná")" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px;font-size:14px;resize:vertical;"></textarea>
-    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;flex:1;">
-        <input type="checkbox" id="blok-new-public" style="width:18px;height:18px;"> 🌐 Veřejná (uvidí všichni)
-      </label>
-      <button onclick="addBlok()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer;">Přidat</button>
-    </div>
-  </div>
   <div id="blok-list" style="padding:12px 14px;overflow-y:auto;flex:1;"></div>
+</div>
+<!-- Detail poznámky – otevírací kontejner (nadpis + text, kdykoli doplnit/upravit/smazat) -->
+<div id="blok-detail" style="display:none;position:fixed;inset:0;z-index:3650;background:var(--bg);flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <button onclick="closeBlokDetail()" title="Zpět" style="background:none;border:none;color:var(--text2);font-size:26px;cursor:pointer;min-width:44px;min-height:44px;">‹</button>
+    <div id="blok-detail-title-h" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">Poznámka</div>
+    <button id="blok-detail-pdf" onclick="printBlok(window._blokEditId)" title="Uložit / sdílet jako PDF" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:14px;cursor:pointer;">🖨️ PDF</button>
+    <button id="blok-detail-del" onclick="deleteBlok(window._blokEditId)" title="Smazat" style="background:var(--panel2);border:1px solid #e57373;border-radius:8px;color:#e57373;padding:7px 10px;font-size:14px;cursor:pointer;">🗑️</button>
+  </div>
+  <div style="padding:12px 14px;overflow-y:auto;flex:1;">
+    <input type="text" id="blok-d-title" placeholder="Nadpis / název poznámky" maxlength="120" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-weight:700;margin-bottom:8px;">
+    <textarea id="blok-d-text" placeholder="Text poznámky… (kdykoli se sem vrať a dopiš/uprav)" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:14px;line-height:1.5;resize:vertical;min-height:200px;"></textarea>
+    <label id="blok-d-public-row" style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;cursor:pointer;">
+      <input type="checkbox" id="blok-d-public" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;">
+      <span style="font-size:13px;color:var(--text);"><b>🌐 Veřejná</b> — uvidí ji všichni v aplikaci.<br><span style="color:var(--text2);">Necháš-li prázdné, je <b>soukromá</b> – vidíš ji jen ty.</span></span>
+    </label>
+    <div id="blok-d-readonly" style="display:none;font-size:12px;color:var(--text2);margin-top:10px;">👁️ Cizí poznámka – jen ke čtení.</div>
+  </div>
+  <div id="blok-d-savebar" style="padding:12px 14px;border-top:1px solid var(--border);flex-shrink:0;">
+    <button onclick="saveBlokDetail()" style="width:100%;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:13px;font-size:15px;font-weight:700;cursor:pointer;">💾 Uložit</button>
+  </div>
 </div>
 
 <!-- iPhone instalační hint -->
@@ -1541,6 +1559,27 @@ document.addEventListener('touchend', function(e){
 <button id="btn-home-fab" onclick="resetMapView()" title="Domů – reset pohledu">⌂</button>
 <button id="fabgrid-trigger" onclick="toggleFabGrid()" title="Vše – panely z lišty (listuj jak ciferník)">🗂️</button>
 <div id="fabgrid"></div>
+<!-- 🐞 Nahlásit chybu / návrh na vylepšení – vždy dostupné -->
+<button id="btn-report" onclick="openReport()" title="Nahlásit chybu / návrh na vylepšení">🐞</button>
+<div id="report-modal" style="display:none;position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;border:1px solid var(--border);padding:16px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><div style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">🐞 Nahlásit / navrhnout</div><button onclick="closeReport()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button id="rep-t-chyba" onclick="_repType('chyba')" class="rep-tbtn">🐞 Chyba</button>
+      <button id="rep-t-vylepseni" onclick="_repType('vylepseni')" class="rep-tbtn">💡 Vylepšení</button>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Čeho se to týká:</div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px;color:var(--text);">
+      <input type="radio" name="rep-kde" id="rep-kde-tady" checked onchange="_repKde()" style="width:18px;height:18px;"> <span>Tady, kde právě jsem: <b id="rep-screen" style="color:var(--accent2);">Mapa</b></span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px;color:var(--text);">
+      <input type="radio" name="rep-kde" id="rep-kde-jinde" onchange="_repKde()" style="width:18px;height:18px;"> <span>Jinde / obecné (napíšu)</span>
+    </label>
+    <input type="text" id="rep-misto" placeholder="Napiš, čeho se to týká" style="display:none;width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px;font-size:13px;margin:2px 0 6px;">
+    <textarea id="rep-text" rows="4" placeholder="Popiš chybu / návrh…" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:14px;resize:vertical;margin-top:8px;"></textarea>
+    <button onclick="submitReport()" style="width:100%;margin-top:12px;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:12px;font-size:15px;font-weight:700;cursor:pointer;">Odeslat</button>
+  </div>
+</div>
 <div id="place-crosshair">✛</div>
 <div id="place-bar">
   <span id="place-hint">Najeď křížkem na místo</span>
@@ -10755,7 +10794,7 @@ function loadBlok(){
   try{
     db.ref('blok_poznamky').on('value', function(snap){
       window.blokData = snap.val() || {};
-      var p=document.getElementById('blok-panel'); if(p && p.style.display==='flex') renderBlok();
+      var p=document.getElementById('blok-panel'); if(p && p.style.display==='flex') renderBlokList();
     }, function(e){ console.warn('loadBlok:', e&&e.message); });
   }catch(e){}
 }
@@ -10763,7 +10802,7 @@ function openBlok(){
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   if(typeof hasPerm==='function' && !hasPerm('blok')){ showToast('📝 Poznámkový blok Ti admin nepovolil', 3000); return; }
   document.getElementById('blok-panel').style.display='flex';
-  renderBlok();
+  renderBlokList();
 }
 function closeBlok(){ var p=document.getElementById('blok-panel'); if(p) p.style.display='none'; }
 
@@ -10868,48 +10907,141 @@ function _fabgridDial(d){ var M=_fabgridItems().length; if(M>5){ _gridCenter=((_
   }, true);
   window.addEventListener('resize', function(){ if(document.body.classList.contains('grid-open')) renderFabGrid(); });
 })();
-function addBlok(){
-  var ta=document.getElementById('blok-new-text'); var v=(ta&&ta.value||'').trim();
-  if(!v){ showToast('Napiš text poznámky', 1800); return; }
-  if(!window.currentUser) return;
-  var pub=!!((document.getElementById('blok-new-public')||{}).checked);
-  var id='b_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
-  db.ref('blok_poznamky/'+id).set({ text:v, uid:window.currentUser.uid, author:window.currentUser.name||'', ts:Date.now(), verejne:pub })
-    .then(function(){ ta.value=''; var c=document.getElementById('blok-new-public'); if(c) c.checked=false; showToast(pub?'🌐 Uloženo (veřejná)':'🔒 Uloženo (soukromá)', 1600); })
-    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
-}
-function toggleBlokPublic(id){
-  var n=window.blokData[id]; if(!n || !window.currentUser || n.uid!==window.currentUser.uid) return;
-  db.ref('blok_poznamky/'+id+'/verejne').set(!n.verejne)
-    .then(function(){ showToast(!n.verejne?'🌐 Zveřejněno':'🔒 Skryto', 1400); });
-}
-function deleteBlok(id){
-  var n=window.blokData[id]; if(!n || !window.currentUser || n.uid!==window.currentUser.uid){ showToast('Smazat můžeš jen svoje', 2000); return; }
-  if(!confirm('Smazat tuhle poznámku?')) return;
-  db.ref('blok_poznamky/'+id).remove().then(function(){ showToast('🗑️ Smazáno', 1400); });
-}
-function renderBlok(){
+var _blokEditId = null;
+function _blokVisible(n, me){ return !!(n && (n.uid===me || n.verejne===true)); }
+function renderBlokList(){
   var box=document.getElementById('blok-list'); if(!box) return;
   var me=window.currentUser&&window.currentUser.uid;
-  var arr=Object.keys(window.blokData).map(function(k){ var n=window.blokData[k]; if(n) n._id=k; return n; })
-    .filter(function(n){ return n && (n.uid===me || n.verejne===true); })
-    .sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
-  if(!arr.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">Zatím žádné poznámky – napiš první nahoře.<br>Soukromé vidíš jen ty, po zaškrtnutí „veřejná" je uvidí všichni.</div>'; return; }
+  var arr=Object.keys(window.blokData||{}).map(function(k){ var n=window.blokData[k]; if(n) n._id=k; return n; })
+    .filter(function(n){ return _blokVisible(n, me); })
+    .sort(function(a,b){ return (b.updated||b.ts||0)-(a.updated||a.ts||0); });
+  if(!arr.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:24px;font-size:13px;">Zatím žádné poznámky.<br>Ťukni <b>➕ Nová</b> nahoře. Poznámka je defaultně soukromá; kdykoli ji otevřeš a dopíšeš/upravíš.</div>'; return; }
   box.innerHTML=arr.map(function(n){
     var mine=(n.uid===me);
-    var when=new Date(n.ts||0).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+    var when=new Date(n.updated||n.ts||0).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
     var tag = n.verejne ? '<span style="color:#48bb78;">🌐 veřejná</span>' : '<span>🔒 soukromá</span>';
-    return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel);">'+
-      '<div style="white-space:pre-wrap;word-break:break-word;font-size:14px;color:var(--text);">'+escapeHtml(n.text||'')+'</div>'+
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--text2);">'+
-        tag+'<span>'+escapeHtml(when)+'</span>'+(mine?'':('<span>· '+escapeHtml(n.author||'')+'</span>'))+
-        (mine?('<span style="flex:1;min-width:8px;"></span>'+
-          '<button onclick="toggleBlokPublic(\''+n._id+'\')" style="background:var(--panel2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:5px 9px;font-size:12px;cursor:pointer;">'+(n.verejne?'🔒 Skrýt':'🌐 Zveřejnit')+'</button>'+
-          '<button onclick="deleteBlok(\''+n._id+'\')" style="background:var(--panel2);border:1px solid #e57373;border-radius:7px;color:#e57373;padding:5px 9px;font-size:12px;cursor:pointer;">🗑️</button>')
-          :'')+
-      '</div>'+
+    var title = ((n.title||'').trim()) || ((n.text||'').trim().split('\n')[0].slice(0,60)) || '(bez názvu)';
+    var preview = (n.text||'').trim().replace(/\s+/g,' ').slice(0,90);
+    return '<div onclick="openBlokDetail(\''+n._id+'\')" style="border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px;background:var(--panel);cursor:pointer;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(mine?'':'👁️ ')+escapeHtml(title)+'</div>'+
+      (preview?'<div style="font-size:12px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(preview)+'</div>':'')+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--text2);">'+tag+'<span>'+escapeHtml(when)+'</span>'+(mine?'':('<span>· '+escapeHtml(n.author||'')+'</span>'))+'</div>'+
     '</div>';
   }).join('');
+}
+function openBlokDetail(id){
+  var me=window.currentUser&&window.currentUser.uid;
+  var isNew = !id;
+  var n = isNew ? null : (window.blokData||{})[id];
+  if(!isNew && !n){ showToast('Poznámka nenalezena', 2000); return; }
+  var mine = isNew || (n && n.uid===me);
+  _blokEditId = isNew ? '' : id;
+  document.getElementById('blok-d-title').value = n ? (n.title||'') : '';
+  document.getElementById('blok-d-text').value  = n ? (n.text||'')  : '';
+  document.getElementById('blok-d-public').checked = n ? !!n.verejne : false;
+  document.getElementById('blok-detail-title-h').textContent = isNew ? 'Nová poznámka' : (mine?'Upravit poznámku':'Poznámka');
+  ['blok-d-title','blok-d-text','blok-d-public'].forEach(function(el){ var e=document.getElementById(el); if(e) e.disabled = !mine; });
+  document.getElementById('blok-detail-del').style.display = (mine && !isNew) ? '' : 'none';
+  document.getElementById('blok-detail-pdf').style.display = isNew ? 'none' : '';   // PDF jen u uložené
+  document.getElementById('blok-d-savebar').style.display = mine ? '' : 'none';
+  document.getElementById('blok-d-public-row').style.display = mine ? 'flex' : 'none';
+  document.getElementById('blok-d-readonly').style.display = mine ? 'none' : 'block';
+  document.getElementById('blok-detail').style.display='flex';
+  if(isNew) setTimeout(function(){ var t=document.getElementById('blok-d-title'); if(t) t.focus(); }, 80);
+}
+function closeBlokDetail(){ var d=document.getElementById('blok-detail'); if(d) d.style.display='none'; _blokEditId=null; renderBlokList(); }
+function saveBlokDetail(){
+  if(!window.currentUser) return;
+  var title=(document.getElementById('blok-d-title').value||'').trim();
+  var text=(document.getElementById('blok-d-text').value||'').trim();
+  var pub=!!document.getElementById('blok-d-public').checked;
+  if(!title && !text){ showToast('Napiš aspoň nadpis nebo text', 2000); return; }
+  var isNew = !_blokEditId;
+  var id = isNew ? ('b_'+Date.now()+'_'+Math.random().toString(36).substr(2,5)) : _blokEditId;
+  if(!isNew){ var ex=(window.blokData||{})[id]; if(!ex || ex.uid!==window.currentUser.uid){ showToast('Upravit můžeš jen svoje', 2500); return; } }
+  var rec = isNew
+    ? { title:title, text:text, uid:window.currentUser.uid, author:window.currentUser.name||'', ts:Date.now(), updated:Date.now(), verejne:pub }
+    : { title:title, text:text, updated:Date.now(), verejne:pub };
+  var ref = db.ref('blok_poznamky/'+id);
+  (isNew ? ref.set(rec) : ref.update(rec))
+    .then(function(){ showToast(pub?'💾 Uloženo (veřejná)':'💾 Uloženo (soukromá)', 1500); closeBlokDetail(); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
+}
+function deleteBlok(id){
+  id = id || _blokEditId;
+  var n=(window.blokData||{})[id]; if(!n || !window.currentUser || n.uid!==window.currentUser.uid){ showToast('Smazat můžeš jen svoje', 2000); return; }
+  if(!confirm('Smazat tuhle poznámku?')) return;
+  db.ref('blok_poznamky/'+id).remove().then(function(){ showToast('🗑️ Smazáno', 1400); closeBlokDetail(); });
+}
+// PDF poznámky přes tisk prohlížeče (Uložit jako PDF / sdílet). Okno otevři HNED v kliknutí (popup-blocker).
+function printBlok(id){
+  id = id || _blokEditId;
+  var n=(window.blokData||{})[id]; if(!n) return;
+  var me=window.currentUser&&window.currentUser.uid;
+  if(!_blokVisible(n, me)){ showToast('Poznámka není přístupná', 2000); return; }
+  var w = window.open('', '_blank');
+  var esc=function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var title=(n.title||'').trim() || 'Poznámka';
+  var when=new Date(n.updated||n.ts||0).toLocaleString('cs-CZ');
+  var html='<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+'</title>'+
+    '<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:22px auto;padding:0 18px;color:#111;line-height:1.55;}'+
+    'h1{font-size:20px;margin:0 0 4px;}.meta{color:#666;font-size:12px;margin-bottom:16px;border-bottom:1px solid #ddd;padding-bottom:10px;}'+
+    '.txt{white-space:pre-wrap;word-break:break-word;font-size:14px;}.foot{margin-top:26px;color:#999;font-size:11px;border-top:1px solid #eee;padding-top:8px;}'+
+    '.bar{position:sticky;top:0;background:#fff;padding:8px 0;text-align:right;}.bar button{padding:9px 15px;font-size:14px;border:1px solid #ccc;border-radius:8px;background:#f5f5f5;cursor:pointer;}'+
+    '@media print{.bar{display:none;}body{margin:0;}}</style></head><body>'+
+    '<div class="bar"><button onclick="window.print()">🖨️ Uložit jako PDF / vytisknout</button></div>'+
+    '<h1>'+esc(title)+'</h1>'+
+    '<div class="meta">'+(n.verejne?'🌐 Veřejná':'🔒 Soukromá')+' · '+esc(n.author||'')+' · '+esc(when)+'</div>'+
+    '<div class="txt">'+esc(n.text||'')+'</div>'+
+    '<div class="foot">II/603 Sulice–Želivec · Poznámkový blok</div></body></html>';
+  if(w && !w.closed){ w.document.open(); w.document.write(html); w.document.close(); }
+  else { try{ var b=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }catch(e){ showToast('Povol vyskakovací okna pro PDF', 3000); } }
+}
+
+// ── 🐞 NAHLÁSIT CHYBU / NÁVRH NA VYLEPŠENÍ (vždy dostupné tlačítko) ──
+// Detekce, v jakém místě appky uživatel právě je (nejvýše položený otevřený panel/modal).
+var _repTyp='chyba';
+function _reportScreen(){
+  var map=[
+    ['report-modal','—'], // sebe ignoruj (řeší se pořadím)
+    ['blok-detail','Poznámky – detail'],['blok-panel','Poznámkový blok'],
+    ['task-detail','Úkol – detail'],['task-new-modal','Nový úkol'],['tasks-panel','Úkolníček'],
+    ['diary-panel','Deník / šichtovka'],['kzp-panel','Kvalita / KZP'],['zkousky-panel','Zkoušky na stavbě'],
+    ['dokumenty-panel','Dokumenty'],['gallery-modal','Galerie'],['pano-fs','360° prohlížeč'],
+    ['body-modal','Žebříček aktivity'],['activity-modal','Novinky & aktivita'],['is-panel','Inženýrské sítě']
+  ];
+  // Pozn.: fixní panely mají offsetParent===null → detekuj JEN podle display/visibility (+ opacity).
+  for(var i=1;i<map.length;i++){ var el=document.getElementById(map[i][0]); if(!el) continue;
+    try{ var st=getComputedStyle(el); if(st.display!=='none' && st.visibility!=='hidden' && st.opacity!=='0') return map[i][1]; }catch(e){}
+  }
+  return 'Mapa';
+}
+function _repType(t){ _repTyp=t; ['chyba','vylepseni'].forEach(function(x){ var b=document.getElementById('rep-t-'+x); if(b) b.classList.toggle('active', x===t); }); }
+function _repKde(){ var jinde=(document.getElementById('rep-kde-jinde')||{}).checked; var el=document.getElementById('rep-misto'); if(el) el.style.display=jinde?'block':'none'; }
+function openReport(){
+  if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
+  _repType('chyba');
+  var sc=_reportScreen(); window._repScreen=sc; var scEl=document.getElementById('rep-screen'); if(scEl) scEl.textContent=sc;
+  var t=document.getElementById('rep-kde-tady'); if(t) t.checked=true; _repKde();
+  var mi=document.getElementById('rep-misto'); if(mi) mi.value='';
+  var tx=document.getElementById('rep-text'); if(tx) tx.value='';
+  document.getElementById('report-modal').style.display='flex';
+}
+function closeReport(){ var m=document.getElementById('report-modal'); if(m) m.style.display='none'; }
+function submitReport(){
+  if(!window.currentUser) return;
+  var text=((document.getElementById('rep-text')||{}).value||'').trim();
+  if(!text){ showToast('Popiš to prosím', 2000); return; }
+  var jinde=(document.getElementById('rep-kde-jinde')||{}).checked;
+  var misto = jinde ? (((document.getElementById('rep-misto')||{}).value||'').trim() || 'obecné') : (window._repScreen||'Mapa');
+  var id='r_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  db.ref('hlaseni/'+id).set({
+    typ:_repTyp, misto:misto, text:text,
+    uid:window.currentUser.uid, author:window.currentUser.name||'',
+    ts:Date.now(), stav:'nove',
+    verze:(typeof APP_NOVINKY!=='undefined' && APP_NOVINKY[0] ? APP_NOVINKY[0].verze : '')
+  }).then(function(){ closeReport(); showToast(_repTyp==='chyba'?'🐞 Chyba odeslána, díky!':'💡 Návrh odeslán, díky!', 2800); })
+    .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 
 // ── FEED AKTIVITY („co se děje") – jeden centrální log /aktivita, čte ho každý přihlášený ──
@@ -10983,6 +11115,8 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-06', verze:'v149', text:'🐞 Nové: vlevo (uprostřed okraje) je vždy tlačítko „Nahlásit chybu / návrh na vylepšení" – funguje kdekoli v appce, sama pozná, v jakém jsi místě, a předvyplní ho (nebo napíšeš, že jsi jinde). 🖨️ U poznámky je teď tlačítko „PDF" – otevře náhled, který uložíš jako PDF nebo rovnou sdílíš (mailem, WhatsAppem…). Skvělé na zápisy z porad.' },
+  { datum:'2026-08-06', verze:'v148', text:'📝 Poznámky jsou teď plnohodnotné – otevřou se jako kontejner (jako úkol / poznámky na iPhonu): dáš nadpis a text, kdykoli se k poznámce vrátíš a můžeš ji dopsat, upravit i smazat (dřív šla jen smazat). U veřejné je teď i popis, co znamená. Cizí poznámky vidíš jen ke čtení.' },
   { datum:'2026-08-06', verze:'v147', text:'🗺️ Výchozí mapa je teď Mapy.com Outdoor (turistická). Ostatní podklady (Basic, Letecká, OSM) zůstávají v ☰ Vrstvy → Podklady. 🗂️ Vpravo dole je tlačítko „Vše" – rozbalí malý půlkruh (jako ⋯) s panely z horní lišty a listuješ v něm jak ciferníkem: nově i KROUŽENÍM prstem kolem něj (jako knoflíkem), nebo tažením nahoru/dolů, kolečkem myši či ťuknutím na krajní vybledlou ikonu. ⌂ Domů je nově i vlevo dole (hned po ruce).' },
   { datum:'2026-08-06', verze:'v144', text:'🔘 Vpravo dole je nově pořádek: samostatně 📍 poloha a 📷 foťák (rychlé focení), a tlačítko ⋯, které se po ťuknutí rozbalí do půlkola a nabídne ➕ poznámku/úkol, 📏 měření a 📝 zápisník. 🔒 Úkoly: v zadání zaškrtneš „Jen můj úkol" – vidíš ho JEN ty (v seznamu, na mapě, nikde jinde), ostatním se neplete a nikomu nechodí upozornění. 📝 Poznámkový blok (v ⋯) – osobní zápisník; poznámky jsou defaultně soukromé, po zaškrtnutí „veřejná" je uvidí všichni.' },
   { datum:'2026-07-30', verze:'v138', text:'📷 360° prohlížeč má novou navigaci: svislé šipky na střed obrazovky – NAHORU jedeš po silnici dopředu, DOLŮ zpět. Dvojšipky ⏫/⏬ na krajích skáčou rychle (o 4 fotky), jednoduché ▲/▼ po jedné. Boční šipky i šipky v obraze jsme zrušili (u 360° pletly). Na klávesnici ↑/↓ (se Shiftem rychle), Esc zavře.' },
