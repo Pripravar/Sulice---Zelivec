@@ -1272,12 +1272,16 @@ document.addEventListener('touchend', function(e){
   <div style="display:flex;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
     <button onclick="closeBlokDetail()" title="Zpět" style="background:none;border:none;color:var(--text2);font-size:26px;cursor:pointer;min-width:44px;min-height:44px;">‹</button>
     <div id="blok-detail-title-h" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">Poznámka</div>
+    <button id="blok-d-showedits" onclick="toggleBlokEdits()" title="Zobrazit editované změny" style="display:none;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:13px;cursor:pointer;">👁 Editované</button>
     <button id="blok-detail-pdf" onclick="printBlok(window._blokEditId)" title="Uložit / sdílet jako PDF" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-size:14px;cursor:pointer;">🖨️ PDF</button>
     <button id="blok-detail-del" onclick="deleteBlok(window._blokEditId)" title="Smazat" style="background:var(--panel2);border:1px solid #e57373;border-radius:8px;color:#e57373;padding:7px 10px;font-size:14px;cursor:pointer;">🗑️</button>
   </div>
   <div style="padding:12px 14px;overflow-y:auto;flex:1;">
     <input type="text" id="blok-d-title" placeholder="Nadpis / název poznámky" maxlength="120" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-weight:700;margin-bottom:8px;">
     <textarea id="blok-d-text" placeholder="Text poznámky… (kdykoli se sem vrať a dopiš/uprav)" style="width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:14px;line-height:1.5;resize:vertical;min-height:200px;"></textarea>
+    <div id="blok-d-view" style="display:none;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.5;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:120px;color:var(--text);"></div>
+    <div id="blok-d-legend" style="display:none;font-size:11px;color:var(--text2);margin-top:6px;"><ins style="color:#66bb6a;text-decoration:none;">přidané</ins> &nbsp;·&nbsp; <del style="color:#ef5350;">smazané</del></div>
+    <button id="blok-d-accept" onclick="acceptBlokEdits()" style="display:none;margin-top:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer;">✓ Přijmout změny (vyčistit revize)</button>
     <label id="blok-d-public-row" style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;cursor:pointer;">
       <input type="checkbox" id="blok-d-public" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;">
       <span style="font-size:13px;color:var(--text);"><b>🌐 Veřejná</b> — uvidí ji všichni v aplikaci.<br><span style="color:var(--text2);">Necháš-li prázdné, je <b>soukromá</b> – vidíš ji jen ty.</span></span>
@@ -1285,6 +1289,10 @@ document.addEventListener('touchend', function(e){
     <div id="blok-d-readonly" style="display:none;font-size:12px;color:var(--text2);margin-top:10px;">👁️ Cizí poznámka – jen ke čtení.</div>
   </div>
   <div id="blok-d-savebar" style="padding:12px 14px;border-top:1px solid var(--border);flex-shrink:0;">
+    <label id="blok-d-revize-row" style="display:none;align-items:flex-start;gap:8px;margin-bottom:10px;cursor:pointer;">
+      <input type="checkbox" id="blok-d-revize" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;">
+      <span style="font-size:12px;color:var(--text);"><b>🔴 Zaznamenat úpravu jako revizi</b> — bude vidět, co ses změnilo (<span style="color:#66bb6a;">přidané</span> / <span style="color:#ef5350;text-decoration:line-through;">smazané</span>). Necháš prázdné = tichá oprava (překlepy), změnu nikdo neuvidí.</span>
+    </label>
     <button onclick="saveBlokDetail()" style="width:100%;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:13px;font-size:15px;font-weight:700;cursor:pointer;">💾 Uložit</button>
   </div>
 </div>
@@ -10929,13 +10937,68 @@ function renderBlokList(){
     '</div>';
   }).join('');
 }
+// ── Sledování změn (word-diff, „zobrazit editované") ──
+function _blokMaZmeny(n){ return !!(n && n.baseline!=null && String(n.baseline)!==String(n.text||'')); }
+function _blokTokenize(s){ return String(s==null?'':s).split(/(\s+)/); }   // slova + mezery jako tokeny (drží formát)
+function _blokDiff(aStr, bStr){
+  var a=_blokTokenize(aStr), b=_blokTokenize(bStr), n=a.length, m=b.length;
+  if(n*m > 500000){ return [['-',aStr],['+',bStr]]; }   // pojistka na obří texty
+  var dp=[]; for(var i=0;i<=n;i++){ dp.push(new Array(m+1).fill(0)); }
+  for(var i2=n-1;i2>=0;i2--) for(var j2=m-1;j2>=0;j2--){ dp[i2][j2] = (a[i2]===b[j2]) ? dp[i2+1][j2+1]+1 : Math.max(dp[i2+1][j2], dp[i2][j2+1]); }
+  var out=[], i=0, j=0;
+  while(i<n && j<m){
+    if(a[i]===b[j]){ out.push(['=',a[i]]); i++; j++; }
+    else if(dp[i+1][j] >= dp[i][j+1]){ out.push(['-',a[i]]); i++; }
+    else { out.push(['+',b[j]]); j++; }
+  }
+  while(i<n){ out.push(['-',a[i]]); i++; }
+  while(j<m){ out.push(['+',b[j]]); j++; }
+  return out;
+}
+function _blokDiffHtml(baseline, text){
+  var d=_blokDiff(baseline, text), out='';
+  d.forEach(function(t){ var v=escapeHtml(t[1]);
+    if(t[0]==='=') out+=v;
+    else if(t[0]==='+') out+='<ins style="color:#66bb6a;background:rgba(102,187,106,.15);text-decoration:none;border-radius:3px;">'+v+'</ins>';
+    else out+='<del style="color:#ef5350;background:rgba(239,83,80,.12);border-radius:3px;">'+v+'</del>';
+  });
+  return out;
+}
+function toggleBlokEdits(){ window._blokShowEdits = !window._blokShowEdits; _blokRenderDetailBody(); }
+function _blokRenderDetailBody(){
+  var id=_blokEditId, isNew=!id;
+  var n = isNew ? null : (window.blokData||{})[id];
+  var me=window.currentUser&&window.currentUser.uid;
+  var mine = isNew || (n && n.uid===me);
+  var maZmeny = _blokMaZmeny(n);
+  var showBtn=document.getElementById('blok-d-showedits');
+  var view=document.getElementById('blok-d-view'), ta=document.getElementById('blok-d-text');
+  var legend=document.getElementById('blok-d-legend'), accept=document.getElementById('blok-d-accept');
+  if(showBtn){ showBtn.style.display = maZmeny ? '' : 'none';
+    showBtn.textContent = window._blokShowEdits ? (mine?'✏️ Upravit':'🧹 Skrýt změny') : '👁 Editované'; }
+  if(accept) accept.style.display = (mine && !isNew && maZmeny) ? '' : 'none';
+  var showMarks = maZmeny && window._blokShowEdits;
+  if(!mine){   // čtenář: jen náhled (bez textarea), přepíná se značené/čisté
+    ta.style.display='none'; view.style.display='block';
+    view.innerHTML = showMarks ? _blokDiffHtml(n.baseline, n.text) : escapeHtml((n&&n.text)||'');
+    if(legend) legend.style.display = showMarks ? '' : 'none';
+  } else if(showMarks){   // autor v režimu „zobrazit editované" = náhled revizí
+    ta.style.display='none'; view.style.display='block'; view.innerHTML=_blokDiffHtml(n.baseline, n.text);
+    if(legend) legend.style.display='';
+  } else {   // autor edituje
+    view.style.display='none'; ta.style.display='block';
+    if(legend) legend.style.display='none';
+  }
+}
 function openBlokDetail(id){
   var me=window.currentUser&&window.currentUser.uid;
   var isNew = !id;
   var n = isNew ? null : (window.blokData||{})[id];
   if(!isNew && !n){ showToast('Poznámka nenalezena', 2000); return; }
   var mine = isNew || (n && n.uid===me);
+  var maZmeny = _blokMaZmeny(n);
   _blokEditId = isNew ? '' : id;
+  window._blokShowEdits = (!mine && maZmeny);   // čtenář vidí značky rovnou; autor začne v editaci
   document.getElementById('blok-d-title').value = n ? (n.title||'') : '';
   document.getElementById('blok-d-text').value  = n ? (n.text||'')  : '';
   document.getElementById('blok-d-public').checked = n ? !!n.verejne : false;
@@ -10946,8 +11009,19 @@ function openBlokDetail(id){
   document.getElementById('blok-d-savebar').style.display = mine ? '' : 'none';
   document.getElementById('blok-d-public-row').style.display = mine ? 'flex' : 'none';
   document.getElementById('blok-d-readonly').style.display = mine ? 'none' : 'block';
+  // revize checkbox: jen autor u existující poznámky; default zapnuto, když už revize běží
+  var revRow=document.getElementById('blok-d-revize-row'), revCb=document.getElementById('blok-d-revize');
+  if(revRow) revRow.style.display = (mine && !isNew) ? 'flex' : 'none';
+  if(revCb) revCb.checked = maZmeny;
+  _blokRenderDetailBody();
   document.getElementById('blok-detail').style.display='flex';
   if(isNew) setTimeout(function(){ var t=document.getElementById('blok-d-title'); if(t) t.focus(); }, 80);
+}
+function acceptBlokEdits(){
+  var id=_blokEditId; var n=(window.blokData||{})[id];
+  if(!n || !window.currentUser || n.uid!==window.currentUser.uid) return;
+  if(!confirm('Přijmout změny? Revizní značky (barevné/přeškrtnuté) se sloučí do čistého textu a zmizí.')) return;
+  db.ref('blok_poznamky/'+id+'/baseline').remove().then(function(){ showToast('✓ Změny přijaty', 1500); });
 }
 function closeBlokDetail(){ var d=document.getElementById('blok-detail'); if(d) d.style.display='none'; _blokEditId=null; renderBlokList(); }
 function saveBlokDetail(){
@@ -10958,13 +11032,21 @@ function saveBlokDetail(){
   if(!title && !text){ showToast('Napiš aspoň nadpis nebo text', 2000); return; }
   var isNew = !_blokEditId;
   var id = isNew ? ('b_'+Date.now()+'_'+Math.random().toString(36).substr(2,5)) : _blokEditId;
-  if(!isNew){ var ex=(window.blokData||{})[id]; if(!ex || ex.uid!==window.currentUser.uid){ showToast('Upravit můžeš jen svoje', 2500); return; } }
-  var rec = isNew
-    ? { title:title, text:text, uid:window.currentUser.uid, author:window.currentUser.name||'', ts:Date.now(), updated:Date.now(), verejne:pub }
-    : { title:title, text:text, updated:Date.now(), verejne:pub };
+  var ex=null;
+  if(!isNew){ ex=(window.blokData||{})[id]; if(!ex || ex.uid!==window.currentUser.uid){ showToast('Upravit můžeš jen svoje', 2500); return; } }
   var ref = db.ref('blok_poznamky/'+id);
-  (isNew ? ref.set(rec) : ref.update(rec))
-    .then(function(){ showToast(pub?'💾 Uloženo (veřejná)':'💾 Uloženo (soukromá)', 1500); closeBlokDetail(); })
+  var op;
+  if(isNew){
+    op = ref.set({ title:title, text:text, uid:window.currentUser.uid, author:window.currentUser.name||'', ts:Date.now(), updated:Date.now(), verejne:pub });
+  } else {
+    var revize = !!((document.getElementById('blok-d-revize')||{}).checked);
+    var upd = { title:title, text:text, updated:Date.now(), verejne:pub };
+    // Revize: baseline = stávající (akumuluj) NEBO starý text před touto úpravou → diff ukáže změny.
+    // Tichá oprava: baseline pryč (přijmout vše, žádné značky).
+    upd.baseline = revize ? ((ex.baseline!=null) ? ex.baseline : (ex.text||'')) : null;
+    op = ref.update(upd);
+  }
+  op.then(function(){ showToast(pub?'💾 Uloženo (veřejná)':'💾 Uloženo (soukromá)', 1500); closeBlokDetail(); })
     .catch(function(e){ showToast('❌ '+((e&&e.message)||'chyba'), 3000); });
 }
 function deleteBlok(id){
@@ -11115,6 +11197,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-06', verze:'v150', text:'✏️ Poznámky umí sledování změn (jako revize smlouvy): když poznámku upravíš, můžeš zaškrtnout „Zaznamenat úpravu jako revizi" – pak je vidět, co se změnilo (přidané zeleně, smazané přeškrtnuté). Nezaškrtneš = tichá oprava (překlepy), nikdo změnu nevidí. Tlačítkem „👁 Editované" si zvýraznění kdokoli zapne/vypne; „✓ Přijmout změny" revize sloučí do čistého textu. Skvělé na zápisy z porad – vidíš, co ode všech přibylo/vyřešilo.' },
   { datum:'2026-08-06', verze:'v149', text:'🐞 Nové: vlevo (uprostřed okraje) je vždy tlačítko „Nahlásit chybu / návrh na vylepšení" – funguje kdekoli v appce, sama pozná, v jakém jsi místě, a předvyplní ho (nebo napíšeš, že jsi jinde). 🖨️ U poznámky je teď tlačítko „PDF" – otevře náhled, který uložíš jako PDF nebo rovnou sdílíš (mailem, WhatsAppem…). Skvělé na zápisy z porad.' },
   { datum:'2026-08-06', verze:'v148', text:'📝 Poznámky jsou teď plnohodnotné – otevřou se jako kontejner (jako úkol / poznámky na iPhonu): dáš nadpis a text, kdykoli se k poznámce vrátíš a můžeš ji dopsat, upravit i smazat (dřív šla jen smazat). U veřejné je teď i popis, co znamená. Cizí poznámky vidíš jen ke čtení.' },
   { datum:'2026-08-06', verze:'v147', text:'🗺️ Výchozí mapa je teď Mapy.com Outdoor (turistická). Ostatní podklady (Basic, Letecká, OSM) zůstávají v ☰ Vrstvy → Podklady. 🗂️ Vpravo dole je tlačítko „Vše" – rozbalí malý půlkruh (jako ⋯) s panely z horní lišty a listuješ v něm jak ciferníkem: nově i KROUŽENÍM prstem kolem něj (jako knoflíkem), nebo tažením nahoru/dolů, kolečkem myši či ťuknutím na krajní vybledlou ikonu. ⌂ Domů je nově i vlevo dole (hned po ruce).' },
