@@ -154,7 +154,7 @@ body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accen
 /* Dial „Vše" – MALÉ ikony (stejné jako ⋯ vějíř) na půlkruhu kolem triggeru; listuje se jak ciferník. */
 .fabgrid-item { position:fixed; right:16px; bottom:204px; width:46px; height:46px; border-radius:50%; background:var(--panel2); border:2px solid var(--border); color:var(--text); font-size:21px; cursor:pointer; z-index:1501; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,.45); opacity:0; transform:translate(0,0) scale(.4); transition:transform .2s cubic-bezier(.2,.7,.3,1), opacity .18s; }
 /* 🐞 Nahlásit chybu/vylepšení – VŽDY viditelné (i přes panely), fixní na levém okraji uprostřed */
-#btn-report { position:fixed; left:6px; top:50%; transform:translateY(-50%); z-index:9600; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:19px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:.72; }
+#btn-report { position:fixed; left:6px; top:50%; transform:translateY(-50%); z-index:9600; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:19px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:.72; touch-action:none; -webkit-user-select:none; user-select:none; }
 #btn-report:hover { opacity:1; }
 .rep-tbtn { flex:1; padding:11px; border-radius:9px; border:2px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; }
 .rep-tbtn.active { border-color:var(--accent2); color:var(--accent2); }
@@ -11239,6 +11239,7 @@ function _reportScreen(){
 function _repType(t){ _repTyp=t; ['chyba','vylepseni'].forEach(function(x){ var b=document.getElementById('rep-t-'+x); if(b) b.classList.toggle('active', x===t); }); }
 function _repKde(){ var jinde=(document.getElementById('rep-kde-jinde')||{}).checked; var el=document.getElementById('rep-misto'); if(el) el.style.display=jinde?'block':'none'; }
 function openReport(){
+  if(window._reportJustDragged) return;   // právě jsem berušku přetáhl → neotvírat
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   if(typeof hasPerm==='function' && !hasPerm('beruska')){ showToast('🐞 Nahlašování Ti admin nepovolil', 3000); return; }
   _repType('chyba');
@@ -11250,6 +11251,19 @@ function openReport(){
   document.getElementById('report-modal').style.display='flex';
 }
 function closeReport(){ var m=document.getElementById('report-modal'); if(m) m.style.display='none'; }
+// 🐞 beruška je PLOVOUCÍ – dá se přetáhnout kamkoli (pozice v localStorage 'reportPos'). Tap = otevřít, tah = přesun.
+(function(){
+  function initReportDrag(){
+    var b=document.getElementById('btn-report'); if(!b || b._dragInit) return; b._dragInit=true;
+    try{ var p=JSON.parse(localStorage.getItem('reportPos')||'null'); if(p && p.left!=null){ b.style.left=p.left+'px'; b.style.top=p.top+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; } }catch(e){}
+    var sx=0,sy=0,ox=0,oy=0,moved=false,dragging=false;
+    b.addEventListener('pointerdown', function(e){ dragging=true; moved=false; sx=e.clientX; sy=e.clientY; var r=b.getBoundingClientRect(); ox=r.left; oy=r.top; try{ b.setPointerCapture(e.pointerId); }catch(_){}}, {passive:true});
+    b.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-sx, dy=e.clientY-sy; if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true; if(moved){ var nx=Math.max(2, Math.min(window.innerWidth-b.offsetWidth-2, ox+dx)); var ny=Math.max(2, Math.min(window.innerHeight-b.offsetHeight-2, oy+dy)); b.style.left=nx+'px'; b.style.top=ny+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; e.preventDefault(); }});
+    function end(){ if(!dragging) return; dragging=false; if(moved){ window._reportJustDragged=true; setTimeout(function(){ window._reportJustDragged=false; }, 350); try{ localStorage.setItem('reportPos', JSON.stringify({ left:parseInt(b.style.left,10), top:parseInt(b.style.top,10) })); }catch(e){} } }
+    b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initReportDrag); else initReportDrag();
+})();
 function submitReport(){
   if(!window.currentUser) return;
   var text=((document.getElementById('rep-text')||{}).value||'').trim();
@@ -11440,6 +11454,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-11', verze:'v156', text:'🧪 V Kvalitě/KZP teď nahráváš PDF přímo z telefonu – nahoře vybereš, CO nahráváš (KZP / 📋 TePř / protokol / jiný dokument) a PDF se bezpečně uloží do Firebase (otevřou ho jen přihlášení). Odkaz na PDF zůstává jako druhá možnost. 🐞 Berušku (Nahlásit chybu) jde teď chytit a přetáhnout kamkoli – kam si ji dáš, tam zůstane.' },
   { datum:'2026-08-06', verze:'v155', text:'🧭 Při procházení 360° fotek je vlevo dole malá mapka s tvojí polohou a kuželem, kam se zrovna díváš (jako Street View – otáčí se, jak se rozhlížíš). 🔄 U fotek přibyla tlačítka na otočení (↺ ↻ vpravo nahoře) – když je fotka na výšku bokem, otočíš ji; uloží se to a stáhne se pak správně orientovaná i s razítkem.' },
   { datum:'2026-08-06', verze:'v154', text:'🗒️ Poznámkový blok má novou ikonu (aby se nepletl s evidencí poznámek) a je i nahoře v liště. Přibylo v něm 🔍 hledání (hledá v nadpisu i textu VŠECH poznámek), filtr (soukromé/veřejné) a řazení (nejnovější/nejstarší/A–Z). 🐞 V přijatých hlášeních (beruška) je taky filtr (typ, stav) a řazení.' },
   { datum:'2026-08-06', verze:'v152', text:'🐞 Nahlašování chyb/vylepšení je teď na DVOU místech: v berušce (vlevo) i v Rozhlasu jako 3. záložka „Hlášení". Svá hlášení a hlavně JAK a KDY byla vyřešená vidíš i ty jako obyčejný uživatel – i subka a investor (mají na to právo). Na berušce svítí číslo (adminovi kolik je nevyřešených, tobě kolik tvých bylo nově vyřešeno). Admin při „Vyřešeno" napíše jak, a autor to uvidí. 👁 Admin navíc vidí i cizí soukromé poznámky/úkoly a tlačítkem „Vidím vše / Jako ostatní" si je může skrýt.' },
@@ -17002,6 +17017,8 @@ function openKzpAddModal(){
   document.getElementById('kzp-tc').value      = '';
   document.getElementById('kzp-verze').value   = '';
   document.getElementById('kzp-schvaleno').checked = false;
+  document.getElementById('kzp-dok-typ').value = 'kzp';
+  var _kf=document.getElementById('kzp-pdf-file'); if(_kf) _kf.value='';
   document.getElementById('kzp-pdf-url').value = '';
   document.getElementById('kzp-modal-delete').style.display = 'none';
   document.getElementById('kzp-modal').classList.add('open');
@@ -17018,6 +17035,8 @@ function openKzpEditModal(id){
   document.getElementById('kzp-tc').value         = k.technologickaCast || '';
   document.getElementById('kzp-verze').value      = k.verze || '';
   document.getElementById('kzp-schvaleno').checked = !!k.schvaleno;
+  document.getElementById('kzp-dok-typ').value    = k.typ || 'kzp';
+  var _kf=document.getElementById('kzp-pdf-file'); if(_kf) _kf.value='';
   document.getElementById('kzp-pdf-url').value    = k.pdfUrl || '';
   document.getElementById('kzp-modal-delete').style.display = 'inline-block';
   document.getElementById('kzp-modal').classList.add('open');
@@ -17032,26 +17051,53 @@ function saveKzpFromForm(){
   if(!so || !nazev) { showToast('Vyplň aspoň SO a Název', 2000); return; }
   var verze     = (document.getElementById('kzp-verze').value || '').trim();
   var schvaleno = !!document.getElementById('kzp-schvaleno').checked;
+  var typ       = (document.getElementById('kzp-dok-typ') && document.getElementById('kzp-dok-typ').value) || 'kzp';
   var pdfUrl    = (document.getElementById('kzp-pdf-url').value || '').trim();
   var id = window.editingKzpId || ('kzp_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
   var existing = window.allKzp[id];
-  var k = {
-    id: id,
-    so: so,
-    nazev: nazev,
-    technologickaCast: tc,
-    verze: verze,
-    schvaleno: schvaleno,
-    pdfUrl: pdfUrl,
-    vytvoreno: (existing && existing.vytvoreno) || Date.now(),
-    upraveno: Date.now()
-  };
-  db.ref('kvalita/' + id).set(k).then(function(){
-    showToast('✅ Uloženo', 1500);
-    closeKzpAddModal();
-  }).catch(function(e){
-    showToast('❌ Chyba: ' + (e.message || e), 2500);
-  });
+  var fi   = document.getElementById('kzp-pdf-file');
+  var file = fi && fi.files && fi.files[0];
+
+  function _saveKzp(finalPdfUrl){
+    var k = {
+      id: id,
+      so: so,
+      nazev: nazev,
+      technologickaCast: tc,
+      verze: verze,
+      schvaleno: schvaleno,
+      typ: typ,
+      pdfUrl: finalPdfUrl,
+      vytvoreno: (existing && existing.vytvoreno) || Date.now(),
+      upraveno: Date.now()
+    };
+    db.ref('kvalita/' + id).set(k).then(function(){
+      hideSync(); showToast('✅ Uloženo', 1500);
+      closeKzpAddModal();
+    }).catch(function(e){
+      hideSync(); showToast('❌ Chyba: ' + (e.message || e), 2500);
+    });
+  }
+
+  // Nahrává se PDF soubor → do Firebase Storage; jinak použij URL pole (příp. původní).
+  if(file){
+    if(!/\.pdf$/i.test(file.name)){ showToast('Soubor musí být PDF', 2500); return; }
+    if(file.size > 20*1024*1024){ showToast('PDF je větší než 20 MB', 2800); return; }
+    var safe = file.name.replace(/\.pdf$/i,'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60) || 'kzp';
+    var path = 'pdf/kvalita/' + typ + '/' + safe + '_' + Date.now() + '.pdf';
+    showSync('⏳ Nahrávám PDF…');
+    var r = new FileReader();
+    r.onload = function(){
+      var b64 = String(r.result).replace(/^data:[^;]+;base64,/,'');
+      _privStorage().ref(path).putString(b64,'base64',{contentType:'application/pdf'}).then(function(){
+        try { delete _fileUrlCache[path]; } catch(e){}
+        _saveKzp(path);   // do DB ukládáme Storage cestu; resolveFileUrl ji při otevření přeloží na token URL
+      }).catch(function(e){ hideSync(); showToast('❌ ' + ((e&&(e.code||e.message))||'chyba uploadu'), 3500); });
+    };
+    r.readAsDataURL(file);
+    return;
+  }
+  _saveKzp(pdfUrl || (existing && existing.pdfUrl) || '');
 }
 
 function deleteKzpItem(){
@@ -18601,6 +18647,14 @@ function copyDiaryExport(){
     <h3 id="kzp-modal-title">➕ Nová položka KZP</h3>
     <input type="hidden" id="kzp-id">
 
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Co nahráváš (typ dokumentu)</label>
+    <select class="kzp-field" id="kzp-dok-typ">
+      <option value="kzp">🧪 KZP – kontrolní a zkušební plán</option>
+      <option value="tepr">📋 TePř – technologický předpis (půjde podepsat)</option>
+      <option value="protokol">📄 Protokol / zkouška</option>
+      <option value="jiny">📎 Jiný dokument kvality</option>
+    </select>
+
     <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Stavební objekt (SO)</label>
     <input type="text" class="kzp-field" id="kzp-so" placeholder="např. SO 101 / SO 102 / SO 103 …" list="kzp-so-list">
     <datalist id="kzp-so-list"></datalist>
@@ -18619,8 +18673,12 @@ function copyDiaryExport(){
       <input type="checkbox" id="kzp-schvaleno" style="margin-right:6px;"> Schválená verze
     </label>
 
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">Odkaz na PDF (URL)</label>
-    <input type="text" class="kzp-field" id="kzp-pdf-url" placeholder="https://… nebo relativní cesta v repu (pdf/KZP/...)">
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">PDF soubor (nahraje se do Firebase)</label>
+    <input type="file" class="kzp-field" id="kzp-pdf-file" accept="application/pdf,.pdf">
+    <div style="font-size:11px;color:var(--text2);margin:-4px 0 6px;">Vyber PDF z telefonu – uloží se bezpečně do Firebase Storage (jen přihlášení ho otevřou).</div>
+
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;">… nebo odkaz na PDF (URL)</label>
+    <input type="text" class="kzp-field" id="kzp-pdf-url" placeholder="https://… (nepovinné, když nenahráváš soubor)">
 
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn-primary" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:700;cursor:pointer;" onclick="saveKzpFromForm()">💾 Uložit</button>
