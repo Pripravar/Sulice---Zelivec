@@ -10452,6 +10452,7 @@ function categoryAllows(cat, feature){
 // PRAVIDLO: 1 věc = 1 klíč. Každé tlačítko, panel, modul I KAŽDÁ VRSTVA má vlastní právo.
 // Nikdy nevěš vrstvu na cizí právo („souvisí to s galerií") – viz díra s `fotomapa` pod `galerie`.
 var FEATURES = [
+  {key:'prepinac', label:'🗺️ Přepínač staveb (rozcestník)', btns:[]},   // OZ-JIH switcher – kategorie silnice=ano, sub/investor=ne, + osobní výjimka
   // ── Funkce (tlačítka / panely) ──
   { key:'pdf',        label:'Prohlížení výkresů (PDF)', btns:[] },
   { key:'foto',       label:'Focení',            btns:['btn-standalone-foto','btn-foto-fab'] },
@@ -10542,6 +10543,9 @@ function applyPermsToUI(){
   });
   // 2) Vrstvy: sekce označené data-perm SCHOVAT + VYPNOUT, když uživatel funkci nemá
   //    (nesmí ji ani vidět – ne jen zakládat). Vypne se každý zapnutý přepínač vrstvy uvnitř.
+  // Plovoucí přepínač staveb (OZ-JIH) – řízeno právem 'prepinac' (stejně jako ostatní funkce)
+  window.MSWState = { override: hasPerm('prepinac') };
+  if(typeof window.MSWInit === 'function'){ window.MSWInit(window.MSWState); }
   document.querySelectorAll('[data-perm]').forEach(function(sec){
     var allowed = hasPerm(sec.getAttribute('data-perm'));
     if(!allowed){
