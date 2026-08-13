@@ -837,7 +837,7 @@ body.submode #user-badge, body.submode #btn-layers, body.submode #btn-standalone
 .auth-note-warn b { color:var(--accent2); }
 #auth-view-main, #auth-view-phone, #auth-view-code, #auth-view-name { display:flex; flex-direction:column; gap:10px; }
 #auth-error { color:#ff6b81; font-size:12px; text-align:center; min-height:14px; }
-#user-badge { display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; max-width:140px; }
+#user-badge { position:relative; display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; color:var(--text); cursor:pointer; max-width:140px; }
 #user-badge img { width:20px; height:20px; border-radius:50%; flex-shrink:0; }
 #user-badge span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
@@ -1334,7 +1334,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-mereni-evidence" onclick="openMereniEvidence()" title="Evidence měření" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📐</button>
   <button id="btn-is" onclick="openInzenyrskeSite()" title="Inženýrské sítě (vyjádření správců)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔌</button>
   <button id="btn-reset-view" onclick="resetMapView()" title="Reset pohledu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">⌂</button>
-  <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span></div>
+  <div id="user-badge" onclick="showUserMenu()" title="Uživatel"><img id="user-photo" src="" alt=""><span id="user-name">…</span><span id="approval-badge" title="Uživatelé čekají na schválení" style="display:none;position:absolute;top:-6px;right:-6px;background:#e94560;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;align-items:center;justify-content:center;padding:0 4px;box-shadow:0 1px 4px rgba(0,0,0,.5);">0</span></div>
   <button id="btn-layers" onclick="toggleLayers()">☰ Vrstvy</button>
 </div>
 
@@ -10531,6 +10531,17 @@ function loadCategoryPerms(){
   });
 }
 // Skryje/zobrazí tlačítka funkcí podle práv (volá se po přihlášení i živě po změně práv adminem).
+function updateApprovalBadge(){
+  var el = document.getElementById('approval-badge'); if(!el) return;
+  if(typeof isAdmin!=='function' || !isAdmin() || !window.allUsers){ el.style.display='none'; return; }
+  var n = 0;
+  Object.keys(window.allUsers).forEach(function(uid){
+    var u = window.allUsers[uid] || {};
+    if(!isAdmin(uid) && u.approved !== true && !u.blocked) n++;   // nový, neschválený, nezablokovaný
+  });
+  if(n > 0){ el.textContent = n; el.style.display = 'flex'; }
+  else { el.style.display = 'none'; }
+}
 function applyPermsToUI(){
   if(!window.currentUser) return;
   // 1) Tlačítka funkcí (zakládání)
@@ -10546,6 +10557,7 @@ function applyPermsToUI(){
   // Plovoucí přepínač staveb (OZ-JIH) – řízeno právem 'prepinac' (stejně jako ostatní funkce)
   window.MSWState = { override: hasPerm('prepinac') };
   if(typeof window.MSWInit === 'function'){ window.MSWInit(window.MSWState); }
+  if(typeof updateApprovalBadge==='function') updateApprovalBadge();   // počet čekajících na schválení (na avataru)
   document.querySelectorAll('[data-perm]').forEach(function(sec){
     var allowed = hasPerm(sec.getAttribute('data-perm'));
     if(!allowed){
