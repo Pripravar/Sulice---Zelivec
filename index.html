@@ -9377,11 +9377,53 @@ function _photoBadge(){
     el.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:3000;background:rgba(0,0,0,.78);color:#fff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:14px;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.4);';
     document.body.appendChild(el);
   }
-  if(photoPending > 0){ el.style.display = 'block'; el.textContent = '⏳ Nahrávám fotky na pozadí: ' + photoPending; }
-  else { el.style.display = 'none'; }
+  var failing = photoQueue.some(function(j){ return (j.tries||0) >= 2; });
+  var w = document.getElementById('photo-fail-banner');
+  if(!w){
+    w = document.createElement('div'); w.id = 'photo-fail-banner';
+    w.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#c0392b;color:#fff;font-size:13px;font-weight:700;padding:9px 14px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5);display:none;pointer-events:none;line-height:1.35;';
+    document.body.appendChild(w);
+  }
+  if(failing){
+    el.style.display = 'none';
+    w.innerHTML = '⚠️ '+photoPending+' '+(photoPending===1?'fotka se zatím NEULOŽILA':'fotek se zatím NEULOŽILO')+' na server – zkouším to dál.<br>Fotky jsou bezpečně uložené v telefonu a nahrají se samy, až server pojede. <b>Neztratí se.</b>';
+    w.style.display = 'block';
+  } else {
+    w.style.display = 'none';
+    if(photoPending > 0){ el.style.display = 'block'; el.textContent = '⏳ Nahrávám fotky na pozadí: ' + photoPending; }
+    else { el.style.display = 'none'; }
+  }
+}
+// ── Perzistentní fronta fotek v IndexedDB – fotka se NIKDY neztratí (opatření #96) ──
+var _photoIDB = null;
+function _photoIDBOpen(){
+  return new Promise(function(res){
+    if(_photoIDB) return res(_photoIDB);
+    try{
+      var rq = indexedDB.open('sulicePhotos', 1);
+      rq.onupgradeneeded = function(e){ var db=e.target.result; if(!db.objectStoreNames.contains('pending')) db.createObjectStore('pending',{keyPath:'t'}); };
+      rq.onsuccess = function(e){ _photoIDB=e.target.result; res(_photoIDB); };
+      rq.onerror = function(){ res(null); };
+    }catch(e){ res(null); }
+  });
+}
+function _photoDbPut(job){ _photoIDBOpen().then(function(db){ if(!db)return; try{ db.transaction('pending','readwrite').objectStore('pending').put({t:job.t,compressed:job.compressed,meta:job.meta,yes:job.yes,sub:job.sub,tries:job.tries||0}); }catch(e){} }); }
+function _photoDbDelete(t){ _photoIDBOpen().then(function(db){ if(!db)return; try{ db.transaction('pending','readwrite').objectStore('pending').delete(t); }catch(e){} }); }
+function _photoDbAll(){ return _photoIDBOpen().then(function(db){ return new Promise(function(res){ if(!db)return res([]); try{ var rq=db.transaction('pending','readonly').objectStore('pending').getAll(); rq.onsuccess=function(){ res(rq.result||[]); }; rq.onerror=function(){ res([]); }; }catch(e){ res([]); } }); }); }
+function _restorePhotoQueue(){
+  _photoDbAll().then(function(jobs){
+    if(!jobs || !jobs.length) return;
+    var added=0;
+    jobs.forEach(function(j){ if(j && j.compressed && j.t!=null && !photoQueue.some(function(q){return q.t===j.t;})){ j.tries=0; photoQueue.push(j); photoPending++; added++; } });
+    if(added){ _photoBadge(); if(!photoUploading) _processPhotoQueue(); showToast('📤 Dohrávám '+added+' '+(added===1?'fotku':'fotek')+' z minula…', 3500); }
+  });
 }
 function enqueuePhoto(compressed, meta, yes){
-  photoQueue.push({ compressed: compressed, meta: meta, yes: yes, tries: 0, sub: !!window.subMode });
+  var t = (meta && meta.ts) || _uniqueT();
+  if(meta) meta.ts = t;
+  var job = { t: t, compressed: compressed, meta: meta, yes: yes, tries: 0, sub: !!window.subMode };
+  photoQueue.push(job);
+  _photoDbPut(job);
   photoPending++; _photoBadge();
   if(!photoUploading) _processPhotoQueue();
 }
@@ -9470,11 +9512,12 @@ function batchTagPhotos(){
 function _stripB64(dataUrl){ return String(dataUrl||'').replace(/^data:image\/\w+;base64,/, ''); }
 function _uploadSubJob(job){
   var meta = job.meta, compressed = job.compressed;
-  var t = meta.ts || _uniqueT();
+  var t = job.t || meta.ts || _uniqueT();
   function fail(msg){
-    if(job.tries < 1){ job.tries++; photoQueue.push(job); }
-    else { photoPending = Math.max(0, photoPending-1); showToast('❌ Fotka se nenahrála ('+(msg||'')+')', 3000); }
-    _photoBadge(); setTimeout(_processPhotoQueue, 500);
+    job.tries = (job.tries||0) + 1;
+    _photoDbPut(job);                 // NIKDY nezahazuj (opatření #96)
+    photoQueue.push(job);
+    _photoBadge(); setTimeout(_processPhotoQueue, Math.min(30000, 3000 * job.tries));
   }
   burnInMetadata(compressed, meta.km, meta.author, function(stamped){
     resizeImageMax(stamped, 400, 0.5, function(thumbUrl){
@@ -9489,6 +9532,7 @@ function _uploadSubJob(job){
         .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status)); })
         .then(function(resp){
           _subAddMyPhoto({ url: resp.visible, thumb: resp.thumb || resp.visible, so: meta.so||'', km: meta.km||'', date: new Date(t).toLocaleDateString('cs-CZ'), ts: t });
+          _photoDbDelete(t);   // uloženo na server → smaž lokální kopii (opatření #96)
           photoPending = Math.max(0, photoPending-1); _photoBadge(); setTimeout(_processPhotoQueue, 400);
         })
         .catch(function(e){ fail((e && e.message) || 'síť'); });
@@ -9502,12 +9546,13 @@ function _processPhotoQueue(){
   if(job.sub){ _uploadSubJob(job); return; }   // SUB → přes Cloud Function (bez Firebase auth)
   var compressed = job.compressed, meta = job.meta, yes = job.yes;
   function fail(msg){
-    if(job.tries < 1){ job.tries++; photoQueue.push(job); }   // 1× zkus znovu (výpadek sítě)
-    else { photoPending = Math.max(0, photoPending-1); showToast('❌ Fotka se nenahrála ('+(msg||'')+')', 3000); }
-    _photoBadge(); setTimeout(_processPhotoQueue, 400);
+    job.tries = (job.tries||0) + 1;
+    _photoDbPut(job);                 // NIKDY nezahazuj (opatření #96)
+    photoQueue.push(job);
+    _photoBadge(); setTimeout(_processPhotoQueue, Math.min(30000, 3000 * job.tries));
   }
   burnInMetadata(compressed, meta.km, meta.author, function(stamped){
-    var t = meta.ts || _uniqueT();
+    var t = job.t || meta.ts || _uniqueT();
     var fnOrig = 'standalone/foto_' + t + '_o.jpg', fnStamp = 'standalone/foto_' + t + '_s.jpg';
     var firstSrc, firstFn, secondSrc, secondFn;
     if(yes){ firstSrc = stamped; firstFn = fnStamp; secondSrc = compressed; secondFn = fnOrig; }
@@ -9532,6 +9577,7 @@ function _processPhotoQueue(){
           if(meta.sdilenoInvestor){ entry.sdilenoInvestor = true; }          // sdíleno investorovi
           function saveEntry(){
             db.ref('standalone_photos/' + t).set(entry).then(function(){
+              _photoDbDelete(t);   // uloženo na server → smaž lokální kopii (opatření #96)
               _tagPhoto(t);   // AI popis obsahu na pozadí (pro vyhledávání)
               trackEvent('foto_ulozeno');   // body: skutečně uložená fotka (ne stisk tlačítka)
               photoPending = Math.max(0, photoPending-1); _photoBadge();
@@ -12024,6 +12070,7 @@ function _enterApp(displayName){
   localStorage.setItem('noteAuthor', displayName);
   document.getElementById('auth-gate').classList.add('hide');
   // Načíst data
+  _restorePhotoQueue();   // dohraj fotky, které se minule nestihly nahrát (opatření #96)
   loadAllUsers();
   loadCategoryPerms();
   loadMjList();
