@@ -1790,6 +1790,7 @@ document.addEventListener('touchend', function(e){
       <div style="flex:1;font-size:15px;font-weight:700;color:#f5a623;">👥 Správa uživatelů</div>
       <button onclick="openCatPerms()" title="Výchozí práva kategorií" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;">⚙️ Práva kategorií</button>
       <button onclick="openStats()" title="Statistiky využití" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;">📊 Statistiky</button>
+      <button onclick="signOutUser()" title="Odhlásit se z aplikace" style="background:var(--panel2);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;">🚪 Odhlásit</button>
       <button onclick="closeUserAdmin()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
     <div style="font-size:11px;color:var(--text2);padding:8px 16px 0;line-height:1.4;flex-shrink:0;">Zaškrtnuté = povolené funkce (nový uživatel má vše). Odškrtnutím funkci odebereš, 🚫 účet zablokuješ.</div>
@@ -10086,10 +10087,36 @@ function _gfiltSoToggleAll(on){
   _gfiltSoChanged();
 }
 
-function toggleGalleryFilter(){
+function toggleGalleryFilter(force){
   var bar = document.getElementById('gallery-filter-bar');
   if(!bar) return;
-  bar.style.display = (bar.style.display === 'none' || !bar.style.display) ? 'block' : 'none';
+  var isOpen = !(bar.style.display === 'none' || !bar.style.display);
+  var open = (typeof force === 'boolean') ? force : !isOpen;   // force=false → zavřít, i když se klikne na „Skrýt"
+  bar.style.display = open ? 'block' : 'none';
+  // Tlačítko v hlavičce jasně říká, co dělá: otevřený filtr = „Skrýt filtr" (žlutě), zavřený = „Filtr"
+  var btn = document.getElementById('gallery-filter-btn');
+  if(btn){
+    if(open){
+      btn.innerHTML = '🔼 Skrýt filtr';
+      btn.style.background = 'var(--accent2)'; btn.style.color = '#0f3460'; btn.style.borderColor = 'var(--accent2)'; btn.style.fontWeight = '800';
+    } else {
+      var anyActive = (typeof _galleryHasActiveFilter === 'function') && _galleryHasActiveFilter();
+      btn.innerHTML = anyActive ? '🔍 Filtr •' : '🔍 Filtr';   // tečka = filtr je zapnutý, i když je schovaný
+      btn.style.background = anyActive ? 'var(--panel2)' : 'var(--panel2)';
+      btn.style.color = anyActive ? 'var(--accent2)' : 'var(--text)';
+      btn.style.borderColor = anyActive ? 'var(--accent2)' : 'var(--border)';
+      btn.style.fontWeight = anyActive ? '800' : '400';
+    }
+  }
+}
+// Je aktivní aspoň jeden filtr galerie? (aby šlo dát vizuální „•" i po schování panelu)
+function _galleryHasActiveFilter(){
+  function v(id){ var e=document.getElementById(id); return e ? (e.value||'').trim() : ''; }
+  function ck(id){ var e=document.getElementById(id); return !!(e && e.checked); }
+  if(v('gfilt-search')||v('gfilt-km-od')||v('gfilt-km-do')||v('gfilt-date-od')||v('gfilt-date-do')||v('gfilt-author')||v('gfilt-sub')) return true;
+  if(ck('gfilt-komentar')||ck('gfilt-zkousky')) return true;
+  if(window._gfiltSoSel && window._gfiltSoSel.size) return true;
+  return false;
 }
 
 // ── Náhledy: jednorázové dogenerování miniatur pro starší fotky (bez thumb) ──
@@ -10708,12 +10735,8 @@ function signOutUser() {
 function showUserMenu() {
   if(!window.currentUser) return;
   if(isAdmin()){
-    // Admin: nejdřív nabídni Správu uživatelů, jinak odhlášení.
-    if(confirm('👤 ' + window.currentUser.name + '\n\n👥 Otevřít Správu uživatelů?\n(Zrušit = jen odhlášení)')){
-      openUserAdmin();
-    } else if(confirm('Odhlásit se?')){
-      signOutUser();
-    }
+    // Admin: klik na svoje jméno = rovnou otevři tabulku Správa uživatelů (odhlášení je tlačítkem uvnitř).
+    openUserAdmin();
     return;
   }
   var msg = '👤 ' + window.currentUser.name + '\n' + window.currentUser.email;
@@ -11516,6 +11539,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-19', verze:'v157', text:'🔍 Filtr v galerii jde teď jasně schovat: po otevření se tlačítko změní na „🔼 Skrýt filtr" (žlutě) a v panelu je i velké tlačítko „Skrýt filtr a vidět fotky". Filtr přitom zůstane zapnutý (u schovaného svítí u tlačítka „•"), takže procházíš fotky přes celou obrazovku a nemusíš mít filtr otevřený. 👥 Admin: klik na svoje jméno teď rovnou otevře Správu uživatelů (žádné „OK/Zrušit"); odhlášení je tlačítkem 🚪 přímo v tabulce. Díky Tomášovi za podněty. 🐞' },
   { datum:'2026-08-11', verze:'v156', text:'🧪 V Kvalitě/KZP teď nahráváš PDF přímo z telefonu – nahoře vybereš, CO nahráváš (KZP / 📋 TePř / protokol / jiný dokument) a PDF se bezpečně uloží do Firebase (otevřou ho jen přihlášení). Odkaz na PDF zůstává jako druhá možnost. 🐞 Berušku (Nahlásit chybu) jde teď chytit a přetáhnout kamkoli – kam si ji dáš, tam zůstane.' },
   { datum:'2026-08-06', verze:'v155', text:'🧭 Při procházení 360° fotek je vlevo dole malá mapka s tvojí polohou a kuželem, kam se zrovna díváš (jako Street View – otáčí se, jak se rozhlížíš). 🔄 U fotek přibyla tlačítka na otočení (↺ ↻ vpravo nahoře) – když je fotka na výšku bokem, otočíš ji; uloží se to a stáhne se pak správně orientovaná i s razítkem.' },
   { datum:'2026-08-06', verze:'v154', text:'🗒️ Poznámkový blok má novou ikonu (aby se nepletl s evidencí poznámek) a je i nahoře v liště. Přibylo v něm 🔍 hledání (hledá v nadpisu i textu VŠECH poznámek), filtr (soukromé/veřejné) a řazení (nejnovější/nejstarší/A–Z). 🐞 V přijatých hlášeních (beruška) je taky filtr (typ, stav) a řazení.' },
@@ -17485,7 +17509,7 @@ function copyDiaryExport(){
     <button id="gallery-import-btn" onclick="openLibraryImport()" title="Vložit fotky z knihovny (s ručním datem a staničením)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;">📥</button>
     <button id="gallery-group-btn" onclick="toggleGalleryGrouped()" title="Zobrazit po stavebních objektech" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">📁 Po objektech</button>
     <button id="gallery-select-btn" onclick="toggleGallerySelectMode()" title="Hromadný výběr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">☑️ Vybrat</button>
-    <button onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
+    <button id="gallery-filter-btn" onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
     <button id="gallery-clearfilter-btn" onclick="clearGalleryFilters()" title="Zrušit všechny filtry" style="display:none;background:#e57373;border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-right:6px;">✕ Zrušit filtr</button>
     <button id="gallery-close" onclick="closeGallery()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:4px 8px;">&#x2715;</button>
   </div>
@@ -17493,7 +17517,11 @@ function copyDiaryExport(){
     <div class="gallery-tab active" id="gtab-0" onclick="switchGalleryTab(0)">&#128247; Samostatné</div>
     <div class="gallery-tab" id="gtab-1" onclick="switchGalleryTab(1)">&#128204; Z poznámek</div>
   </div>
-  <div id="gallery-filter-bar" style="display:none;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+  <div id="gallery-filter-bar" style="display:none;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;max-height:60vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:12px;color:var(--text2);">Nastav filtr – <b>fotky se filtrují rovnou</b>. Pak si ho schovej, ať vidíš víc fotek (filtr zůstane zapnutý).</div>
+      <button onclick="toggleGalleryFilter(false)" title="Schovat filtr (zůstane aktivní)" style="background:var(--accent2);border:none;border-radius:6px;color:#0f3460;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;margin-left:8px;flex-shrink:0;">🔼 Skrýt filtr</button>
+    </div>
     <div id="gfilt-search-wrap" style="margin-bottom:10px;display:none;">
       <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🔎 Hledat v obsahu fotek (např. finišer, válec, roura…)</div>
       <input type="text" id="gfilt-search" placeholder="napiš co hledáš na fotkách…" oninput="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--accent);border-radius:6px;color:var(--text);padding:9px 10px;font-size:14px;">
@@ -17574,6 +17602,7 @@ function copyDiaryExport(){
       <button onclick="generateMissingThumbs()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">🖼️ Zrychlit galerii (dogenerovat náhledy)</button>
       <div style="font-size:10px;color:var(--text2);margin-top:4px;">Jednorázově pro starší fotky – pak se galerie načítá rychleji. Běží na pozadí.</div>
     </div>
+    <button onclick="toggleGalleryFilter(false)" title="Schovat filtr (zůstane aktivní)" style="width:100%;margin-top:10px;background:var(--accent2);border:none;border-radius:8px;color:#0f3460;padding:11px;font-size:14px;font-weight:800;cursor:pointer;">🔼 Skrýt filtr a vidět fotky</button>
   </div>
   <div id="gallery-body">
     <div id="gallery-empty" style="text-align:center;color:var(--text2);padding:40px 20px;font-size:14px;">Zatím žádné fotky</div>
