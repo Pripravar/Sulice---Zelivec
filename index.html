@@ -2524,7 +2524,7 @@ function initMap() {
     version: '1.3.0'
   });
 
-  map.on('dragstart',function(){gpsCentering=false;});
+  map.on('movestart',function(){ if(!window._gpsSelfMove) gpsCentering=false; });   // #98a: cizí pohyb mapy (⌂/skok na pin) vypne centrování
   map.on('click',function(){closeLayersPanel();});
 
   // Při touch na PDF/prop panelu - vypni Leaflet aby nepřebíral pinch-zoom
@@ -3586,12 +3586,12 @@ function updateGPS(lat,lng) {
   else{gpsMarker.setLatLng([lat,lng]); gpsMarker.setIcon(icon);}
   var n=nearestOnRoute(lat,lng);
   document.getElementById('km-display').textContent='km '+fmtKm(gpxCumToRealKm(n.cum));
-  if(gpsCentering) map.setView([lat,lng],map.getZoom());
+  if(gpsCentering){ window._gpsSelfMove=true; map.setView([lat,lng],map.getZoom()); setTimeout(function(){ window._gpsSelfMove=false; },0); }
 }
 
 function centerGPS() {
   if(!gpsActive){document.getElementById('lyr-gps').checked=true;startGPS();}
-  else{gpsCentering=true;if(gpsMarker)map.setView(gpsMarker.getLatLng(),16);}
+  else{gpsCentering=true;if(gpsMarker){window._gpsSelfMove=true;map.setView(gpsMarker.getLatLng(),16);setTimeout(function(){window._gpsSelfMove=false;},0);}}
 }
 
 // ── VRSTVY ────────────────────────────
@@ -6622,6 +6622,7 @@ function rotatePhoto(dir){
 var _fsIndex = -1;        // pozice v galleryCurrentItems (procházení tažením), -1 = mimo galerii
 
 function openPhotoFs(src, firebaseKey, item) {
+  var _br=document.getElementById('btn-report'); if(_br){ _br.dataset.prevDisp=_br.style.display||''; _br.style.display='none'; }   // #98b: beruška nepřekáží šipce zpět
   var url = (typeof src === 'string') ? src : src.src;
   var it = item || (typeof src === 'object' ? src : null);
   // POSLEDNÍ BRÁNA – chytí proklik z mapy, z poznámky, z úkolu i přímé volání z konzole.
@@ -6994,6 +6995,7 @@ function showPhotoOnMap(){
 function closePhotoFs() {
   closeFsMenu();
   document.getElementById('photo-fs').classList.remove('open');
+  var _brR=document.getElementById('btn-report'); if(_brR){ _brR.style.display=_brR.dataset.prevDisp||''; }   // #98b: vrať berušku
   _photoFsKey = null;
   _photoFsItem = null;
   _fsIndex = -1;
@@ -8077,7 +8079,7 @@ function toggleGpsBtn() {
   } else if(!gpsCentering) {
     // GPS je zapnutá ale necentruje → centruj
     gpsCentering=true;
-    if(gpsMarker) map.setView(gpsMarker.getLatLng(),16);
+    if(gpsMarker){ window._gpsSelfMove=true; map.setView(gpsMarker.getLatLng(),16); setTimeout(function(){ window._gpsSelfMove=false; },0); }
     showToast('Centrování GPS zapnuto',1200);
   } else {
     // GPS centruje → vypni GPS
@@ -9387,7 +9389,7 @@ function _photoBadge(){
   }
   if(failing){
     el.style.display = 'none';
-    w.innerHTML = '⚠️ '+photoPending+' '+(photoPending===1?'fotka se zatím NEULOŽILA':'fotek se zatím NEULOŽILO')+' na server – zkouším to dál.<br>Fotky jsou bezpečně uložené v telefonu a nahrají se samy, až server pojede. <b>Neztratí se.</b>';
+    w.innerHTML = '⚠️ '+photoPending+' '+_czPlural(photoPending,'fotka se zatím NEULOŽILA','fotky se zatím NEULOŽILY','fotek se zatím NEULOŽILO')+' na server – zkouším to dál.<br>Fotky jsou bezpečně uložené v telefonu a nahrají se samy, až server pojede. <b>Neztratí se.</b>';
     w.style.display = 'block';
   } else {
     w.style.display = 'none';
@@ -9395,6 +9397,8 @@ function _photoBadge(){
     else { el.style.display = 'none'; }
   }
 }
+// #97a: české skloňování počtu (1→fotku, 2–4→fotky, 0/5+→fotek)
+function _czPlural(n, one, few, many){ n=Math.abs(n); if(n===1) return one; if(n>=2 && n<=4) return few; return many; }
 // ── Perzistentní fronta fotek v IndexedDB – fotka se NIKDY neztratí (opatření #96) ──
 var _photoIDB = null;
 function _photoIDBOpen(){
@@ -9416,7 +9420,7 @@ function _restorePhotoQueue(){
     if(!jobs || !jobs.length) return;
     var added=0;
     jobs.forEach(function(j){ if(j && j.compressed && j.t!=null && !photoQueue.some(function(q){return q.t===j.t;})){ j.tries=0; photoQueue.push(j); photoPending++; added++; } });
-    if(added){ _photoBadge(); if(!photoUploading) _processPhotoQueue(); showToast('📤 Dohrávám '+added+' '+(added===1?'fotku':'fotek')+' z minula…', 3500); }
+    if(added){ _photoBadge(); if(!photoUploading) _processPhotoQueue(); showToast('📤 Dohrávám '+added+' '+_czPlural(added,'fotku','fotky','fotek')+' z minula…', 3500); }
   });
 }
 function enqueuePhoto(compressed, meta, yes){
@@ -11539,11 +11543,7 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
-<<<<<<< HEAD
   { datum:'2026-08-19', verze:'v157', text:'🔍 Filtr v galerii jde teď jasně schovat: po otevření se tlačítko změní na „🔼 Skrýt filtr" (žlutě) a v panelu je i velké tlačítko „Skrýt filtr a vidět fotky". Filtr přitom zůstane zapnutý (u schovaného svítí u tlačítka „•"), takže procházíš fotky přes celou obrazovku a nemusíš mít filtr otevřený. 👥 Admin: klik na svoje jméno teď rovnou otevře Správu uživatelů (žádné „OK/Zrušit"); odhlášení je tlačítkem 🚪 přímo v tabulce. Díky Tomášovi za podněty. 🐞' },
-=======
-  { datum:'2026-08-19', verze:'v157', text:'🔍 Filtr v galerii jde teď jasně schovat: po otevření se tlačítko změní na „🔼 Skrýt filtr" (žlutě) a v panelu je i velké tlačítko „Skrýt filtr a vidět fotky". Filtr přitom zůstane zapnutý (u schovaného svítí u tlačítka „•"), takže procházíš fotky přes celou obrazovku a nemusíš mít filtr otevřený. Díky Tomášovi za podnět. 🐞' },
->>>>>>> a5191615c4328da346cf92949e394a7820e59e87
   { datum:'2026-08-11', verze:'v156', text:'🧪 V Kvalitě/KZP teď nahráváš PDF přímo z telefonu – nahoře vybereš, CO nahráváš (KZP / 📋 TePř / protokol / jiný dokument) a PDF se bezpečně uloží do Firebase (otevřou ho jen přihlášení). Odkaz na PDF zůstává jako druhá možnost. 🐞 Berušku (Nahlásit chybu) jde teď chytit a přetáhnout kamkoli – kam si ji dáš, tam zůstane.' },
   { datum:'2026-08-06', verze:'v155', text:'🧭 Při procházení 360° fotek je vlevo dole malá mapka s tvojí polohou a kuželem, kam se zrovna díváš (jako Street View – otáčí se, jak se rozhlížíš). 🔄 U fotek přibyla tlačítka na otočení (↺ ↻ vpravo nahoře) – když je fotka na výšku bokem, otočíš ji; uloží se to a stáhne se pak správně orientovaná i s razítkem.' },
   { datum:'2026-08-06', verze:'v154', text:'🗒️ Poznámkový blok má novou ikonu (aby se nepletl s evidencí poznámek) a je i nahoře v liště. Přibylo v něm 🔍 hledání (hledá v nadpisu i textu VŠECH poznámek), filtr (soukromé/veřejné) a řazení (nejnovější/nejstarší/A–Z). 🐞 V přijatých hlášeních (beruška) je taky filtr (typ, stav) a řazení.' },
