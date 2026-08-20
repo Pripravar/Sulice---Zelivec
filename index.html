@@ -9600,7 +9600,7 @@ function _processPhotoQueue(){
           var entry = {
             url: visibleUrl, stamped: !!yes, so: (meta.so || ''),
             soList: (meta.soList && meta.soList.length ? meta.soList : (meta.so ? [meta.so] : [])),
-            km: meta.km, author: meta.author, uid: (window.currentUser ? window.currentUser.uid : ''),
+            km: meta.km, author: meta.author, uid: (window.currentUser ? window.currentUser.uid : ''), zdrojFoto: 'app',
             lat: meta.lat, lng: meta.lng,
             time: new Date(t).toLocaleString('cs-CZ'), date: new Date(t).toLocaleDateString('cs-CZ'), ts: t
           };
@@ -9875,6 +9875,7 @@ function submitLibImport(){
                 soList: (_soFinal ? [_soFinal] : []),
                 km: kmDisp, author: author,
                 uid: window.currentUser.uid,
+                zdrojFoto: 'import',
                 time: dObj.toLocaleString('cs-CZ'),
                 date: dObj.toLocaleDateString('cs-CZ'),
                 ts: dObj.getTime() + idx
@@ -10249,6 +10250,14 @@ function _galleryItemEl(item) {
       };
     })(item);
     div.appendChild(badge);
+  }
+  // #94: zdroj fotky – 📸 focené appkou / 📥 import z telefonu (vlevo dole, ať se nepere s ostatními)
+  if(!item.noteId && item.zdrojFoto){
+    var srcB = document.createElement('div');
+    srcB.textContent = (item.zdrojFoto==='import' ? '\uD83D\uDCE5' : '\uD83D\uDCF8');
+    srcB.title = (item.zdrojFoto==='import' ? 'Import z telefonu' : 'Focené aplikací');
+    srcB.style.cssText = 'position:absolute;bottom:4px;left:4px;font-size:11px;line-height:1;padding:2px 5px;border-radius:6px;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,.45);background:'+(item.zdrojFoto==='import'?'#f59e0b':'#0891b2')+';';
+    div.appendChild(srcB);
   }
   if(item.zdroj === 'SUB' || item.sub){
     div.classList.add('gallery-sub');
