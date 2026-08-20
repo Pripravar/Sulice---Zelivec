@@ -43,6 +43,8 @@
 <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
+    /* Viditelné zaškrtnutí práv i na iOS (tmavý motiv) – bez toho je fajfka neviditelná */
+    input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 :root {
   --bg:#1a1a2e; --panel:#16213e; --panel2:#0f3460;
   --accent:#e94560; --accent2:#f5a623;
@@ -5822,11 +5824,39 @@ function openPano360(key){
   var el = document.getElementById('pano-fs'); if(el) el.style.display = 'flex';
   _panoShow(idx);
 }
+// #95: přepnutí dne z otevřené 360° fotky – skok na nejbližší fotku téhož místa v jiný den
+function _renderPanoDateSwitch(){
+  var sel=document.getElementById('pano-date-sel'); if(!sel) return;
+  var dates=(typeof panoDates==='function')?panoDates():[];
+  if(dates.length<2){ sel.style.display='none'; return; }
+  sel.innerHTML=dates.map(function(d){ var n=_panoItemsForDate(d).length; return '<option value="'+d+'"'+(d===panoActiveDate?' selected':'')+'>\uD83D\uDCC5 '+panoFmtDatum(d)+' ('+n+')</option>'; }).join('');
+  sel.value=panoActiveDate; sel.style.display='';
+}
+function _panoNearestInDate(datum, lat, lon){
+  var arr=_panoItemsForDate(datum), best=null, bd=Infinity;
+  arr.forEach(function(o){ if(typeof o.lat!=='number'||typeof o.lon!=='number') return; var dLat=(o.lat-lat), dLon=(o.lon-lon)*Math.cos(lat*Math.PI/180), d=dLat*dLat+dLon*dLon; if(d<bd){ bd=d; best=o; } });
+  return best;
+}
+function panoSwitchDate(d){
+  if(!d || d===panoActiveDate) return;
+  var cur=_panoList[_panoIdx];
+  if(!cur || typeof cur.lat!=='number' || typeof cur.lon!=='number'){ showToast('Tahle fotka nemá polohu pro přesun',2200); return; }
+  var nb=_panoNearestInDate(d, cur.lat, cur.lon);
+  if(!nb){ showToast('V tomto dni nejsou fotky s polohou',2200); return; }
+  panoActiveDate=d;
+  renderPano360Markers();
+  if(typeof rebuildPanoDateButtons==='function') rebuildPanoDateButtons();
+  var idx=-1; for(var i=0;i<_panoList.length;i++){ if(_panoList[i]._key===nb._key){ idx=i; break; } }
+  if(idx<0) return;
+  showToast('\uD83D\uDCC5 '+panoFmtDatum(d),1200);
+  _panoShow(idx);
+}
 function _panoShow(idx){
   if(idx < 0 || idx >= _panoList.length) return;
   _panoIdx = idx;
   var r = _panoList[idx];
   try { _panoMiniInit(); _panoMiniUpdate(r); _panoMiniStartCompass(r); } catch(e){}
+  try { _renderPanoDateSwitch(); } catch(e){}   // #95: naplň přepínač dne
   var km = '';
   try { if(typeof gpsToKm === 'function'){ var k = gpsToKm(r.lat, r.lon); if(k!=null && !isNaN(k)) km = ' · ' + fmtKm(k); } } catch(e){}
   var inf = document.getElementById('pano-fs-info');
@@ -10258,7 +10288,7 @@ function _galleryItemEl(item) {
   if(item.sdilenoInvestor && !(item.zdroj === 'INVESTOR' || item.investor)){
     div.classList.add('gallery-shared-inv');
     var shI = document.createElement('div');
-    shI.className = 'gallery-shared-badge gallery-shared-badge-inv'; shI.textContent = '↗ INV';
+    shI.className = 'gallery-shared-badge gallery-shared-badge-inv'; shI.textContent = '↗ TDS';
     shI.style.top = (item.sdilenoSub ? '24px' : '4px');   // ať se nepřekrývá s SUB odznakem
     div.appendChild(shI);
   }
@@ -17449,6 +17479,7 @@ function copyDiaryExport(){
   <div id="pano-minimap"></div>
   <div id="pano-fs-info" style="position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;max-width:70%;background:rgba(0,0,0,0.6);color:#fff;font-size:13px;line-height:1.35;padding:6px 12px;border-radius:12px;z-index:5;pointer-events:none;"></div>
   <button onclick="closePano360()" title="Zavřít" style="position:absolute;top:calc(8px + env(safe-area-inset-top));right:10px;width:44px;height:44px;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:10px;font-size:22px;cursor:pointer;z-index:6;">✕</button>
+  <select id="pano-date-sel" onchange="panoSwitchDate(this.value)" title="Přepnout na jiný den – skočí na nejbližší 360° fotku k tvé poloze" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:6;background:rgba(15,20,40,.92);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:6px 10px;font-size:13px;max-width:80vw;pointer-events:auto;"></select>
   <!-- Svislá navigace na střed: nahoru = vpřed po silnici, dolů = zpět. Dvojšipky = skok o 4. -->
   <button id="pano-fast-fwd"  class="pano-btn" onclick="panoNav(4)"  title="Rychle vpřed (+4)">⏫</button>
   <button id="pano-next"      class="pano-btn" onclick="panoNav(1)"  title="Vpřed">▲</button>
