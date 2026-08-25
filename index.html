@@ -12697,7 +12697,8 @@ function _chatWatchChannels(){
   });
 }
 
-function _chatUnread(id){ return (window._chatLastTs[id]||0) > ((window._chatSeen&&window._chatSeen[id])||0) ? 1 : 0; }
+function _chatSeenTs(id){ var a=(window._chatSeen&&window._chatSeen[id])||0, b=0; try{ b=+(localStorage.getItem('chatSeen_'+id)||0); }catch(e){} return Math.max(a,b); }
+function _chatUnread(id){ return (window._chatLastTs[id]||0) > _chatSeenTs(id) ? 1 : 0; }
 function _updateChatBadge(){
   var n=0; _myChatChannels().forEach(function(k){ n += _chatUnread(k.id); });
   var b=document.getElementById('chat-badge'); if(!b) return;
@@ -12812,10 +12813,7 @@ function _notifyChat(id, text, mentions){
   db.ref('notifikace_fronta/'+rec.id).set(rec).catch(function(e){ console.warn('chat notif:', e); });
 }
 
-function _chatMarkSeen(id){
-  var uid=window.currentUser?window.currentUser.uid:null; if(!uid) return;
-  db.ref('uzivatele/'+uid+'/chatSeen/'+id).set(Date.now());
-}
+function _chatMarkSeen(id){ var t=Date.now(); try{ localStorage.setItem('chatSeen_'+id, String(t)); }catch(e){} if(typeof _updateChatBadge==='function') _updateChatBadge(); var uid=window.currentUser?window.currentUser.uid:null; if(!uid) return; db.ref('uzivatele/'+uid+'/chatSeen/'+id).set(t).catch(function(){}); }
 
 // ── Nová / úprava skupiny ──────────────────────────────────────────
 function openNewChatGroup(){
@@ -13054,6 +13052,7 @@ function updateTaskBadge() {
 // (Fresh mark nastavuje service worker při doručení pushe; tady ho po otevření sklidíme.)
 function clearAppBadgeOnOpen(){
   try{ if(navigator.clearAppBadge) navigator.clearAppBadge(); }catch(e){}
+  try{ if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'clearBadge'}); }catch(e){}
 }
 document.addEventListener('visibilitychange', function(){ if(!document.hidden) clearAppBadgeOnOpen(); });
 window.addEventListener('focus', clearAppBadgeOnOpen);
