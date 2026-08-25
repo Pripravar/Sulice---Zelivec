@@ -1158,7 +1158,12 @@ document.addEventListener('touchend', function(e){
 <body>
 
 <!-- ═════════════ AUTH GATE - viditelný dokud uživatel není přihlášen ═════════════ -->
-<div id="auth-gate">
+<!-- Úvodní „Načítám" – drží obrazovku, dokud Firebase neobnoví přihlášení (jinak se úvodní obrazovka ukáže při každém otevření). -->
+<div id="auth-splash" style="position:fixed;inset:0;z-index:9500;background:linear-gradient(135deg,#0f3460 0%,#16213e 60%,#1a1a2e 100%);display:flex;align-items:center;justify-content:center;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="text-align:center;opacity:.92;"><div style="font-size:40px;">🗺️</div><div style="margin-top:12px;font-size:14px;opacity:.8;">Načítám…</div></div>
+</div>
+<script>setTimeout(function(){ if(!window.currentUser && !window.subMode){ var s=document.getElementById("auth-splash"); if(s) s.style.display="none"; var g=document.getElementById("auth-gate"); if(g) g.classList.remove("hide"); } }, 8000);</script>
+<div id="auth-gate" class="hide">
   <div class="auth-box">
     <h2>🗺️ Sulice – Želivec</h2>
 
@@ -12339,6 +12344,7 @@ function _subDownload(url, ts){
 
 // Hlavní auth listener - běží automaticky po načtení stránky
 if(fbAuth) fbAuth.onAuthStateChanged(function(user) {
+  var __s=document.getElementById("auth-splash"); if(__s) __s.style.display="none";   // auth vyřešen → schovej „Načítám"
   if(!authConfigOk()) return; // skip - legacy mode
   if(user) {
     // Pokud je uživatel přihlášený přes telefon a NEMÁ ještě jméno (první přihlášení),
@@ -13696,6 +13702,10 @@ function registerServiceWorker() {
 // ── PUSH: FCM token získání + uložení ───────────────────────────────
 function setupFcmIfPossible() {
   if(!authConfigOk()) return;
+  if(typeof isIos==='function' && isIos() && typeof isStandalone==='function' && !isStandalone()){
+    // iOS: Web Push funguje jen v PWA přidané na plochu (iOS 16.4+). Mimo ni FCM nespouštět – ukáže se výzva „Přidat na plochu".
+    return;
+  }
   if(!('serviceWorker' in navigator) || !('Notification' in window)) {
     console.warn('Notifikace nejsou v tomto prohlížeči podporovány.');
     return;
