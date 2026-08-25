@@ -79,6 +79,13 @@ exports.sendTaskNotifications = functions
     }
 
     // Odstranit duplicity
+    // typ:'chat' – zpráva v interním chatu; příjemci = členové kanálu (bez pisatele), přijdou v záznamu
+    if(rec.typ === 'chat') {
+      title = '💬 ' + (rec.kanalNazev || 'Chat');
+      body = (rec.zadalName || 'Někdo') + ': ' + (rec.komentText || '');
+      recipientUids = (rec.recipientUids || []).filter(Boolean);
+    }
+
     recipientUids = [...new Set(recipientUids)];
 
     if(recipientUids.length === 0) {

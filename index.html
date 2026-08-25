@@ -847,6 +847,9 @@ body.submode #user-badge, body.submode #btn-layers, body.submode #btn-standalone
 #btn-tasks { position:relative; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:6px 10px; font-size:15px; cursor:pointer; }
 #btn-tasks .task-badge { position:absolute; top:-5px; right:-5px; background:var(--accent); color:#fff; font-size:10px; font-weight:700; border-radius:9px; padding:1px 5px; min-width:16px; text-align:center; display:none; }
 #btn-tasks .task-badge.show { display:block; }
+#btn-chat { position:relative; }
+#btn-chat .task-badge { position:absolute; top:-5px; right:-5px; background:#e94560; color:#fff; font-size:10px; font-weight:700; border-radius:9px; padding:1px 5px; min-width:16px; text-align:center; display:none; }
+#btn-chat .task-badge.show { display:block; }
 
 /* Panel úkolů – posuvný shora */
 #tasks-panel { position:fixed; top:0; left:0; right:0; bottom:0; z-index:3500; background:var(--bg); display:none; flex-direction:column; }
@@ -1254,6 +1257,56 @@ document.addEventListener('touchend', function(e){
   </div>
 </div>
 
+<!-- ══════════ CHAT (Fáze 2) – interní chat jako WhatsApp ══════════ -->
+<div id="chat-modal" style="display:none;position:fixed;inset:0;z-index:5300;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:0;">
+  <div style="background:var(--panel);border-radius:0;max-width:520px;width:100%;height:100%;max-height:100vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+
+    <!-- SEZNAM KANÁLŮ -->
+    <div id="chat-list-view" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <div id="chat-title" style="flex:1;font-size:16px;font-weight:700;color:var(--accent);">💬 Chat</div>
+        <button onclick="openNewChatGroup()" title="Nová skupina" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;">➕ Skupina</button>
+        <button onclick="closeChatPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+      </div>
+      <div id="chat-list" style="padding:6px 0;overflow-y:auto;flex:1;"></div>
+    </div>
+
+    <!-- VLÁKNO KANÁLU -->
+    <div id="chat-thread-view" style="display:none;flex-direction:column;flex:1;min-height:0;">
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <button onclick="chatBackToList()" style="background:none;border:none;color:var(--accent2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">‹</button>
+        <div id="chat-thread-title" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Kanál</div>
+        <button id="chat-members-btn" onclick="openChatMembers()" title="Členové skupiny" style="display:none;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">👥</button>
+        <button onclick="closeChatPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">✕</button>
+      </div>
+      <div id="chat-messages" style="padding:10px 12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;"></div>
+      <div style="display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;align-items:flex-end;">
+        <input id="chat-input" type="text" placeholder="Napiš zprávu… (@ označí osobu)" autocomplete="off" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMessage();}" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:20px;color:var(--text);padding:11px 15px;font-size:15px;">
+        <button onclick="sendChatMessage()" style="background:var(--accent);border:none;border-radius:50%;color:#fff;width:44px;height:44px;font-size:18px;cursor:pointer;flex-shrink:0;">➤</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Nová / úprava skupiny -->
+<div id="chat-newgrp-modal" style="display:none;position:fixed;inset:0;z-index:5400;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:420px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 8px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div id="chat-newgrp-title" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">➕ Nová skupina</div>
+      <button onclick="closeNewChatGroup()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="padding:12px 16px 0;flex-shrink:0;">
+      <input id="chat-newgrp-name" type="text" placeholder="Název skupiny (např. Geodeti, SO 201…)" maxlength="60" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 12px;font-size:14px;box-sizing:border-box;">
+      <div style="font-size:12px;color:var(--text2);margin:10px 2px 4px;">Kdo bude ve skupině:</div>
+    </div>
+    <div id="chat-newgrp-users" style="padding:0 16px;overflow-y:auto;flex:1;"></div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;">
+      <button onclick="createChatGroup()" style="width:100%;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">Uložit skupinu</button>
+    </div>
+  </div>
+</div>
+
 <!-- 🏆 Žebříček aktivity (soutěž M - SILNICE) -->
 <div id="body-modal" style="display:none;position:fixed;inset:0;z-index:5200;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
@@ -1329,6 +1382,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-activity" onclick="openActivity()" title="Co se děje – aktivita v aplikaci" style="position:relative;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📢<span class="task-badge" id="activity-badge" style="display:none;">0</span></button>
   <button id="btn-body" onclick="openBody()" title="Žebříček aktivity – soutěž M - SILNICE" style="position:relative;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🏆<span class="task-badge" id="body-badge" style="display:none;background:#f5a623;color:#0f3460;min-width:16px;">0</span></button>
   <button id="btn-tasks" onclick="openTasksPanel()" title="Úkoly" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">✅<span class="task-badge" id="task-badge">0</span></button>
+  <button id="btn-chat" onclick="openChatPanel()" title="Chat stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">💬<span class="task-badge" id="chat-badge">0</span></button>
   <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
   <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
   <button id="btn-zkousky" onclick="openZkouskyPanel()" title="Zkoušky na stavbě (laboratorní průvodka)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔬</button>
@@ -12490,6 +12544,7 @@ function loadAllUsers() {
       return;
     }
     applyPermsToUI();   // živě promítni změnu práv (admin zapnul/vypnul funkci)
+    if(window.currentUser && typeof initChat==='function') initChat();   // chat: nastartuj listenery po přihlášení
     if(typeof updateBodyBadge==='function') updateBodyBadge();   // žebříček: změna týmu/členů
     // Pokud je otevřený admin panel, obnov ho
     var am = document.getElementById('user-admin-modal');
@@ -12569,6 +12624,249 @@ function deleteTaskFromFirebase(taskId, cb) {
     hideSync();
     showToast('❌ Chyba mazání', 2500);
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CHAT (Fáze 2) – interní chat jako WhatsApp
+   Obecný kanál (všichni) + uživatelské skupiny (zakládá kdokoli), realtime,
+   @zmínky, push na členy kanálu, badge nepřečtených.
+   Model:
+     /chat_kanaly/{id} = {typ:'obecny'|'skupina', nazev, vytvorilUid, vytvorilName, ts, ucastnici:{uid:true}}
+     /chat_zpravy/{id}/{msgId} = {uid, name, text, ts, mentions?}
+     uzivatele/{uid}/chatSeen/{id} = ts (naposledy přečteno)
+   ═══════════════════════════════════════════════════════════════════ */
+window._chatChannels   = {};   // id -> meta kanálu
+window._chatLastTs      = {};  // id -> ts poslední zprávy
+window._chatLastPreview = {};  // id -> náhled poslední zprávy
+window._chatSeen        = {};  // id -> ts naposledy přečteno (z DB)
+window._chatWatchers    = {};  // id -> true (listener na poslední zprávu už běží)
+window._chatOpenId      = null;// aktuálně otevřený kanál (thread)
+window._chatMsgRef      = null;// ref na listener zpráv otevřeného kanálu
+window._chatMsgCb       = null;
+window._chatEditGroupId = null;// když upravujeme existující skupinu
+var _chatInited = false;
+
+function initChat(){
+  if(_chatInited || !window.currentUser) return;
+  _chatInited = true;
+  var uid = window.currentUser.uid;
+  // Obecný kanál – vytvořit idempotentně (jen když ještě není)
+  db.ref('chat_kanaly/obecny').transaction(function(cur){
+    if(cur) return cur;
+    return {typ:'obecny', nazev:'Obecný – celá stavba', vytvorilUid:'system', vytvorilName:'', ts: Date.now()};
+  });
+  // Seznam kanálů
+  db.ref('chat_kanaly').on('value', function(snap){
+    window._chatChannels = snap.val() || {};
+    _chatWatchChannels();
+    if(_chatModalOpen() && !window._chatOpenId) _renderChatList();
+    _updateChatBadge();
+  });
+  // Moje „seen"
+  db.ref('uzivatele/'+uid+'/chatSeen').on('value', function(snap){
+    window._chatSeen = snap.val() || {};
+    _updateChatBadge();
+    if(_chatModalOpen() && !window._chatOpenId) _renderChatList();
+  });
+}
+function _chatModalOpen(){ var m=document.getElementById('chat-modal'); return m && m.style.display==='flex'; }
+
+// Kanály, kterých jsem členem (obecný = všichni)
+function _myChatChannels(){
+  var uid = window.currentUser ? window.currentUser.uid : null, out = [];
+  Object.keys(window._chatChannels||{}).forEach(function(id){
+    var k = window._chatChannels[id]; if(!k) return;
+    if(k.typ==='obecny' || (k.ucastnici && k.ucastnici[uid])){ var o={id:id}; for(var p in k){ o[p]=k[p]; } out.push(o); }
+  });
+  out.sort(function(a,b){ return (window._chatLastTs[b.id]||b.ts||0) - (window._chatLastTs[a.id]||a.ts||0); });
+  return out;
+}
+
+// Listener na poslední zprávu každého mého kanálu (badge + náhled)
+function _chatWatchChannels(){
+  _myChatChannels().forEach(function(k){
+    if(window._chatWatchers[k.id]) return;
+    window._chatWatchers[k.id] = true;
+    db.ref('chat_zpravy/'+k.id).orderByChild('ts').limitToLast(1).on('value', function(snap){
+      var last=0, prev='';
+      snap.forEach(function(ch){ var m=ch.val()||{}; last=m.ts||0; prev=(m.name?(m.name+': '):'')+(m.text||''); });
+      window._chatLastTs[k.id]=last; window._chatLastPreview[k.id]=prev;
+      _updateChatBadge();
+      if(_chatModalOpen() && !window._chatOpenId) _renderChatList();
+    });
+  });
+}
+
+function _chatUnread(id){ return (window._chatLastTs[id]||0) > ((window._chatSeen&&window._chatSeen[id])||0) ? 1 : 0; }
+function _updateChatBadge(){
+  var n=0; _myChatChannels().forEach(function(k){ n += _chatUnread(k.id); });
+  var b=document.getElementById('chat-badge'); if(!b) return;
+  b.textContent = n>99?'99+':n; b.classList.toggle('show', n>0);
+}
+
+function openChatPanel(){
+  if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
+  initChat();
+  document.getElementById('chat-modal').style.display='flex';
+  window._chatOpenId=null;
+  _renderChatList();
+}
+function closeChatPanel(){
+  var m=document.getElementById('chat-modal'); if(m) m.style.display='none';
+  _chatCloseThread();
+}
+
+function _renderChatList(){
+  var lv=document.getElementById('chat-list-view'), tv=document.getElementById('chat-thread-view');
+  if(lv) lv.style.display='flex'; if(tv) tv.style.display='none';
+  var box=document.getElementById('chat-list'); if(!box) return;
+  var chans=_myChatChannels(), html='';
+  chans.forEach(function(k){
+    var unread=_chatUnread(k.id);
+    var prev=window._chatLastPreview[k.id]||'';
+    var icon=k.typ==='obecny'?'📣':'👥';
+    html+='<button onclick="openChatThread(\''+k.id+'\')" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:12px 16px;cursor:pointer;">'
+      +'<div style="width:40px;height:40px;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">'+icon+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(k.nazev||'Kanál')+'</div>'
+        +'<div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(prev||'Zatím žádné zprávy')+'</div>'
+      +'</div>'
+      +(unread?'<span style="width:11px;height:11px;border-radius:50%;background:#e94560;flex-shrink:0;"></span>':'')
+      +'</button>';
+  });
+  box.innerHTML = html || '<div style="color:var(--text2);padding:24px;text-align:center;">Zatím žádné kanály</div>';
+}
+
+function openChatThread(id){
+  window._chatOpenId=id;
+  var k=window._chatChannels[id]||{};
+  var lv=document.getElementById('chat-list-view'), tv=document.getElementById('chat-thread-view');
+  if(lv) lv.style.display='none'; if(tv) tv.style.display='flex';
+  document.getElementById('chat-thread-title').textContent=(k.typ==='obecny'?'📣 ':'👥 ')+(k.nazev||'Kanál');
+  var mb=document.getElementById('chat-members-btn'); if(mb) mb.style.display=(k.typ==='skupina')?'inline-block':'none';
+  var box=document.getElementById('chat-messages'); if(box) box.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px;">Načítám…</div>';
+  _chatCloseThread(true);
+  window._chatMsgRef=db.ref('chat_zpravy/'+id).orderByChild('ts').limitToLast(300);
+  window._chatMsgCb=function(snap){
+    var msgs=[]; snap.forEach(function(ch){ var m=ch.val()||{}; m._id=ch.key; msgs.push(m); });
+    _renderChatMessages(msgs);
+    _chatMarkSeen(id);
+  };
+  window._chatMsgRef.on('value', window._chatMsgCb);
+}
+function _chatCloseThread(keepId){
+  if(window._chatMsgRef && window._chatMsgCb){ try{ window._chatMsgRef.off('value', window._chatMsgCb); }catch(e){} }
+  window._chatMsgRef=null; window._chatMsgCb=null;
+  if(!keepId) window._chatOpenId=null;
+}
+function chatBackToList(){ _chatCloseThread(); _renderChatList(); }
+
+function _chatFormatText(t){
+  return escapeHtml(t).replace(/@([\p{L}][\p{L}\w]*)/gu, '<b>@$1</b>');
+}
+function _renderChatMessages(msgs){
+  var box=document.getElementById('chat-messages'); if(!box) return;
+  var me=window.currentUser?window.currentUser.uid:null, html='', lastDay='';
+  msgs.forEach(function(m){
+    var mine=m.uid===me, d=new Date(m.ts||0), day=d.toLocaleDateString('cs-CZ');
+    if(day!==lastDay){ html+='<div style="text-align:center;margin:10px 0;"><span style="background:var(--panel2);color:var(--text2);font-size:11px;padding:3px 10px;border-radius:10px;">'+day+'</span></div>'; lastDay=day; }
+    var time=d.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
+    html+='<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:3px 0;">'
+      +'<div style="max-width:80%;background:'+(mine?'var(--accent)':'var(--panel2)')+';color:'+(mine?'#fff':'var(--text)')+';border-radius:14px;padding:7px 12px;">'
+      +(mine?'':'<div style="font-size:11px;font-weight:700;color:var(--accent2);margin-bottom:2px;">'+escapeHtml(m.name||'?')+'</div>')
+      +'<div style="font-size:14px;line-height:1.35;white-space:pre-wrap;word-break:break-word;">'+_chatFormatText(m.text||'')+'</div>'
+      +'<div style="font-size:10px;opacity:.65;text-align:right;margin-top:2px;">'+time+'</div>'
+      +'</div></div>';
+  });
+  box.innerHTML = html || '<div style="color:var(--text2);text-align:center;padding:20px;">Napiš první zprávu 👋</div>';
+  box.scrollTop=box.scrollHeight;
+}
+
+function sendChatMessage(){
+  var inp=document.getElementById('chat-input'); if(!inp) return;
+  var text=(inp.value||'').trim(); if(!text) return;
+  var id=window._chatOpenId, u=window.currentUser; if(!id || !u) return;
+  var mentions=(typeof _extractMentions==='function')?_extractMentions(text):[];
+  var msg={uid:u.uid, name:u.name||'', text:text.slice(0,2000), ts:Date.now()};
+  if(mentions.length) msg.mentions=mentions;
+  db.ref('chat_zpravy/'+id).push().set(msg).then(function(){
+    inp.value=''; _hideMentionPop(); _chatMarkSeen(id); _notifyChat(id, text, mentions);
+  }).catch(function(e){ showToast('Zpráva se neodeslala: '+(e.message||e),3000); });
+}
+
+function _notifyChat(id, text, mentions){
+  var k=window._chatChannels[id]||{}, me=window.currentUser?window.currentUser.uid:null, uids=[];
+  if(k.typ==='obecny'){
+    Object.keys(window.allUsers||{}).forEach(function(uid){ var uu=window.allUsers[uid]; if(uu && uu.name && !uu.blocked) uids.push(uid); });
+  } else if(k.ucastnici){
+    Object.keys(k.ucastnici).forEach(function(uid){ if(k.ucastnici[uid]) uids.push(uid); });
+  }
+  uids=uids.filter(function(x){ return x && x!==me; });
+  uids=uids.filter(function(x,i){ return uids.indexOf(x)===i; });
+  if(!uids.length) return;
+  var rec={
+    id:'n_'+Date.now()+'_'+Math.random().toString(36).substr(2,5),
+    typ:'chat', recipientUids:uids, kanalId:id, kanalNazev:k.nazev||'Chat',
+    komentText:text.slice(0,140), zadalName:(window.currentUser&&window.currentUser.name)||'', time:Date.now()
+  };
+  db.ref('notifikace_fronta/'+rec.id).set(rec).catch(function(e){ console.warn('chat notif:', e); });
+}
+
+function _chatMarkSeen(id){
+  var uid=window.currentUser?window.currentUser.uid:null; if(!uid) return;
+  db.ref('uzivatele/'+uid+'/chatSeen/'+id).set(Date.now());
+}
+
+// ── Nová / úprava skupiny ──────────────────────────────────────────
+function openNewChatGroup(){
+  window._chatEditGroupId=null;
+  var t=document.getElementById('chat-newgrp-title'); if(t) t.textContent='➕ Nová skupina';
+  document.getElementById('chat-newgrp-name').value='';
+  _chatFillUserPicks({});
+  document.getElementById('chat-newgrp-modal').style.display='flex';
+}
+function openChatMembers(){
+  var id=window._chatOpenId, k=window._chatChannels[id]; if(!k || k.typ!=='skupina') return;
+  window._chatEditGroupId=id;
+  var t=document.getElementById('chat-newgrp-title'); if(t) t.textContent='👥 Upravit skupinu';
+  document.getElementById('chat-newgrp-name').value=k.nazev||'';
+  _chatFillUserPicks(k.ucastnici||{});
+  document.getElementById('chat-newgrp-modal').style.display='flex';
+}
+function _chatFillUserPicks(preselect){
+  var box=document.getElementById('chat-newgrp-users'); if(!box) return;
+  var me=window.currentUser?window.currentUser.uid:null, html='';
+  Object.keys(window.allUsers||{}).sort(function(a,b){
+    return ((window.allUsers[a]&&window.allUsers[a].name)||'').localeCompare((window.allUsers[b]&&window.allUsers[b].name)||'', undefined, {sensitivity:'base'});
+  }).forEach(function(uid){
+    var uu=window.allUsers[uid]; if(!uu||!uu.name||uu.blocked||uid===me) return;
+    var chk=preselect[uid]?' checked':'';
+    html+='<label style="display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border);cursor:pointer;">'
+      +'<input type="checkbox" value="'+uid+'"'+chk+' style="width:18px;height:18px;flex-shrink:0;">'
+      +'<span style="flex:1;">'+escapeHtml(uu.name)+(uu.firma?(' <span style="color:var(--text2);font-size:12px;">· '+escapeHtml(uu.firma)+'</span>'):'')+'</span></label>';
+  });
+  box.innerHTML = html || '<div style="color:var(--text2);padding:14px;">Žádní další uživatelé</div>';
+}
+function closeNewChatGroup(){ document.getElementById('chat-newgrp-modal').style.display='none'; window._chatEditGroupId=null; }
+function createChatGroup(){
+  var name=(document.getElementById('chat-newgrp-name').value||'').trim();
+  if(!name){ showToast('Zadej název skupiny',2000); return; }
+  var u=window.currentUser; if(!u) return;
+  var ucast={}; ucast[u.uid]=true;
+  var picks=document.querySelectorAll('#chat-newgrp-users input:checked');
+  for(var i=0;i<picks.length;i++){ ucast[picks[i].value]=true; }
+  if(window._chatEditGroupId){
+    var id=window._chatEditGroupId, k=window._chatChannels[id]||{};
+    if(k.vytvorilUid) ucast[k.vytvorilUid]=true;   // zakladatel zůstává vždy
+    db.ref('chat_kanaly/'+id).update({nazev:name.slice(0,60), ucastnici:ucast})
+      .then(function(){ closeNewChatGroup(); showToast('Skupina upravena',1500); if(window._chatOpenId===id) openChatThread(id); })
+      .catch(function(e){ showToast('Nepodařilo se: '+(e.message||e),3000); });
+  } else {
+    var ref=db.ref('chat_kanaly').push();
+    ref.set({typ:'skupina', nazev:name.slice(0,60), vytvorilUid:u.uid, vytvorilName:u.name||'', ts:Date.now(), ucastnici:ucast})
+      .then(function(){ closeNewChatGroup(); showToast('Skupina vytvořena',1500); openChatThread(ref.key); })
+      .catch(function(e){ showToast('Nepodařilo se: '+(e.message||e),3000); });
+  }
 }
 
 function sendTaskNotificationRequest(task, typ, extra) {
@@ -12747,8 +13045,19 @@ function updateTaskBadge() {
   if(!badge) return;
   badge.textContent = mine;
   badge.classList.toggle('show', mine > 0);
-  try{ if(navigator.setAppBadge){ if(mine>0) navigator.setAppBadge(mine); else if(navigator.clearAppBadge) navigator.clearAppBadge(); } }catch(e){}
+  // POZN.: Odznak na ikoně na ploše (setAppBadge) záměrně NEnastavujeme podle počtu úkolů.
+  // Ikona na ploše má ukazovat jen „přišlo něco nového" (nastaví service worker při pushi)
+  // a po otevření appky se maže (clearAppBadgeOnOpen). Počet úkolů je vidět jen uvnitř appky.
 }
+
+// Odznak na ikoně na ploše smažeme, jakmile uživatel appku otevře / vrátí se do ní.
+// (Fresh mark nastavuje service worker při doručení pushe; tady ho po otevření sklidíme.)
+function clearAppBadgeOnOpen(){
+  try{ if(navigator.clearAppBadge) navigator.clearAppBadge(); }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) clearAppBadgeOnOpen(); });
+window.addEventListener('focus', clearAppBadgeOnOpen);
+window.addEventListener('load', clearAppBadgeOnOpen);
 
 function openTasksPanel() {
   if(!window.currentUser) { showToast('Nejdřív se přihlas', 2000); return; }
@@ -13585,12 +13894,21 @@ function _onCommentInput(inp){
     var b=document.createElement('button');
     b.style.cssText='display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:10px 12px;font-size:13px;cursor:pointer;min-height:42px;';
     b.innerHTML='<b>@'+escapeHtml(c.name)+'</b>'+(c.firma?(' <span style="color:var(--text2);font-size:11px;">· '+escapeHtml(c.firma)+'</span>'):'');
-    b.onmousedown=function(e){ e.preventDefault(); _insertMention(inp, m.index, pos, c); };
+    // Na mobilu spolehlivě reaguj na dotyk i myš. preventDefault zabrání ztrátě
+    // fokusu (blur) dřív, než stihneme vložit zmínku. pointerdown pokrývá obojí.
+    var _fire=function(e){ e.preventDefault(); e.stopPropagation(); _insertMention(inp, m.index, pos, c); };
+    if(window.PointerEvent){ b.addEventListener('pointerdown', _fire); }
+    else { b.onmousedown=_fire; b.addEventListener('touchstart', _fire, {passive:false}); }
     pop.appendChild(b);
   });
   var r = inp.getBoundingClientRect();
-  pop.style.left = r.left+'px'; pop.style.width = r.width+'px'; pop.style.display='block';
-  pop.style.top = Math.max(6, r.top - pop.offsetHeight - 4) + 'px';   // nad inputem
+  pop.style.left  = Math.max(6, r.left)+'px';
+  pop.style.width = Math.min(r.width, window.innerWidth-12)+'px';
+  pop.style.display='block';
+  // Umísti nad input; když tam není místo (klávesnice / input u horního okraje), dej pod input.
+  var above = r.top - pop.offsetHeight - 4;
+  if(above >= 6){ pop.style.top = above+'px'; }
+  else { pop.style.top = Math.min(window.innerHeight - pop.offsetHeight - 6, r.bottom + 4) + 'px'; }
 }
 function _insertMention(inp, atIdx, cursorPos, c){
   var val = inp.value, tag = '@'+c.name+' ';
@@ -17544,9 +17862,9 @@ function copyDiaryExport(){
   <div id="photo-fs-info" style="display:none;position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;max-width:66%;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;line-height:1.35;padding:6px 12px;border-radius:12px;z-index:7;pointer-events:none;"></div>
   <button id="photo-fs-prev" onclick="event.stopPropagation();navigateFs(-1)" style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">‹</button>
   <button id="photo-fs-next" onclick="event.stopPropagation();navigateFs(1)" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);width:48px;height:64px;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;border:none;border-radius:10px;font-size:30px;cursor:pointer;">›</button>
-  <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:60px;bottom:calc(60px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.95);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:32vh;overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:6;border-top:1px solid rgba(255,255,255,0.12);"></div>
+  <div id="photo-fs-comment" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchmove="event.stopPropagation()" ontouchend="event.stopPropagation()" style="display:none;flex:0 0 auto;width:100%;box-sizing:border-box;background:rgba(12,14,20,0.95);color:#fff;font-size:13px;line-height:1.45;padding:8px 14px;max-height:32vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid rgba(255,255,255,0.12);"></div>
   <!-- Inline pole komentáře k fotce (nahrazuje prompt → jde v něm @označit osobu) -->
-  <div id="photo-fs-cmt-box" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:60px;bottom:calc(60px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.98);padding:8px 12px;z-index:9;border-top:1px solid rgba(255,255,255,0.16);align-items:center;gap:8px;">
+  <div id="photo-fs-cmt-box" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="display:none;flex:0 0 auto;width:100%;box-sizing:border-box;background:rgba(12,14,20,0.98);padding:8px 12px;border-top:1px solid rgba(255,255,255,0.16);align-items:center;gap:8px;">
     <input id="photo-fs-cmt-input" type="text" placeholder="Komentář… (@ označí osobu)" autocomplete="off" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)" onkeydown="if(event.key==='Enter')submitPhotoComment()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 11px;font-size:14px;">
     <button onclick="submitPhotoComment()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:10px 14px;font-weight:700;cursor:pointer;min-height:42px;">Odeslat</button>
     <button onclick="_closePhotoCmtBox()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:10px 12px;cursor:pointer;min-height:42px;">✕</button>
