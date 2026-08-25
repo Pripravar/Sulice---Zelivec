@@ -12747,6 +12747,7 @@ function updateTaskBadge() {
   if(!badge) return;
   badge.textContent = mine;
   badge.classList.toggle('show', mine > 0);
+  try{ if(navigator.setAppBadge){ if(mine>0) navigator.setAppBadge(mine); else if(navigator.clearAppBadge) navigator.clearAppBadge(); } }catch(e){}
 }
 
 function openTasksPanel() {
@@ -13700,6 +13701,27 @@ function registerServiceWorker() {
 }
 
 // ── PUSH: FCM token získání + uložení ───────────────────────────────
+// Zapnutí notifikací z UI (nápověda / tlačítko). requestPermission běží v gestu → funguje na iOS i Android napoprvé.
+function enableNotifications(){
+  if(!('Notification' in window)){ showToast('Notifikace tento prohlížeč nepodporuje', 3000); return; }
+  if(!window.currentUser){ showToast('Nejdřív se přihlas', 2500); return; }
+  if(typeof isIos==='function' && isIos() && typeof isStandalone==='function' && !isStandalone()){ showToast('Na iPhonu nejdřív přidej appku na plochu (Sdílet → Přidat na plochu), pak zapni upozornění.', 5500); return; }
+  var _m; try{ _m = firebase.messaging(); }catch(e){ showToast('Notifikace nejsou v této appce dostupné', 3000); return; }
+  Notification.requestPermission().then(function(p){
+    if(p !== 'granted'){ showToast('Notifikace nepovoleny (můžeš je zapnout v Nastavení telefonu)', 4500); return; }
+    registerServiceWorker().then(function(reg){
+      if(!reg) return;
+      _m.getToken({vapidKey: FIREBASE_VAPID_KEY, serviceWorkerRegistration: reg}).then(function(token){
+        if(!token){ showToast('Nepodařilo se získat token', 3000); return; }
+        var _dev; try{ _dev=localStorage.getItem('msDeviceId'); if(!_dev){ _dev='d_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); localStorage.setItem('msDeviceId',_dev); } }catch(e){ _dev='d_default'; }
+        db.ref('uzivatele/'+window.currentUser.uid+'/fcmTokens/'+_dev).set(token);
+        db.ref('uzivatele/'+window.currentUser.uid+'/fcmToken').set(token);
+        var b=document.getElementById('ios-push-btn'); if(b) b.style.display='none';
+        showToast('✅ Upozornění zapnuta', 2500);
+      }).catch(function(){ showToast('Nepodařilo se zapnout upozornění', 3000); });
+    });
+  });
+}
 function setupFcmIfPossible() {
   if(!authConfigOk()) return;
   if(typeof isIos==='function' && isIos() && typeof isStandalone==='function' && !isStandalone()){
@@ -13734,20 +13756,17 @@ function setupFcmIfPossible() {
     }
     if(Notification.permission === 'granted'){ _fcmRegister(); return; }
     if(Notification.permission === 'denied'){ return; }
-    if(typeof isIos==='function' && isIos()){
-      var _pb = document.getElementById('ios-push-btn');
-      if(!_pb){
-        _pb = document.createElement('button');
-        _pb.id = 'ios-push-btn';
-        _pb.textContent = '🔔 Zapnout upozornění';
-        _pb.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:9700;background:#e94560;color:#fff;border:none;border-radius:24px;padding:13px 22px;font-size:15px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;';
-        document.body.appendChild(_pb);
-      }
-      _pb.onclick = function(){ _pb.style.display='none'; try{ Notification.requestPermission().then(function(p){ if(p==='granted'){ _fcmRegister(); showToast('✅ Upozornění zapnuta',2500); } else showToast('Notifikace nepovoleny',3000); }); }catch(e){} };
-      _pb.style.display = 'block';
-      return;
+    // permission === 'default' → o povolení žádej VŽDY po klepnutí (iOS to jinak potlačí, i Android/Chrome vyžaduje gesto) = spolehlivé napoprvé všude
+    var _pb = document.getElementById('ios-push-btn');
+    if(!_pb){
+      _pb = document.createElement('button');
+      _pb.id = 'ios-push-btn';
+      _pb.textContent = '🔔 Zapnout upozornění';
+      _pb.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:9700;background:#e94560;color:#fff;border:none;border-radius:24px;padding:13px 22px;font-size:15px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;';
+      document.body.appendChild(_pb);
     }
-    Notification.requestPermission().then(function(perm){ if(perm==='granted') _fcmRegister(); else console.log('Notifikace nepovoleny:', perm); });
+    _pb.onclick = function(){ _pb.style.display='none'; try{ Notification.requestPermission().then(function(p){ if(p==='granted'){ _fcmRegister(); showToast('✅ Upozornění zapnuta',2500); } else showToast('Notifikace nepovoleny',3000); }); }catch(e){} };
+    _pb.style.display = 'block';
     // Foreground zpráva
     fbMessaging.onMessage(function(payload){
       console.log('FCM foreground:', payload);
@@ -18055,6 +18074,12 @@ function copyDiaryExport(){
       <button onclick="closeHelp()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
     <div id="help-body" style="padding:12px 16px 18px;overflow-y:auto;font-size:13px;line-height:1.55;color:var(--text);">
+
+      <div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin:0 0 14px;">
+        <div style="font-weight:800;margin-bottom:6px;">🔔 Upozornění do telefonu</div>
+        <div style="color:var(--text2);margin-bottom:10px;">Push upozornění na nové úkoly a zprávy. Na iPhonu musí být appka přidaná na plochu (Sdílet → Přidat na plochu).</div>
+        <button onclick="enableNotifications()" style="background:#e94560;color:#fff;border:none;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;">🔔 Zapnout upozornění</button>
+      </div>
 
       <p style="margin:0 0 10px;color:var(--text2);">Mapa stavby <b style="color:var(--text);">II/603 Sulice – Želivec</b> v telefonu: výkresy podle staničení, fotky s razítkem, úkoly, deník, měření. Funguje i venku bez signálu (co se stihne, dojede později).</p>
 

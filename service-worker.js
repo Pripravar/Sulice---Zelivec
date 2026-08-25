@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 // VERZE cache - při změně příště zvedni, ať si telefony stáhnou novou verzi.
-const CACHE_VERSION = 'sulice-v158-2026-08-19-fcm26';
+const CACHE_VERSION = 'sulice-v158-2026-08-19-fcm27';
 
 const CORE_ASSETS = [
   './',
@@ -105,7 +105,9 @@ self.addEventListener('push', function(event) {
     tag:     (data.data && data.data.taskId) || 'sulice-notify',
     renotify: true
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(self.registration.showNotification(title, options).then(function(){
+    try{ if(self.navigator && self.navigator.setAppBadge) self.navigator.setAppBadge(); }catch(e){}
+  }));
 });
 
 // ── Klik na notifikaci - otevřít aplikaci ──────────────────────
