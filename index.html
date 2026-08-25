@@ -13719,27 +13719,35 @@ function setupFcmIfPossible() {
   // Registrovat SW (Firebase Messaging chce vlastní SW soubor, ale my registrujeme společný)
   registerServiceWorker().then(function(reg){
     if(!reg || !fbMessaging) return;
-    // Požádat o povolení
-    Notification.requestPermission().then(function(perm){
-      if(perm !== 'granted') {
-        console.log('Notifikace nepovoleny:', perm);
-        return;
-      }
-      // Získat FCM token
+    // Uložení tokenu (getToken → DB, per-zařízení). POZOR: na iOS requestPermission projde JEN po klepnutí uživatele.
+    function _fcmRegister(){
       fbMessaging.getToken({vapidKey: FIREBASE_VAPID_KEY, serviceWorkerRegistration: reg})
         .then(function(token){
           if(!token) { console.warn('FCM token prázdný'); return; }
-          // Uložit token do DB pod uživatele
           if(window.currentUser) {
             var _dev; try{ _dev=localStorage.getItem('msDeviceId'); if(!_dev){ _dev='d_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); localStorage.setItem('msDeviceId',_dev); } }catch(e){ _dev='d_default'; }
-            db.ref('uzivatele/' + window.currentUser.uid + '/fcmTokens/' + _dev).set(token);   // token per-zařízení (telefon i PC zvlášť → push na všechna)
+            db.ref('uzivatele/' + window.currentUser.uid + '/fcmTokens/' + _dev).set(token);
             db.ref('uzivatele/' + window.currentUser.uid + '/fcmToken').set(token);
           }
         })
-        .catch(function(err){
-          console.warn('FCM token error:', err);
-        });
-    });
+        .catch(function(err){ console.warn('FCM token error:', err); });
+    }
+    if(Notification.permission === 'granted'){ _fcmRegister(); return; }
+    if(Notification.permission === 'denied'){ return; }
+    if(typeof isIos==='function' && isIos()){
+      var _pb = document.getElementById('ios-push-btn');
+      if(!_pb){
+        _pb = document.createElement('button');
+        _pb.id = 'ios-push-btn';
+        _pb.textContent = '🔔 Zapnout upozornění';
+        _pb.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:9700;background:#e94560;color:#fff;border:none;border-radius:24px;padding:13px 22px;font-size:15px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;';
+        document.body.appendChild(_pb);
+      }
+      _pb.onclick = function(){ _pb.style.display='none'; try{ Notification.requestPermission().then(function(p){ if(p==='granted'){ _fcmRegister(); showToast('✅ Upozornění zapnuta',2500); } else showToast('Notifikace nepovoleny',3000); }); }catch(e){} };
+      _pb.style.display = 'block';
+      return;
+    }
+    Notification.requestPermission().then(function(perm){ if(perm==='granted') _fcmRegister(); else console.log('Notifikace nepovoleny:', perm); });
     // Foreground zpráva
     fbMessaging.onMessage(function(payload){
       console.log('FCM foreground:', payload);
