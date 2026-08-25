@@ -89,11 +89,14 @@ exports.sendTaskNotifications = functions
     // Najít FCM tokeny příjemců
     const usersSnap = await db.ref('/uzivatele').once('value');
     const users = usersSnap.val() || {};
-    const tokens = [];
+    const rawTokens = [];
     recipientUids.forEach(uid => {
       const u = users[uid];
-      if(u && u.fcmToken) tokens.push(u.fcmToken);
+      if(!u) return;
+      if(u.fcmToken) rawTokens.push(u.fcmToken);
+      if(u.fcmTokens) Object.keys(u.fcmTokens).forEach(k => { if(u.fcmTokens[k]) rawTokens.push(u.fcmTokens[k]); });
     });
+    const tokens = [...new Set(rawTokens)];   // per-zařízení, bez duplicit
 
     if(tokens.length === 0) {
       console.log('Žádné FCM tokeny u příjemců.');
@@ -137,9 +140,9 @@ exports.sendTaskNotifications = functions
                      err.code === 'messaging/registration-token-not-registered')) {
             // Najít uživatele, kdo má tento token, a smazat ho
             Object.keys(users).forEach(uid => {
-              if(users[uid] && users[uid].fcmToken === badToken) {
-                cleanupPromises.push(db.ref('/uzivatele/' + uid + '/fcmToken').remove());
-              }
+              const u = users[uid]; if(!u) return;
+              if(u.fcmToken === badToken) cleanupPromises.push(db.ref('/uzivatele/' + uid + '/fcmToken').remove());
+              if(u.fcmTokens) Object.keys(u.fcmTokens).forEach(k => { if(u.fcmTokens[k] === badToken) cleanupPromises.push(db.ref('/uzivatele/' + uid + '/fcmTokens/' + k).remove()); });
             });
           }
         }
@@ -618,8 +621,9 @@ async function _sendPush(uids, title, body, high) {
   if(!uids.length) return;
   const usersSnap = await db.ref('/uzivatele').once('value');
   const users = usersSnap.val() || {};
-  const tokens = [];
-  uids.forEach(uid => { const u = users[uid]; if(u && u.fcmToken) tokens.push(u.fcmToken); });
+  const _raw = [];
+  uids.forEach(uid => { const u = users[uid]; if(!u) return; if(u.fcmToken) _raw.push(u.fcmToken); if(u.fcmTokens) Object.keys(u.fcmTokens).forEach(k => { if(u.fcmTokens[k]) _raw.push(u.fcmTokens[k]); }); });
+  const tokens = [...new Set(_raw)];
   if(!tokens.length) return;
   const isHigh = !!high;
   try {

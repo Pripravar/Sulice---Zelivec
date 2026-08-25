@@ -13731,6 +13731,8 @@ function setupFcmIfPossible() {
           if(!token) { console.warn('FCM token prázdný'); return; }
           // Uložit token do DB pod uživatele
           if(window.currentUser) {
+            var _dev; try{ _dev=localStorage.getItem('msDeviceId'); if(!_dev){ _dev='d_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); localStorage.setItem('msDeviceId',_dev); } }catch(e){ _dev='d_default'; }
+            db.ref('uzivatele/' + window.currentUser.uid + '/fcmTokens/' + _dev).set(token);   // token per-zařízení (telefon i PC zvlášť → push na všechna)
             db.ref('uzivatele/' + window.currentUser.uid + '/fcmToken').set(token);
           }
         })
