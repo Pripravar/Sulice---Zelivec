@@ -13867,13 +13867,14 @@ function renderComments(t) {
 
 // ── @ZMÍNKY v komentáři úkolu (WhatsApp styl: @ → vyber osobu) ──────────────
 window._mentionPicks = {};   // "@Celé Jméno" → uid (co uživatel vybral přes picker)
-function _hideMentionPop(){ var p=document.getElementById('mention-pop'); if(p) p.style.display='none'; }
+function _hideMentionPop(){ if(window._mentionHold) return; var p=document.getElementById('mention-pop'); if(p) p.style.display='none'; }
+function _deaccent(s){ try{ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }catch(e){ return (s||'').toLowerCase(); } }
 function _mentionCandidates(q){
-  q = (q||'').toLowerCase();
+  q = _deaccent(q);   // bez diakritiky – „sv" najde i „Švába"
   var users = window.allUsers || {}, out = [];
   Object.keys(users).forEach(function(uid){
     var u = users[uid]; if(!u || !u.name || u.blocked) return;
-    if(q && u.name.toLowerCase().indexOf(q) === -1) return;
+    if(q && _deaccent(u.name).indexOf(q) === -1 && _deaccent(u.firma||'').indexOf(q) === -1) return;
     out.push({ uid: uid, name: u.name, firma: u.firma||'' });
   });
   out.sort(function(a,b){ return a.name.localeCompare(b.name, undefined, {sensitivity:'base'}); });
@@ -13887,17 +13888,22 @@ function _onCommentInput(inp){
   var cands = _mentionCandidates(m[1]);
   if(!cands.length){ _hideMentionPop(); return; }
   var pop = document.getElementById('mention-pop');
-  if(!pop){ pop = document.createElement('div'); pop.id='mention-pop'; pop.style.cssText='position:fixed;z-index:5400;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-height:230px;overflow-y:auto;'; document.body.appendChild(pop); }
+  if(!pop){
+    pop = document.createElement('div'); pop.id='mention-pop';
+    pop.style.cssText='position:fixed;z-index:5400;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-height:min(50vh,280px);overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;';
+    document.body.appendChild(pop);
+    // „Drž otevřené" během doteku (rolování i tap) – jinak blur schová seznam dřív, než stihneš vybrat.
+    var _hold=function(){ window._mentionHold=true; }, _rel=function(){ setTimeout(function(){ window._mentionHold=false; }, 250); };
+    pop.addEventListener('pointerdown', _hold); pop.addEventListener('pointerup', _rel); pop.addEventListener('pointercancel', function(){ window._mentionHold=false; });
+    pop.addEventListener('touchstart', _hold, {passive:true}); pop.addEventListener('touchend', _rel);
+  }
   pop.innerHTML='';
   cands.forEach(function(c){
-    var b=document.createElement('button');
-    b.style.cssText='display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:10px 12px;font-size:13px;cursor:pointer;min-height:42px;';
+    var b=document.createElement('button'); b.type='button';
+    b.style.cssText='display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:12px;font-size:14px;cursor:pointer;min-height:46px;';
     b.innerHTML='<b>@'+escapeHtml(c.name)+'</b>'+(c.firma?(' <span style="color:var(--text2);font-size:11px;">· '+escapeHtml(c.firma)+'</span>'):'');
-    // Na mobilu spolehlivě reaguj na dotyk i myš. preventDefault zabrání ztrátě
-    // fokusu (blur) dřív, než stihneme vložit zmínku. pointerdown pokrývá obojí.
-    var _fire=function(e){ e.preventDefault(); e.stopPropagation(); _insertMention(inp, m.index, pos, c); };
-    if(window.PointerEvent){ b.addEventListener('pointerdown', _fire); }
-    else { b.onmousedown=_fire; b.addEventListener('touchstart', _fire, {passive:false}); }
+    // Výběr na CLICK (ne pointerdown) → rolování prstem přes seznam omylem nevloží jméno.
+    b.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); _insertMention(inp, m.index, pos, c); });
     pop.appendChild(b);
   });
   var r = inp.getBoundingClientRect();
@@ -13915,16 +13921,25 @@ function _insertMention(inp, atIdx, cursorPos, c){
   window._mentionPicks['@'+c.name] = c.uid;
   var np = atIdx + tag.length;
   try { inp.setSelectionRange(np, np); } catch(e){}
-  inp.focus(); _hideMentionPop();
+  window._mentionHold=false; inp.focus(); _hideMentionPop();
 }
 // Z textu vytáhne skutečně zmíněné osoby (které picker vybral a v textu zůstaly).
 function _extractMentions(text){
   var out = [], seen = {};
+  // 1) z pickeru (přesné tagy, které uživatel vybral)
   Object.keys(window._mentionPicks||{}).forEach(function(tag){
     if(text.indexOf(tag) !== -1){
       var uid = window._mentionPicks[tag];
       if(uid && !seen[uid]){ seen[uid]=1; out.push({ uid: uid, name: tag.slice(1) }); }
     }
+  });
+  // 2) fallback: @Jméno napsané ručně (bez výběru z pickeru) → dohledat podle jména v adresáři,
+  //    porovnání bez diakritiky. Tím oznámení chodí, i když picker nešel použít.
+  var users = window.allUsers || {};
+  var low = _deaccent(text);
+  Object.keys(users).forEach(function(uid){
+    var u = users[uid]; if(!u || !u.name || u.blocked || seen[uid]) return;
+    if(low.indexOf('@' + _deaccent(u.name)) !== -1){ seen[uid]=1; out.push({ uid: uid, name: u.name }); }
   });
   return out;
 }
