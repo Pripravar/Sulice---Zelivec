@@ -160,6 +160,8 @@ body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accen
 #btn-report:hover { opacity:1; }
 #btn-chat-fab { position:fixed; left:6px; top:calc(50% - 50px); z-index:9600; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:.72; -webkit-user-select:none; user-select:none; }
 #btn-chat-fab:hover { opacity:1; }
+#btn-chat-fab.fab-collapsed { width:14px !important; height:34px !important; border-radius:0 10px 10px 0 !important; opacity:.4 !important; overflow:hidden; justify-content:flex-start; padding-left:1px; }
+#btn-chat-fab.fab-collapsed.fab-right { border-radius:10px 0 0 10px !important; justify-content:flex-end; padding-left:0; padding-right:1px; }
 .rep-tbtn { flex:1; padding:11px; border-radius:9px; border:2px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; }
 .rep-tbtn.active { border-color:var(--accent2); color:var(--accent2); }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
@@ -1279,6 +1281,7 @@ document.addEventListener('touchend', function(e){
       <div style="display:flex;align-items:center;gap:8px;padding:12px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <button onclick="chatBackToList()" style="background:none;border:none;color:var(--accent2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">‹</button>
         <div id="chat-thread-title" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Kanál</div>
+        <button id="chat-media-btn" onclick="openChatMedia()" title="Fotky v kanálu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">🖼️</button>
         <button id="chat-mute-btn" onclick="_chatToggleMute()" title="Ztlumit oznámení kanálu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">🔔</button>
         <button id="chat-members-btn" onclick="openChatMembers()" title="Členové skupiny" style="display:none;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">👥</button>
         <button onclick="closeChatPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">✕</button>
@@ -1300,6 +1303,15 @@ document.addEventListener('touchend', function(e){
 </div>
 
 <!-- Nová / úprava skupiny -->
+<div id="chat-media-modal" style="display:none;position:fixed;inset:0;z-index:5450;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:520px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🖼️ Fotky v kanálu</div>
+      <button onclick="closeChatMedia()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="chat-media-grid" style="padding:10px;overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
+  </div>
+</div>
 <div id="chat-dm-modal" style="display:none;position:fixed;inset:0;z-index:5400;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;max-width:420px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
@@ -12763,21 +12775,34 @@ function _updateChatBadge(){
   var f=document.getElementById('chat-fab-badge'); if(f){ f.textContent=txt; f.style.display = n>0 ? 'flex' : 'none'; }
 }
 
-// Plovoucí chat ikona (jako beruška) – dá se přetáhnout, pozice v localStorage 'chatFabPos'. Tap = otevřít, tah = přesun.
+// Plovoucí chat ikona (jako beruška) – přetáhni; u kraje se „zasune" do jazýčku, ťuknutím/tažením se vysune. Stav v localStorage 'chatFabPos'.
+function _chatFabState(){ try{ return JSON.parse(localStorage.getItem('chatFabPos')||'null')||{}; }catch(e){ return {}; } }
+function _chatFabSave(s){ try{ localStorage.setItem('chatFabPos', JSON.stringify(s)); }catch(e){} }
+function _chatFabApply(){ var b=document.getElementById('btn-chat-fab'); if(!b) return; var p=_chatFabState();
+  if(p.collapsed){ b.classList.add('fab-collapsed'); b.classList.toggle('fab-right', p.side==='right'); b.style.top=((p.top!=null?p.top:Math.round(window.innerHeight/2-17)))+'px'; b.style.bottom='auto'; b.style.transform='none'; if(p.side==='right'){ b.style.right='0'; b.style.left='auto'; } else { b.style.left='0'; b.style.right='auto'; } }
+  else { b.classList.remove('fab-collapsed','fab-right'); if(p.left!=null){ b.style.left=p.left+'px'; b.style.top=p.top+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; } } }
+function _chatFabExpand(){ var p=_chatFabState(); p.collapsed=false; p.left=(p.side==='right')?(window.innerWidth-46):6; if(p.top==null) p.top=Math.round(window.innerHeight/2-19); _chatFabSave(p); _chatFabApply(); }
 (function(){
   function initChatFabDrag(){
     var b=document.getElementById('btn-chat-fab'); if(!b || b._dragInit) return; b._dragInit=true;
-    try{ var p=JSON.parse(localStorage.getItem('chatFabPos')||'null'); if(p && p.left!=null){ b.style.left=p.left+'px'; b.style.top=p.top+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; } }catch(e){}
+    _chatFabApply();
     var sx=0,sy=0,ox=0,oy=0,moved=false,dragging=false;
     b.addEventListener('pointerdown', function(e){ dragging=true; moved=false; sx=e.clientX; sy=e.clientY; var r=b.getBoundingClientRect(); ox=r.left; oy=r.top; try{ b.setPointerCapture(e.pointerId); }catch(_){}}, {passive:true});
-    b.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-sx, dy=e.clientY-sy; if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true; if(moved){ var nx=Math.max(2, Math.min(window.innerWidth-b.offsetWidth-2, ox+dx)); var ny=Math.max(2, Math.min(window.innerHeight-b.offsetHeight-2, oy+dy)); b.style.left=nx+'px'; b.style.top=ny+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; e.preventDefault(); }});
-    function end(){ if(!dragging) return; dragging=false; if(moved){ window._chatFabJustDragged=true; setTimeout(function(){ window._chatFabJustDragged=false; }, 350); try{ localStorage.setItem('chatFabPos', JSON.stringify({ left:parseInt(b.style.left,10), top:parseInt(b.style.top,10) })); }catch(e){} } }
+    b.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-sx, dy=e.clientY-sy; if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true; if(moved){ if(b.classList.contains('fab-collapsed')) b.classList.remove('fab-collapsed','fab-right'); var w=b.offsetWidth||38,hh=b.offsetHeight||38; var nx=Math.max(-2, Math.min(window.innerWidth-w+2, ox+dx)); var ny=Math.max(2, Math.min(window.innerHeight-hh-2, oy+dy)); b.style.left=nx+'px'; b.style.top=ny+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; e.preventDefault(); }});
+    function end(){ if(!dragging) return; dragging=false; if(!moved) return; window._chatFabJustDragged=true; setTimeout(function(){ window._chatFabJustDragged=false; }, 350);
+      var r=b.getBoundingClientRect(); var top=parseInt(b.style.top,10); if(isNaN(top)) top=r.top;
+      if(r.left<=6){ _chatFabSave({collapsed:true, side:'left', top:top}); }
+      else if(r.right>=window.innerWidth-6){ _chatFabSave({collapsed:true, side:'right', top:top}); }
+      else { _chatFabSave({collapsed:false, left:parseInt(b.style.left,10), top:top}); }
+      _chatFabApply();
+    }
     b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initChatFabDrag); else initChatFabDrag();
 })();
 function openChatPanel(){
   if(window._chatFabJustDragged) return;
+  if(_chatFabState().collapsed){ _chatFabExpand(); return; }
   if(typeof hasPerm==='function' && !hasPerm('chat')){ showToast('💬 Chat Ti admin nepovolil',2800); return; }
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   initChat();
@@ -12931,6 +12956,8 @@ function _chatDmName(k){ var o=_chatDmOther(k); var u=window.allUsers&&window.al
 function openDmPicker(){ var box=document.getElementById('chat-dm-users'); if(!box) return; var me=window.currentUser?window.currentUser.uid:null, html=''; Object.keys(window.allUsers||{}).sort(function(a,b){ return ((window.allUsers[a]&&window.allUsers[a].name)||'').localeCompare((window.allUsers[b]&&window.allUsers[b].name)||'', undefined,{sensitivity:'base'}); }).forEach(function(uid){ var uu=window.allUsers[uid]; if(!uu||!uu.name||uu.blocked||uid===me) return; html+='<button onclick="_chatOpenDM(\''+uid+'\')" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:11px 16px;cursor:pointer;"><div style="width:36px;height:36px;border-radius:50%;background:'+_chatColor(uid)+';display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;">'+escapeHtml((uu.name||'?').charAt(0).toUpperCase())+'</div><span style="flex:1;">'+escapeHtml(uu.name)+(uu.firma?(' <span style="color:var(--text2);font-size:12px;">· '+escapeHtml(uu.firma)+'</span>'):'')+'</span></button>'; }); box.innerHTML=html||'<div style="color:var(--text2);padding:14px;">Žádní uživatelé</div>'; document.getElementById('chat-dm-modal').style.display='flex'; }
 function closeDmPicker(){ var m=document.getElementById('chat-dm-modal'); if(m) m.style.display='none'; }
 function _chatOpenDM(otherUid){ var u=window.currentUser; if(!u) return; var id=_dmId(u.uid, otherUid); var ucast={}; ucast[u.uid]=true; ucast[otherUid]=true; db.ref('chat_kanaly/'+id).transaction(function(cur){ if(cur){ cur.ucastnici=cur.ucastnici||ucast; return cur; } return {typ:'dm', nazev:'', vytvorilUid:u.uid, ts:Date.now(), ucastnici:ucast}; }).then(function(){ closeDmPicker(); openChatThread(id); }).catch(function(e){ showToast('Nepodařilo se: '+(e.message||e),3000); }); }
+function openChatMedia(){ var id=window._chatOpenId; if(!id){ showToast('Otevři kanál',1600); return; } var box=document.getElementById('chat-media-grid'); if(box) box.innerHTML='<div style="color:var(--text2);padding:20px;text-align:center;grid-column:1/-1;">Načítám…</div>'; document.getElementById('chat-media-modal').style.display='flex'; db.ref('chat_zpravy/'+id).orderByChild('ts').once('value', function(snap){ var atts=[]; snap.forEach(function(ch){ var m=ch.val()||{}; if(m.attach) atts.push(m.attach); }); atts.reverse(); if(!box) return; if(!atts.length){ box.innerHTML='<div style="color:var(--text2);padding:20px;text-align:center;grid-column:1/-1;">Žádné fotky v tomto kanálu</div>'; return; } box.innerHTML=atts.map(function(p){ return '<img data-att="'+escapeHtml(p)+'" onclick="_chatOpenAttach(\''+escapeHtml(p)+'\')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--panel2);">'; }).join(''); try{ Array.prototype.forEach.call(box.querySelectorAll('img[data-att]'), function(im){ var p=im.getAttribute('data-att'); if(typeof resolveFileUrl==='function') resolveFileUrl(p).then(function(u){ im.src=u; }); }); }catch(e){} }); }
+function closeChatMedia(){ var m=document.getElementById('chat-media-modal'); if(m) m.style.display='none'; }
 function sendChatMessage(){
   var inp=document.getElementById('chat-input'); if(!inp) return;
   var text=(inp.value||'').trim(); if(!text) return;
@@ -13182,8 +13209,10 @@ function selectPhotosSinceBackup(){
     if(!n){ showToast('Žádné nové fotky od poslední zálohy 🎉',3200); return; }
     gallerySelectedKeys=sel; window._backupNewestTs=newest;
     if(typeof gallerySelectMode!=='undefined') gallerySelectMode=true;
+    if(typeof toggleGalleryFilter==='function'){ try{ toggleGalleryFilter(false); }catch(e){} }
     renderGallery();
-    showToast('📸 Vybráno '+n+' nových fotek. Stáhni je (💻 ZIP / 📲 Mobil), pak dej „✓ Záloha hotová".',6000);
+    showToast('📸 '+n+' nových fotek vybráno – otevírám stažení ZIP…',3500);
+    setTimeout(function(){ if(typeof downloadSelectedGalleryPhotosZip==='function') downloadSelectedGalleryPhotosZip(); else showToast('Dole dej 💻 ZIP',3000); }, 350);
   });
 }
 function markBackupDone(){
@@ -18400,7 +18429,7 @@ function copyDiaryExport(){
       <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📸 Měsíční záloha fotek (stažení bokem)</label>
       <div id="backup-info" style="font-size:11px;color:var(--text2);margin-bottom:6px;"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button type="button" onclick="selectPhotosSinceBackup()" title="Vybrat všechny fotky přidané od poslední zálohy" style="flex:1;background:#0ea5e9;border:none;border-radius:6px;color:#fff;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;">Vybrat nové od minula</button>
+        <button type="button" onclick="selectPhotosSinceBackup()" title="Vybere fotky přidané od poslední zálohy a rovnou nabídne stažení ZIP" style="flex:1;background:#0ea5e9;border:none;border-radius:6px;color:#fff;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout nové (ZIP)</button>
         <button type="button" onclick="markBackupDone()" title="Po stažení označit, že zálohováno k teď" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;">✓ Záloha hotová</button>
       </div>
     </div>
