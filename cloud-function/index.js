@@ -102,6 +102,7 @@ exports.sendTaskNotifications = functions
     // Najít FCM tokeny příjemců
     const usersSnap = await db.ref('/uzivatele').once('value');
     const users = usersSnap.val() || {};
+    if(rec.typ === 'chat' && rec.kanalId){ recipientUids = recipientUids.filter(uid => !(users[uid] && users[uid].chatMute && users[uid].chatMute[rec.kanalId] === true)); }
     const rawTokens = [];
     recipientUids.forEach(uid => {
       const u = users[uid];
