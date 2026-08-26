@@ -6988,6 +6988,46 @@ function toggleFsShareInvestor(){
     if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
   }).catch(function(){ showToast('❌ Nepodařilo se uložit', 2500); });
 }
+// 🟣 SDÍLENÍ INVESTOROVI s volbou razítka + potvrzením. Vygeneruje samostatnou verzi
+// (investorFoto) podle vybraného razítka; investor uvidí právě tuhle verzi (viz _galleryItemEl).
+function openFsInvestorShare(){
+  if(!_photoFsKey || !window.currentUser || isRestrictedCategory()) return;
+  var item = _photoFsItem; if(!item) return;
+  if(item.sdilenoInvestor){
+    if(!confirm('Zrušit sdílení této fotky investorovi?')) return;
+    db.ref('standalone_photos/'+_photoFsKey).update({ sdilenoInvestor:null, investorFoto:null, investorStamp:null }).then(function(){
+      if(_photoFsItem){ _photoFsItem.sdilenoInvestor=false; delete _photoFsItem.investorFoto; delete _photoFsItem.investorStamp; }
+      _updateFsShareBtn(); showToast('Sdílení investorovi zrušeno', 1600);
+      if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+    }).catch(function(){ showToast('❌ Chyba', 2500); });
+    return;
+  }
+  askDownloadStampChoice(1, { warnDoubleStamp: (typeof _hasBothVersions==='function' && !_hasBothVersions(item)) }).then(function(choice){
+    if(choice === null) return;   // Zrušit
+    var popis = choice.stamp
+      ? ('S RAZÍTKEM: ' + ([choice.fields.so?'SO':'', choice.fields.km?'km':'', choice.fields.datum?'datum':'', choice.fields.cas?'čas':'', choice.fields.jmeno?'jméno':''].filter(Boolean).join(', ') || 'bez polí'))
+      : 'BEZ razítka (čistá fotka)';
+    if(!confirm('🟣 Opravdu sdílet tuto fotku INVESTOROVI?\n\nInvestor ji uvidí ve své galerii – ' + popis + '.')) return;
+    showSync('🟣 Připravuji fotku pro investora…');
+    preparePhotoBlobForDownload(item, { stamp: choice }).then(function(blob){
+      var rd = new FileReader();
+      rd.onload = function(){
+        var dataUrl = String(rd.result), fn = 'standalone/inv_' + _photoFsKey + '_' + Date.now() + '.jpg';
+        uploadPhotoToGitHubP(dataUrl, fn).then(function(path){
+          if(!path){ hideSync(); showToast('❌ Upload fotky selhal', 3000); return; }
+          db.ref('standalone_photos/'+_photoFsKey).update({ sdilenoInvestor:true, investorFoto:path, investorStamp:(choice.stamp?choice.fields:false) }).then(function(){
+            hideSync();
+            if(_photoFsItem){ _photoFsItem.sdilenoInvestor=true; _photoFsItem.investorFoto=path; }
+            if(typeof trackEvent==='function') trackEvent('sdileni_sub');
+            _updateFsShareBtn(); showToast('🟣 Sdíleno investorovi', 1800);
+            if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery();
+          }).catch(function(){ hideSync(); showToast('❌ Chyba uložení', 2800); });
+        });
+      };
+      rd.readAsDataURL(blob);
+    }).catch(function(){ hideSync(); showToast('❌ Nepodařilo se připravit fotku', 3000); });
+  });
+}
 // VLÁKNO komentářů k fotce. Zpětná kompat.: starý `komentar` (string/objekt) = první komentář,
 // nové jdou do `komentare/{cid}`. Vrací pole {id?,text,author,uid,ts} seřazené podle času.
 function _photoComments(it){
@@ -10382,9 +10422,11 @@ function _gfiltSoToggleAll(on){
 function toggleGalleryFilter(force){
   var bar = document.getElementById('gallery-filter-bar');
   if(!bar) return;
-  var isOpen = !(bar.style.display === 'none' || !bar.style.display);
+  var isOpen = bar.classList.contains('gf-open');
   var open = (typeof force === 'boolean') ? force : !isOpen;   // force=false → zavřít, i když se klikne na „Skrýt"
-  bar.style.display = open ? 'block' : 'none';
+  bar.classList.toggle('gf-open', open);
+  bar.style.transform = open ? 'translateX(0)' : 'translateX(100%)';   // výsuvný panel zprava (drawer) – neodsouvá fotky
+  var _bd = document.getElementById('gallery-filter-backdrop'); if(_bd) _bd.style.display = open ? 'block' : 'none';
   // Tlačítko v hlavičce jasně říká, co dělá: otevřený filtr = „Skrýt filtr" (žlutě), zavřený = „Filtr"
   var btn = document.getElementById('gallery-filter-btn');
   if(btn){
@@ -10485,12 +10527,12 @@ function _galleryItemEl(item) {
   div.setAttribute('data-gk', k);
   if(gallerySelectedKeys[k]) div.classList.add('selected');
   var img = document.createElement('img');
-  setImgResolved(img, item.thumb || item.url);   // v mřížce malý náhled (přes Storage resolver); plná kvalita až ve fullscreenu/stahování
+  setImgResolved(img, (typeof isInvestorOnly==='function'&&isInvestorOnly()&&item.investorFoto)?item.investorFoto:(item.thumb || item.url));   // investor vidí verzi pro investora (investorFoto)
   img.loading = 'lazy';
   (function(it, divRef) {
     img.onclick = function() {
       if(gallerySelectMode) { _toggleGallerySelection(it, divRef); }
-      else { openPhotoFs(it.url, it.fbKey || null, it); }   // fullscreen = plná verze
+      else { openPhotoFs((typeof isInvestorOnly==='function'&&isInvestorOnly()&&it.investorFoto)?it.investorFoto:it.url, it.fbKey || null, it); }   // fullscreen = plná verze (investor → investorFoto)
     };
   })(item, div);
   var chk = document.createElement('div');
@@ -18470,7 +18512,7 @@ function copyDiaryExport(){
     <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">💬 Přidat komentář</button>
     <button id="photo-fs-report" onclick="openPhotoReportBox()" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📄 Do měsíční zprávy</button>
     <button id="photo-fs-share" onclick="toggleFsShareSub()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📷 Pro SUB</button>
-    <button id="photo-fs-share-inv" onclick="toggleFsShareInvestor()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🟣 Pro investora</button>
+    <button id="photo-fs-share-inv" onclick="openFsInvestorShare()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🟣 Pro investora</button>
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">⬇ Stáhnout s datem</button>
     <a id="photo-fs-open" href="#" target="_blank" rel="noopener" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;text-decoration:none;font-size:15px;font-weight:700;min-height:48px;display:flex;align-items:center;">&#128247; Otevřít v prohlížeči</a>
     <button id="photo-fs-soedit" onclick="editPhotoSO()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🏗️ Přeřadit (SO)</button>
@@ -18515,7 +18557,7 @@ function copyDiaryExport(){
 <div id="gallery-modal">
   <div id="gallery-header">
     <h3>Fotogalerie <span id="gallery-count" style="color:var(--text2);font-size:11px;font-weight:400;margin-left:6px;"></span></h3>
-    <button id="gallery-import-btn" onclick="openLibraryImport()" title="Vložit fotky z knihovny (s ručním datem a staničením)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;">📥</button>
+    <button id="gallery-import-btn" onclick="openLibraryImport()" title="Import fotek z telefonu (s ručním datem a staničením)" style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 10px;font-size:13px;font-weight:700;cursor:pointer;margin-right:6px;">📥 Import</button>
     <button id="gallery-group-btn" onclick="toggleGalleryGrouped()" title="Zobrazit po stavebních objektech" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">📁 Po objektech</button>
     <button id="gallery-select-btn" onclick="toggleGallerySelectMode()" title="Hromadný výběr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">☑️ Vybrat</button>
     <button id="gallery-filter-btn" onclick="toggleGalleryFilter()" title="Filtr" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;cursor:pointer;margin-right:6px;">🔍 Filtr</button>
@@ -18526,10 +18568,11 @@ function copyDiaryExport(){
     <div class="gallery-tab active" id="gtab-0" onclick="switchGalleryTab(0)">&#128247; Samostatné</div>
     <div class="gallery-tab" id="gtab-1" onclick="switchGalleryTab(1)">&#128204; Z poznámek</div>
   </div>
-  <div id="gallery-filter-bar" style="display:none;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;max-height:60vh;overflow-y:auto;">
+  <div id="gallery-filter-backdrop" onclick="toggleGalleryFilter(false)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3340;"></div>
+  <div id="gallery-filter-bar" style="position:fixed;top:0;right:0;height:100%;width:min(380px,90%);background:var(--panel);padding:14px 14px 44px;box-shadow:-4px 0 24px rgba(0,0,0,.45);overflow-y:auto;z-index:3350;transform:translateX(100%);transition:transform .25s ease;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <div style="font-size:12px;color:var(--text2);">Nastav filtr – <b>fotky se filtrují rovnou</b>. Pak si ho schovej, ať vidíš víc fotek (filtr zůstane zapnutý).</div>
-      <button onclick="toggleGalleryFilter(false)" title="Schovat filtr (zůstane aktivní)" style="background:var(--accent2);border:none;border-radius:6px;color:#0f3460;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;margin-left:8px;flex-shrink:0;">🔼 Skrýt filtr</button>
+      <div style="font-size:13px;font-weight:800;color:var(--accent);">🔍 Filtr fotek</div>
+      <button onclick="toggleGalleryFilter(false)" title="Zavřít filtr (zůstane aktivní)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:8px;flex-shrink:0;">✕ Zavřít</button>
     </div>
     <div id="gfilt-search-wrap" style="margin-bottom:10px;display:none;">
       <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:2px;">🔎 Hledat v obsahu fotek (např. finišer, válec, roura…)</div>
