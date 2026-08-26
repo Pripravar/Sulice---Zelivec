@@ -6571,6 +6571,7 @@ function saveNote() {
       author:author, authorUid:(window.currentUser ? window.currentUser.uid : ''), nazev:nazev, text:text, so:noteSo||null,
       photos:keepUrls.concat(uploadedUrls), time:new Date().toLocaleString('cs-CZ') };
     saveNote_toFirebase(note, null);
+    try{ var _mns=(typeof _extractMentions==='function')?_extractMentions(text):[]; if(_mns.length && typeof _notifyMention==='function') _notifyMention(_mns.map(function(m){ return m.uid; }), text, (nazev||'poznámka')); }catch(e){}
     logActivity('📝', 'přidal/a poznámku' + (noteSo?(' k '+noteSo):(nazev?(' „'+nazev+'"'):'')), {k:'note'});
   }
   // Razítko: jen pokud uživatel zaškrtl toggle (a uložíme preferenci pro příště)
@@ -12747,7 +12748,21 @@ function _updateChatBadge(){
   var f=document.getElementById('chat-fab-badge'); if(f){ f.textContent=txt; f.style.display = n>0 ? 'flex' : 'none'; }
 }
 
+// Plovoucí chat ikona (jako beruška) – dá se přetáhnout, pozice v localStorage 'chatFabPos'. Tap = otevřít, tah = přesun.
+(function(){
+  function initChatFabDrag(){
+    var b=document.getElementById('btn-chat-fab'); if(!b || b._dragInit) return; b._dragInit=true;
+    try{ var p=JSON.parse(localStorage.getItem('chatFabPos')||'null'); if(p && p.left!=null){ b.style.left=p.left+'px'; b.style.top=p.top+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; } }catch(e){}
+    var sx=0,sy=0,ox=0,oy=0,moved=false,dragging=false;
+    b.addEventListener('pointerdown', function(e){ dragging=true; moved=false; sx=e.clientX; sy=e.clientY; var r=b.getBoundingClientRect(); ox=r.left; oy=r.top; try{ b.setPointerCapture(e.pointerId); }catch(_){}}, {passive:true});
+    b.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-sx, dy=e.clientY-sy; if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true; if(moved){ var nx=Math.max(2, Math.min(window.innerWidth-b.offsetWidth-2, ox+dx)); var ny=Math.max(2, Math.min(window.innerHeight-b.offsetHeight-2, oy+dy)); b.style.left=nx+'px'; b.style.top=ny+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; e.preventDefault(); }});
+    function end(){ if(!dragging) return; dragging=false; if(moved){ window._chatFabJustDragged=true; setTimeout(function(){ window._chatFabJustDragged=false; }, 350); try{ localStorage.setItem('chatFabPos', JSON.stringify({ left:parseInt(b.style.left,10), top:parseInt(b.style.top,10) })); }catch(e){} } }
+    b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initChatFabDrag); else initChatFabDrag();
+})();
 function openChatPanel(){
+  if(window._chatFabJustDragged) return;
   if(typeof hasPerm==='function' && !hasPerm('chat')){ showToast('💬 Chat Ti admin nepovolil',2800); return; }
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   initChat();
@@ -12814,13 +12829,16 @@ function _chatColor(uid){ var h=0,s=String(uid||''); for(var i=0;i<s.length;i++)
 var _CHAT_EMOJI = (typeof EMOJI_REACTIONS!=='undefined' && EMOJI_REACTIONS && EMOJI_REACTIONS.length) ? EMOJI_REACTIONS : ['👍','✅','❤️','😂','😮','🙏'];
 function _chatReactBar(msgId, reakce){
   if(!reakce) return '';
-  var me=window.currentUser?window.currentUser.uid:null, out='';
+  var me=window.currentUser?window.currentUser.uid:null, chips='', info=[];
   Object.keys(reakce).forEach(function(em){
-    var us=reakce[em]||{}, names=Object.keys(us).filter(function(u){ return us[u]; }); if(!names.length) return;
+    var us=reakce[em]||{}, uids=Object.keys(us).filter(function(u){ return us[u]; }); if(!uids.length) return;
+    var nm=uids.map(function(u){ return us[u]; });
     var mine = me && us[me];
-    out+='<span onclick="event.stopPropagation();_chatToggleReact(\''+msgId+'\',\''+em+'\')" title="'+names.map(function(u){return escapeHtml(us[u]);}).join(', ')+'" style="display:inline-block;cursor:pointer;background:'+(mine?'var(--accent)':'var(--panel)')+';color:'+(mine?'#fff':'var(--text)')+';border:1px solid var(--border);border-radius:12px;padding:0 7px;font-size:12px;margin:3px 3px 0 0;line-height:20px;">'+em+' '+names.length+'</span>';
+    chips+='<span onclick="event.stopPropagation();_chatToggleReact(\''+msgId+'\',\''+em+'\')" style="display:inline-block;cursor:pointer;background:'+(mine?'var(--accent)':'var(--panel)')+';color:'+(mine?'#fff':'var(--text)')+';border:1px solid var(--border);border-radius:12px;padding:0 7px;font-size:12px;margin:3px 3px 0 0;line-height:20px;">'+em+' '+uids.length+'</span>';
+    info.push(em+' '+nm.join(', '));
   });
-  return out;
+  if(!chips) return '';
+  return '<div>'+chips+'</div><div style="font-size:10px;color:var(--text2);opacity:.85;margin-top:1px;">'+escapeHtml(info.join('   ·   '))+'</div>';
 }
 function _renderChatMessages(msgs){
   var box=document.getElementById('chat-messages'); if(!box) return;
@@ -12876,9 +12894,11 @@ function _chatCancelReply(){ window._chatReplyTo=null; var pv=document.getElemen
 // Swipe doprava na zprávu = odpovědět (jako WhatsApp). Připojí se jednou na kontejner.
 function _chatAttachSwipe(){
   var box=document.getElementById('chat-messages'); if(!box || box._swipeBound) return; box._swipeBound=true;
-  var sx=0, sy=0, row=null;
-  box.addEventListener('touchstart', function(e){ var t=(e.target.closest?e.target.closest('[data-mid]'):null); row=t; if(e.touches&&e.touches[0]){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; } }, {passive:true});
-  box.addEventListener('touchend', function(e){ if(!row) return; var ct=e.changedTouches&&e.changedTouches[0]; if(ct){ var dx=ct.clientX-sx, dy=Math.abs(ct.clientY-sy); if(dx>55 && dy<45){ _chatReplyToMsg(row.getAttribute('data-mid')); } } row=null; }, {passive:true});
+  var sx=0, sy=0, row=null, bub=null, active=false;
+  box.addEventListener('touchstart', function(e){ var t=(e.target.closest?e.target.closest('[data-mid]'):null); row=t; bub=t?t.firstElementChild:null; active=false; if(e.touches&&e.touches[0]){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; } }, {passive:true});
+  box.addEventListener('touchmove', function(e){ if(!row||!bub||!e.touches||!e.touches[0]) return; var dx=e.touches[0].clientX-sx, dy=Math.abs(e.touches[0].clientY-sy); if(dx>8 && dy<30){ active=true; var d=Math.min(dx,70); bub.style.transition='none'; bub.style.transform='translateX('+d+'px)'; bub.style.opacity=String(Math.max(.5,1-d/220)); if(!bub._replyHint){ bub._replyHint=1; } } }, {passive:true});
+  function reset(){ if(bub){ bub.style.transition='transform .18s, opacity .18s'; bub.style.transform=''; bub.style.opacity=''; } }
+  box.addEventListener('touchend', function(e){ if(!row){ return; } var ct=e.changedTouches&&e.changedTouches[0]; if(ct){ var dx=ct.clientX-sx, dy=Math.abs(ct.clientY-sy); if(active && dx>55 && dy<45){ _chatReplyToMsg(row.getAttribute('data-mid')); } } reset(); row=null; bub=null; active=false; }, {passive:true});
 }
 
 function sendChatMessage(){
@@ -12894,6 +12914,18 @@ function sendChatMessage(){
   }).catch(function(e){ showToast('Zpráva se neodeslala: '+(e.message||e),3000); });
 }
 
+// Obecný push „byl jsi označen @" (poznámky ap.) – příjemci = zmínění (bez pisatele). CF větev typ:'zminka'.
+function _notifyMention(uids, text, label){
+  if(!window.currentUser || !uids || !uids.length) return;
+  var me=window.currentUser.uid;
+  uids=uids.filter(function(u){ return u && u!==me; });
+  uids=uids.filter(function(u,i){ return uids.indexOf(u)===i; });
+  if(!uids.length) return;
+  var rec={ id:'n_'+Date.now()+'_'+Math.random().toString(36).substr(2,5), typ:'zminka',
+    recipientUids:uids, label:(label||''), komentText:(text||'').slice(0,140),
+    zadalName:(window.currentUser.name||''), time:Date.now() };
+  db.ref('notifikace_fronta/'+rec.id).set(rec).catch(function(e){ console.warn('zminka notif:', e); });
+}
 function _notifyChat(id, text, mentions){
   var k=window._chatChannels[id]||{}, me=window.currentUser?window.currentUser.uid:null, uids=[];
   if(k.typ==='obecny'){
@@ -18055,7 +18087,7 @@ function copyDiaryExport(){
     <input id="note-so" class="note-field" type="text" readonly onclick="openSOFieldPicker('note-so')" placeholder="🏗️ SO objekt (nepovinné) – klepni a vyber" autocomplete="off" style="cursor:pointer;">
     <datalist id="note-so-list"></datalist>
     <input id="note-author" class="note-field" type="text" placeholder="Vaše jméno *" maxlength="40">
-    <textarea id="note-text" class="note-field" placeholder="Text poznámky..."></textarea>
+    <textarea id="note-text" class="note-field" placeholder="Text poznámky… (@ označí osobu)" oninput="if(window._onCommentInput)_onCommentInput(this)" onblur="if(window._hideMentionPop)setTimeout(_hideMentionPop,180)"></textarea>
     <div id="note-photos-preview" class="note-photos-preview"></div>
     <!-- Skryté inputy: kamera (capture) + galerie (multiple) -->
     <input type="file" id="note-photo-input" accept="image/*" capture="environment" style="display:none">

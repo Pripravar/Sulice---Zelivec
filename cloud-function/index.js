@@ -86,6 +86,12 @@ exports.sendTaskNotifications = functions
       recipientUids = (rec.recipientUids || []).filter(Boolean);
     }
 
+    if(rec.typ === 'zminka') {
+      title = '💬 Označení' + (rec.label ? (' – ' + rec.label) : '');
+      body = (rec.zadalName || 'Někdo') + ': ' + (rec.komentText || '');
+      recipientUids = (rec.recipientUids || []).filter(Boolean);
+    }
+
     recipientUids = [...new Set(recipientUids)];
 
     if(recipientUids.length === 0) {
