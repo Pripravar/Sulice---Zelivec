@@ -1282,6 +1282,10 @@ document.addEventListener('touchend', function(e){
         <button onclick="closeChatPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">✕</button>
       </div>
       <div id="chat-messages" style="padding:10px 12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;"></div>
+      <div id="chat-reply-preview" style="display:none;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--border);background:var(--panel2);flex-shrink:0;">
+        <div style="flex:1;min-width:0;font-size:12px;color:var(--text2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">↩︎ <span id="chat-reply-text"></span></div>
+        <button onclick="_chatCancelReply()" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;min-width:36px;min-height:36px;">✕</button>
+      </div>
       <div style="display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;align-items:flex-end;">
         <input id="chat-input" type="text" placeholder="Napiš zprávu… (@ označí osobu)" autocomplete="off" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMessage();}" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:20px;color:var(--text);padding:11px 15px;font-size:15px;">
         <button onclick="sendChatMessage()" style="background:var(--accent);border:none;border-radius:50%;color:#fff;width:44px;height:44px;font-size:18px;cursor:pointer;flex-shrink:0;">➤</button>
@@ -12788,6 +12792,7 @@ function openChatThread(id){
     _chatMarkSeen(id);
   };
   window._chatMsgRef.on('value', window._chatMsgCb);
+  _chatCancelReply(); _chatAttachSwipe();
 }
 function _chatCloseThread(keepId){
   if(window._chatMsgRef && window._chatMsgCb){ try{ window._chatMsgRef.off('value', window._chatMsgCb); }catch(e){} }
@@ -12799,22 +12804,76 @@ function chatBackToList(){ _chatCloseThread(); _renderChatList(); }
 function _chatFormatText(t){
   return escapeHtml(t).replace(/@([\p{L}][\p{L}\w]*)/gu, '<b>@$1</b>');
 }
+// Stabilní barva uživatele z uid (jméno + proužek u bubliny).
+function _chatColor(uid){ var h=0,s=String(uid||''); for(var i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))>>>0; } return 'hsl('+(h%360)+',62%,58%)'; }
+var _CHAT_EMOJI = (typeof EMOJI_REACTIONS!=='undefined' && EMOJI_REACTIONS && EMOJI_REACTIONS.length) ? EMOJI_REACTIONS : ['👍','✅','❤️','😂','😮','🙏'];
+function _chatReactBar(msgId, reakce){
+  if(!reakce) return '';
+  var me=window.currentUser?window.currentUser.uid:null, out='';
+  Object.keys(reakce).forEach(function(em){
+    var us=reakce[em]||{}, names=Object.keys(us).filter(function(u){ return us[u]; }); if(!names.length) return;
+    var mine = me && us[me];
+    out+='<span onclick="event.stopPropagation();_chatToggleReact(\''+msgId+'\',\''+em+'\')" title="'+names.map(function(u){return escapeHtml(us[u]);}).join(', ')+'" style="display:inline-block;cursor:pointer;background:'+(mine?'var(--accent)':'var(--panel)')+';color:'+(mine?'#fff':'var(--text)')+';border:1px solid var(--border);border-radius:12px;padding:0 7px;font-size:12px;margin:3px 3px 0 0;line-height:20px;">'+em+' '+names.length+'</span>';
+  });
+  return out;
+}
 function _renderChatMessages(msgs){
   var box=document.getElementById('chat-messages'); if(!box) return;
+  window._chatMsgs = msgs;
   var me=window.currentUser?window.currentUser.uid:null, html='', lastDay='';
   msgs.forEach(function(m){
     var mine=m.uid===me, d=new Date(m.ts||0), day=d.toLocaleDateString('cs-CZ');
     if(day!==lastDay){ html+='<div style="text-align:center;margin:10px 0;"><span style="background:var(--panel2);color:var(--text2);font-size:11px;padding:3px 10px;border-radius:10px;">'+day+'</span></div>'; lastDay=day; }
     var time=d.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
-    html+='<div style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:3px 0;">'
-      +'<div style="max-width:80%;background:'+(mine?'var(--accent)':'var(--panel2)')+';color:'+(mine?'#fff':'var(--text)')+';border-radius:14px;padding:7px 12px;">'
-      +(mine?'':'<div style="font-size:11px;font-weight:700;color:var(--accent2);margin-bottom:2px;">'+escapeHtml(m.name||'?')+'</div>')
+    var col=_chatColor(m.uid);
+    var quote = m.replyTo ? ('<div style="border-left:3px solid '+(mine?'rgba(255,255,255,.6)':'var(--accent2)')+';padding:2px 8px;margin-bottom:4px;opacity:.85;font-size:12px;"><b>'+escapeHtml(m.replyTo.name||'')+'</b><br>'+escapeHtml((m.replyTo.text||'').slice(0,120))+'</div>') : '';
+    html+='<div data-mid="'+m._id+'" style="display:flex;justify-content:'+(mine?'flex-end':'flex-start')+';margin:3px 0;">'
+      +'<div style="max-width:82%;background:'+(mine?'var(--accent)':'var(--panel2)')+';color:'+(mine?'#fff':'var(--text)')+';border-radius:14px;padding:7px 12px;'+(mine?'':('border-left:3px solid '+col+';'))+'">'
+      +(mine?'':'<div style="font-size:11px;font-weight:700;color:'+col+';margin-bottom:2px;">'+escapeHtml(m.name||'?')+'</div>')
+      +quote
       +'<div style="font-size:14px;line-height:1.35;white-space:pre-wrap;word-break:break-word;">'+_chatFormatText(m.text||'')+'</div>'
-      +'<div style="font-size:10px;opacity:.65;text-align:right;margin-top:2px;">'+time+'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:3px;">'
+        +'<span onclick="event.stopPropagation();_chatReplyToMsg(\''+m._id+'\')" title="Odpovědět" style="cursor:pointer;font-size:13px;opacity:.6;">↩︎</span>'
+        +'<span onclick="event.stopPropagation();_chatOpenReactPicker(\''+m._id+'\')" title="Reagovat" style="cursor:pointer;font-size:13px;opacity:.6;">☺</span>'
+        +'<span style="font-size:10px;opacity:.65;">'+time+'</span>'
+      +'</div>'
+      +_chatReactBar(m._id, m.reakce)
       +'</div></div>';
   });
   box.innerHTML = html || '<div style="color:var(--text2);text-align:center;padding:20px;">Napiš první zprávu 👋</div>';
   box.scrollTop=box.scrollHeight;
+}
+function _chatFindMsg(id){ return (window._chatMsgs||[]).filter(function(m){ return m._id===id; })[0]; }
+function _chatToggleReact(msgId, em){
+  var u=window.currentUser, kanal=window._chatOpenId; if(!u||!kanal) return;
+  var ref=db.ref('chat_zpravy/'+kanal+'/'+msgId+'/reakce/'+em+'/'+u.uid);
+  ref.once('value',function(s){ if(s.exists()) ref.set(null); else ref.set(u.name||'?'); });
+}
+function _chatOpenReactPicker(msgId){
+  var pop=document.getElementById('chat-react-pop');
+  if(!pop){ pop=document.createElement('div'); pop.id='chat-react-pop'; pop.style.cssText='position:fixed;z-index:5600;background:var(--panel);border:1px solid var(--border);border-radius:22px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:6px 8px;display:none;'; document.body.appendChild(pop); pop.addEventListener('pointerdown',function(e){ e.stopPropagation(); }); }
+  pop.innerHTML=_CHAT_EMOJI.map(function(em){ return '<span onclick="_chatPickReact(\''+msgId+'\',\''+em+'\')" style="cursor:pointer;font-size:24px;padding:2px 6px;">'+em+'</span>'; }).join('');
+  pop.style.display='block'; pop.style.left='50%'; pop.style.transform='translateX(-50%)';
+  var mb=document.getElementById('chat-messages'); var r=mb?mb.getBoundingClientRect():null;
+  pop.style.top=Math.max(60,(r?r.bottom:window.innerHeight-140)-140)+'px';
+  window._chatReactCloser=function(){ pop.style.display='none'; document.removeEventListener('pointerdown', window._chatReactCloser); };
+  setTimeout(function(){ document.addEventListener('pointerdown', window._chatReactCloser); },60);
+}
+function _chatPickReact(msgId, em){ _chatToggleReact(msgId, em); if(window._chatReactCloser) window._chatReactCloser(); }
+function _chatReplyToMsg(msgId){
+  var m=_chatFindMsg(msgId); if(!m) return;
+  window._chatReplyTo={ id:msgId, name:m.name||'', text:(m.text||'') };
+  var pv=document.getElementById('chat-reply-preview');
+  if(pv){ pv.style.display='flex'; var t=document.getElementById('chat-reply-text'); if(t) t.innerHTML='<b>'+escapeHtml(m.name||'')+'</b>: '+escapeHtml((m.text||'').slice(0,80)); }
+  var inp=document.getElementById('chat-input'); if(inp) inp.focus();
+}
+function _chatCancelReply(){ window._chatReplyTo=null; var pv=document.getElementById('chat-reply-preview'); if(pv) pv.style.display='none'; }
+// Swipe doprava na zprávu = odpovědět (jako WhatsApp). Připojí se jednou na kontejner.
+function _chatAttachSwipe(){
+  var box=document.getElementById('chat-messages'); if(!box || box._swipeBound) return; box._swipeBound=true;
+  var sx=0, sy=0, row=null;
+  box.addEventListener('touchstart', function(e){ var t=(e.target.closest?e.target.closest('[data-mid]'):null); row=t; if(e.touches&&e.touches[0]){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; } }, {passive:true});
+  box.addEventListener('touchend', function(e){ if(!row) return; var ct=e.changedTouches&&e.changedTouches[0]; if(ct){ var dx=ct.clientX-sx, dy=Math.abs(ct.clientY-sy); if(dx>55 && dy<45){ _chatReplyToMsg(row.getAttribute('data-mid')); } } row=null; }, {passive:true});
 }
 
 function sendChatMessage(){
@@ -12824,8 +12883,9 @@ function sendChatMessage(){
   var mentions=(typeof _extractMentions==='function')?_extractMentions(text):[];
   var msg={uid:u.uid, name:u.name||'', text:text.slice(0,2000), ts:Date.now()};
   if(mentions.length) msg.mentions=mentions;
+  if(window._chatReplyTo) msg.replyTo={ name:window._chatReplyTo.name||'', text:(window._chatReplyTo.text||'').slice(0,140), id:window._chatReplyTo.id||'' };
   db.ref('chat_zpravy/'+id).push().set(msg).then(function(){
-    inp.value=''; _hideMentionPop(); _chatMarkSeen(id); _notifyChat(id, text, mentions);
+    inp.value=''; if(window._hideMentionPop)_hideMentionPop(); _chatCancelReply(); _chatMarkSeen(id); _notifyChat(id, text, mentions);
   }).catch(function(e){ showToast('Zpráva se neodeslala: '+(e.message||e),3000); });
 }
 
