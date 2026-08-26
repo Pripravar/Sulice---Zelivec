@@ -10037,9 +10037,11 @@ function applyGalleryFilters(items){
   var onlyKom = komEl ? komEl.checked : false;
   var zkEl = document.getElementById('gfilt-zkousky');
   var onlyZk = zkEl ? zkEl.checked : false;
+  var repEl = document.getElementById('gfilt-report');
+  var repM = repEl ? (repEl.value || '') : '';   // "YYYY-MM" – album měsíční zprávy
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = srch || onlyKom || onlyZk || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soSel.size || (subKind && !isSubOnly() && !isInvestorOnly());
+  var anyActive = srch || onlyKom || onlyZk || repM || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soSel.size || (subKind && !isSubOnly() && !isInvestorOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   // Měsíční okno: bez filtru (a v ploché mřížce) ukaž jen posledních N měsíců (výkon u tisíců fotek).
@@ -10074,6 +10076,7 @@ function applyGalleryFilters(items){
     var kom = _photoComment(it);
     if(onlyKom && !(kom && kom.text)) return false;
     if(onlyZk && it.kategorie !== 'zkousky') return false;
+    if(repM){ if(!(it.report && it.report[repM])) return false; }   // jen fotky zařazené do vybrané měsíční zprávy
     if(srchWords.length){
       // Hledá v AI popisu (tags) + SO + km + autor + datum + komentář (text i autor). AND.
       var hay = [it.tags, it.so, (it.soList||[]).join(' '), it.km, it.author, it.date, (kom?kom.text:''), (kom?kom.author:'')].filter(Boolean).join(' ').toLowerCase();
@@ -10275,6 +10278,7 @@ function clearGalleryFilters(){
   var srchEl = document.getElementById('gfilt-search'); if(srchEl) srchEl.value = '';
   var komEl = document.getElementById('gfilt-komentar'); if(komEl) komEl.checked = false;
   var zkEl2 = document.getElementById('gfilt-zkousky'); if(zkEl2) zkEl2.checked = false;
+  var repEl2 = document.getElementById('gfilt-report'); if(repEl2) repEl2.value = '';
   renderGallery();
 }
 
@@ -12865,6 +12869,107 @@ function createChatGroup(){
       .then(function(){ closeNewChatGroup(); showToast('Skupina vytvořena',1500); openChatThread(ref.key); })
       .catch(function(e){ showToast('Nepodařilo se: '+(e.message||e),3000); });
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MĚSÍČNÍ FOTOZPRÁVY (Fáze 4/G)
+   Fotku lze zařadit do měsíční zprávy: standalone_photos/{fbKey}/report = {'YYYY-MM':true}
+   + popis standalone_photos/{fbKey}/reportPopis. Album = filtr galerie (gfilt-report).
+   Export: popisy jako text (kopírovat/.txt) i Word; fotky přes stávající ZIP/Mobil.
+   ═══════════════════════════════════════════════════════════════════ */
+function _repMonthNow(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
+function _repFmtMonth(m){ if(!m) return ''; var p=(m||'').split('-'); return p.length===2?(p[1]+'/'+p[0]):m; }
+function _repNormMonth(s){ s=(s||'').trim(); var m=s.match(/^(\d{4})-(\d{1,2})$/); if(m) return m[1]+'-'+String(m[2]).padStart(2,'0'); m=s.match(/^(\d{1,2})[\/.](\d{4})$/); if(m) return m[2]+'-'+String(m[1]).padStart(2,'0'); return ''; }
+function _repMonthDefaultFor(it){ try{ var d=itemDateYmd(it); if(d) return d.slice(0,7); }catch(e){} return _repMonthNow(); }
+
+function openPhotoReportBox(){
+  if(!_photoFsKey || !window.currentUser){ showToast('Označit lze jen fotky po přihlášení',2500); return; }
+  if(typeof closeFsMenu==='function') closeFsMenu();
+  var mEl=document.getElementById('pfr-month'); if(mEl && !mEl.value) mEl.value=_repMonthDefaultFor(_photoFsItem);
+  var pEl=document.getElementById('pfr-popis'); if(pEl) pEl.value=(_photoFsItem && _photoFsItem.reportPopis)||'';
+  _renderPfrMonths();
+  var b=document.getElementById('photo-fs-report-box'); if(b) b.style.display='block';
+}
+function closePhotoReportBox(){ var b=document.getElementById('photo-fs-report-box'); if(b) b.style.display='none'; }
+function _renderPfrMonths(){
+  var box=document.getElementById('pfr-months'); if(!box) return;
+  var rep=(_photoFsItem && _photoFsItem.report)||{};
+  var ms=Object.keys(rep).filter(function(k){return rep[k];}).sort();
+  box.innerHTML = ms.length ? ('V zprávách: '+ms.map(function(m){ return '<span style="display:inline-block;background:#10b981;color:#fff;border-radius:10px;padding:2px 8px;margin:2px;">'+_repFmtMonth(m)+' <span onclick="pfrRemoveMonth(\''+m+'\')" style="cursor:pointer;opacity:.85;">✕</span></span>'; }).join('')) : '<span style="color:#9aa;">Zatím v žádné měsíční zprávě.</span>';
+}
+function pfrToggleMonth(){
+  var mEl=document.getElementById('pfr-month'); var m=mEl?mEl.value:''; if(!m){ showToast('Vyber měsíc',1800); return; }
+  if(!_photoFsKey) return;
+  var rep=_photoFsItem.report||{};
+  if(rep[m]){ delete rep[m]; _photoFsItem.report=rep; db.ref('standalone_photos/'+_photoFsKey+'/report/'+m).set(null); showToast('Odebráno ze zprávy '+_repFmtMonth(m),1500); }
+  else { rep[m]=true; _photoFsItem.report=rep; db.ref('standalone_photos/'+_photoFsKey+'/report/'+m).set(true); showToast('📄 Do zprávy '+_repFmtMonth(m),1500); }
+  _renderPfrMonths();
+}
+function pfrRemoveMonth(m){ if(!_photoFsKey) return; var rep=_photoFsItem.report||{}; delete rep[m]; _photoFsItem.report=rep; db.ref('standalone_photos/'+_photoFsKey+'/report/'+m).set(null); _renderPfrMonths(); if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); }
+function savePhotoReport(){
+  if(!_photoFsKey) return; var pEl=document.getElementById('pfr-popis'); var v=pEl?(pEl.value||'').trim():'';
+  db.ref('standalone_photos/'+_photoFsKey+'/reportPopis').set(v||null).then(function(){ _photoFsItem.reportPopis=v; showToast('📄 Popis uložen',1500); if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); });
+}
+function pfrVoice(){ _voiceToField('pfr-popis'); }
+
+// Diktování do textového pole (Web Speech API). iOS Safari nemusí podporovat → hint na mikrofon klávesnice.
+function _voiceToField(fieldId){
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var el=document.getElementById(fieldId); if(!el) return;
+  if(!SR){ showToast('🎤 Tento prohlížeč diktování nepodporuje – použij mikrofon na klávesnici telefonu.',4000); try{el.focus();}catch(e){} return; }
+  try{ var rec=new SR(); rec.lang='cs-CZ'; rec.interimResults=false; rec.maxAlternatives=1;
+    showToast('🎤 Mluv…',1500);
+    rec.onresult=function(e){ var t=(e.results[0][0].transcript)||''; el.value=(el.value?el.value.trim()+' ':'')+t; };
+    rec.onerror=function(){ showToast('🎤 Diktování se nepovedlo',2000); };
+    rec.start();
+  }catch(e){ showToast('🎤 Nepodařilo se spustit diktování',2500); }
+}
+
+function reportTagSelected(){
+  var items=Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
+  if(!items.length){ showToast('Vyber fotky z galerie',2200); return; }
+  if(!window.currentUser){ showToast('Přihlas se',2000); return; }
+  var def=document.getElementById('gfilt-report'); def=(def&&def.value)||_repMonthNow();
+  var inp=prompt('Do které měsíční zprávy zařadit '+items.length+' fotek?\nFormát MM/RRRR (např. 08/2025)', _repFmtMonth(def));
+  if(inp===null) return; var m=_repNormMonth(inp); if(!m){ showToast('Neplatný měsíc (napiš např. 08/2025)',2800); return; }
+  showSync('📄 Zařazuji 0/'+items.length+'…'); var done=0,fail=0;
+  var proms=items.map(function(it){ return db.ref('standalone_photos/'+it.fbKey+'/report/'+m).set(true).then(function(){ it.report=it.report||{}; it.report[m]=true; done++; showSync('📄 Zařazuji '+done+'/'+items.length+'…'); }).catch(function(){ fail++; done++; }); });
+  Promise.all(proms).then(function(){ hideSync(); showToast('📄 Do zprávy '+_repFmtMonth(m)+': '+(items.length-fail)+' fotek'+(fail?(' ('+fail+'× chyba)'):''),3200); gallerySelectedKeys={}; renderGallery(); });
+}
+
+function _reportAlbum(){
+  var mEl=document.getElementById('gfilt-report'); var m=mEl?mEl.value:'';
+  var items=(window.galleryCurrentItems||[]).filter(function(it){ return m ? (it.report && it.report[m]) : false; });
+  return { m:m, items:items };
+}
+function _reportLine(it){
+  var so=(it.soList&&it.soList.length)?it.soList.join(', '):(it.so||'');
+  var loc=[so, (it.km?('km '+it.km):''), ((typeof itemDateYmd==='function')?itemDateYmd(it):(it.date||''))].filter(Boolean).join(' · ');
+  return { loc:loc, pop:(it.reportPopis||''), url:(it.url||'') };
+}
+function openReportExport(){
+  var a=_reportAlbum();
+  if(!a.m){ showToast('Nejdřív vyber měsíc ve filtru „Měsíční zpráva"',3200); return; }
+  if(!a.items.length){ showToast('V tomto měsíci nejsou žádné označené fotky',3200); return; }
+  var rows=a.items.map(_reportLine);
+  var txt='MĚSÍČNÍ FOTOZPRÁVA '+_repFmtMonth(a.m)+' ('+rows.length+' fotek)\n\n'+rows.map(function(r,i){ return (i+1)+') '+r.loc+(r.pop?('\n   '+r.pop):''); }).join('\n\n');
+  window._reportExportTxt=txt; window._reportExportRows=rows; window._reportExportMonth=a.m;
+  var ta=document.getElementById('report-export-text'); if(ta) ta.value=txt;
+  var t=document.getElementById('report-export-title'); if(t) t.textContent='📄 Zpráva '+_repFmtMonth(a.m)+' — '+rows.length+' fotek';
+  var md=document.getElementById('report-export-modal'); if(md) md.style.display='flex';
+}
+function closeReportExport(){ var md=document.getElementById('report-export-modal'); if(md) md.style.display='none'; }
+function reportCopyText(){ var t=window._reportExportTxt||''; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(function(){ showToast('📋 Popisy zkopírovány',1500); },function(){ _reportSelText(); }); } else { _reportSelText(); } }
+function _reportSelText(){ var ta=document.getElementById('report-export-text'); if(ta){ ta.focus(); ta.select(); showToast('Označeno – zkopíruj (Ctrl/⌘+C)',2500); } }
+function reportDownloadTxt(){ _downloadTextFile('fotozprava_'+(window._reportExportMonth||'').replace('-','_')+'.txt', window._reportExportTxt||'', 'text/plain'); }
+function _downloadTextFile(name, text, mime){ try{ var b=new Blob([text],{type:(mime||'text/plain')+';charset=utf-8'}); var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(u); a.remove(); },1200); showToast('⬇ Staženo: '+name,2000); }catch(e){ showToast('Stažení selhalo – použij Kopírovat',2800); } }
+function reportOpenWord(){
+  var rows=window._reportExportRows||[]; var m=window._reportExportMonth||'';
+  var html='<html><head><meta charset="utf-8"><title>Fotozpráva '+_repFmtMonth(m)+'</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#111;">';
+  html+='<h1>Měsíční fotozpráva '+escapeHtml(_repFmtMonth(m))+'</h1>';
+  rows.forEach(function(r,i){ html+='<div style="margin:0 0 20px;"><div style="font-weight:bold;font-size:14px;">'+(i+1)+') '+escapeHtml(r.loc)+'</div>'; if(r.url) html+='<img src="'+escapeHtml(r.url)+'" style="max-width:560px;width:100%;height:auto;margin:6px 0;">'; if(r.pop) html+='<div style="font-size:13px;">'+escapeHtml(r.pop)+'</div>'; html+='</div>'; });
+  html+='</body></html>';
+  try{ var w=window.open('','_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); showToast('Otevřeno – v prohlížeči Sdílet/Tisk → PDF, nebo ulož a otevři ve Wordu',5000); } else { _downloadTextFile('fotozprava_'+(m||'').replace('-','_')+'.doc', html, 'application/msword'); } }catch(e){ _downloadTextFile('fotozprava_'+(m||'').replace('-','_')+'.doc', html, 'application/msword'); }
 }
 
 function sendTaskNotificationRequest(task, typ, extra) {
@@ -17883,10 +17988,25 @@ function copyDiaryExport(){
     <button onclick="submitPhotoComment()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;padding:10px 14px;font-weight:700;cursor:pointer;min-height:42px;">Odeslat</button>
     <button onclick="_closePhotoCmtBox()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:10px 12px;cursor:pointer;min-height:42px;">✕</button>
   </div>
+  <!-- Inline pole „Do měsíční zprávy" (v toku, pod fotkou – nepřekrývá ji) -->
+  <div id="photo-fs-report-box" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="display:none;flex:0 0 auto;width:100%;box-sizing:border-box;background:rgba(12,14,20,0.98);color:#fff;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.16);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><b style="font-size:14px;">📄 Měsíční zpráva</b><span style="flex:1;"></span><button onclick="closePhotoReportBox()" style="background:none;border:none;color:#bbb;font-size:20px;cursor:pointer;min-height:36px;">✕</button></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input type="month" id="pfr-month" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:14px;">
+      <button onclick="pfrToggleMonth()" style="background:#10b981;border:none;border-radius:8px;color:#fff;padding:9px 12px;font-weight:700;cursor:pointer;min-height:40px;">➕ Přidat / odebrat</button>
+    </div>
+    <div id="pfr-months" style="margin:8px 0;font-size:13px;"></div>
+    <div style="display:flex;gap:6px;align-items:flex-end;">
+      <textarea id="pfr-popis" placeholder="Popis pro zprávu (SO, co je na fotce, jaká práce)…" rows="2" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 11px;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
+      <button onclick="pfrVoice()" title="Nadiktovat popis hlasem" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 12px;font-size:18px;cursor:pointer;min-height:44px;">🎤</button>
+    </div>
+    <button onclick="savePhotoReport()" style="width:100%;margin-top:8px;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:10px;font-weight:700;cursor:pointer;">Uložit popis</button>
+  </div>
   <!-- Vysouvací menu „co s fotkou“ (skryté; otevře ⋯ Možnosti) -->
   <div id="photo-fs-menu" onclick="event.stopPropagation();closeFsMenu()" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom));width:min(320px,92vw);background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:8px;flex-direction:column;gap:6px;z-index:8;box-shadow:0 8px 28px rgba(0,0,0,.65);">
     <button id="photo-fs-tomap" onclick="showPhotoOnMap()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🗺️ Ukázat v mapě (kde vyfoceno)</button>
     <button id="photo-fs-comment-btn" onclick="editPhotoComment()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">💬 Přidat komentář</button>
+    <button id="photo-fs-report" onclick="openPhotoReportBox()" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📄 Do měsíční zprávy</button>
     <button id="photo-fs-share" onclick="toggleFsShareSub()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">📷 Pro SUB</button>
     <button id="photo-fs-share-inv" onclick="toggleFsShareInvestor()" style="display:none;text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">🟣 Pro investora</button>
     <button id="photo-fs-save" onclick="downloadCurrentFsPhoto()" style="text-align:left;background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:12px 14px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;">⬇ Stáhnout s datem</button>
@@ -18025,6 +18145,13 @@ function copyDiaryExport(){
     <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--text);cursor:pointer;">
       <input type="checkbox" id="gfilt-zkousky" onchange="renderGallery()" style="width:18px;height:18px;"> 🔬 Jen fotky ke zkouškám
     </label>
+    <div style="margin-top:8px;">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📄 Měsíční zpráva (album vybraných fotek)</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="month" id="gfilt-report" onchange="renderGallery()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+        <button type="button" onclick="openReportExport()" title="Export popisů / Word pro tento měsíc" style="background:var(--accent2);border:none;border-radius:6px;color:#0f3460;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">📄 Export</button>
+      </div>
+    </div>
     <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
       <button onclick="generateMissingThumbs()" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;cursor:pointer;">🖼️ Zrychlit galerii (dogenerovat náhledy)</button>
       <div style="font-size:10px;color:var(--text2);margin-top:4px;">Jednorázově pro starší fotky – pak se galerie načítá rychleji. Běží na pozadí.</div>
@@ -18045,9 +18172,29 @@ function copyDiaryExport(){
     <button onclick="reassignSelectedGalleryPhotos()" title="Přeřadit vybrané k objektu (SO)" style="background:#f5a623;color:#0f3460;">🏗️ Přeřadit</button>
     <button onclick="reassignKmSelectedGalleryPhotos()" title="Hromadně přenastavit staničení (km)" style="background:#f5a623;color:#0f3460;">📍 Staničení</button>
     <button onclick="changeDateSelectedGalleryPhotos()" title="Hromadně změnit datum pořízení" style="background:#f5a623;color:#0f3460;">📅 Datum</button>
+    <button onclick="reportTagSelected()" title="Zařadit vybrané fotky do měsíční zprávy" style="background:#10b981;color:#fff;">📄 Do zprávy</button>
     <button onclick="shareSelectedWithSub()" title="Sdílet vybrané fotky subce (uvidí je ve své galerii)" style="background:#0ea5e9;color:#fff;">📷 Pro SUB</button>
     <button onclick="shareSelectedWithInvestor()" title="Sdílet vybrané fotky investorovi (uvidí je ve své galerii)" style="background:#8b5cf6;color:#fff;">🟣 Pro investora</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
+  </div>
+</div>
+
+<!-- Modal: export měsíční fotozprávy (popisy) -->
+<div id="report-export-modal" style="display:none;position:fixed;inset:0;z-index:6300;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:540px;width:100%;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div id="report-export-title" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">📄 Měsíční zpráva</div>
+      <button onclick="closeReportExport()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="padding:12px 16px;overflow:auto;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button onclick="reportCopyText()" style="flex:1;min-width:120px;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:11px;font-weight:700;cursor:pointer;">📋 Kopírovat popisy</button>
+        <button onclick="reportDownloadTxt()" style="flex:1;min-width:80px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:11px;font-weight:700;cursor:pointer;">⬇ .txt</button>
+        <button onclick="reportOpenWord()" style="flex:1;min-width:80px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:11px;font-weight:700;cursor:pointer;">📄 Word</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Fotky stáhneš přes výběr v galerii (💻 ZIP / 📲 Mobil). Tady jsou popisy k vložení do zprávy:</div>
+      <textarea id="report-export-text" readonly style="width:100%;height:40vh;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:13px;"></textarea>
+    </div>
   </div>
 </div>
 
