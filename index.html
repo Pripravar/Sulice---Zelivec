@@ -4941,7 +4941,7 @@ function loadDokumenty(){
 }
 // ══ DODACI LISTY – evidence dodavek (foto na pozadi + tabulka + galerie). AI vyteweni: true ══
 // /dodaci_listy/{t} = {foto,fotoOriginal,so,soList,km,author,uid,lat,lng,datum,ts, co,specifikace,mnozstvi,jednotka,dodavatel,cisloDL,spz,konstrukce,poznamka, aiDone}
-var AI_DODACI_ENABLED = __AIFLAG__;
+var AI_DODACI_ENABLED = true;
 var dodaciData = {}; window._dodaciFilter=''; window._dodaciEdit=null; window._dodaciView='table'; window._dodaciSortKey='ts'; window._dodaciSortDir=-1; window._dodakSeriesSO=[];
 function loadDodaci(){ try{ db.ref('dodaci_listy').on('value', function(snap){ dodaciData=snap.val()||{}; var m=document.getElementById('dodaci-modal'); if(m && m.style.display==='flex') renderDodaciList(); }, function(e){ console.warn('loadDodaci', e&&e.message); }); }catch(e){} }
 function openDodaciPanel(){ if(!hasPerm('dodaci')){ showToast('🚚 Dodací listy Ti admin nepovolil',3000); return; } trackEvent('dodaci'); window._dodaciView=window._dodaciView||'table'; _dodaciSetEditVisible(false); document.getElementById('dodaci-modal').style.display='flex'; _dodaciSetView(window._dodaciView); }
