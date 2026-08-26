@@ -762,3 +762,78 @@ exports.backupDatabase = functions
     }
     return null;
   });
+
+/* ════════════════════════════════════════════════════════════════
+   HTTPS FUNKCE – extractDodaciList: AI vytěžení DODACÍHO LISTU z fotky
+   - Klient pošle POST { image (base64, i s data: prefixem), mime } + Firebase ID token
+   - Vrátí { ok, fields:{co,mnozstvi,jednotka,dodavatel,cisloDL,datum,spz} }.
+   - Klíč ANTHROPIC_API_KEY je SECRET. Model Haiku 4.5 (~haléře/fotka).
+   DEPLOY: firebase functions:secrets:set ANTHROPIC_API_KEY
+           firebase deploy --only functions:extractDodaciList
+   ════════════════════════════════════════════════════════════════ */
+exports.extractDodaciList = functions
+  .region('europe-west1')
+  .runWith({ secrets: ['ANTHROPIC_API_KEY'], timeoutSeconds: 60, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    if(req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    if(req.method !== 'POST')    { res.status(405).json({ error: 'Jen POST' }); return; }
+
+    const authHeader = req.get('Authorization') || '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if(!idToken) { res.status(401).json({ error: 'Chybí přihlášení' }); return; }
+    try { await admin.auth().verifyIdToken(idToken); }
+    catch(e) { res.status(401).json({ error: 'Neplatné přihlášení' }); return; }
+
+    const body = req.body || {};
+    let image = String(body.image || '').replace(/^data:[^;]+;base64,/, '');
+    const mime = /png/i.test(String(body.mime || '')) ? 'image/png' : 'image/jpeg';
+    if(!image || image.length > 8 * 1024 * 1024) {
+      res.status(400).json({ error: 'Chybí nebo příliš velký obrázek' }); return;
+    }
+
+    const PROMPT = 'Na obrázku je DODACÍ LIST (dodávka materiálu na stavbu silnice v ČR). '
+      + 'Vytáhni údaje a vrať POUZE JSON (žádný jiný text) přesně v tomto tvaru:\n'
+      + '{"co":"","mnozstvi":"","jednotka":"","dodavatel":"","cisloDL":"","datum":"","spz":""}\n'
+      + 'Význam: co=hlavní dodaný materiál/zboží stručně; mnozstvi=jen číselná hodnota; '
+      + 'jednotka=t/m3/ks/m/kg apod.; dodavatel=kdo dodal (firma/závod/obalovna); '
+      + 'cisloDL=číslo dodacího listu; datum=datum na dokladu ve formátu RRRR-MM-DD; '
+      + 'spz=SPZ vozidla pokud je uvedena. Když údaj nenajdeš, dej prázdný řetězec. Nic jiného nepiš.';
+
+    try {
+      const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5',
+          max_tokens: 512,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mime, data: image } },
+            { type: 'text', text: PROMPT }
+          ]}]
+        })
+      });
+      const data = await aiResp.json();
+      if(!aiResp.ok) {
+        console.error('Anthropic err:', aiResp.status, JSON.stringify(data));
+        res.status(502).json({ error: (data && data.error && data.error.message) || 'AI chyba' }); return;
+      }
+      let text = '';
+      try { text = (data.content || []).map(function(b){ return b && b.type === 'text' ? b.text : ''; }).join(''); } catch(e){}
+      const fields = { co:'', mnozstvi:'', jednotka:'', dodavatel:'', cisloDL:'', datum:'', spz:'' };
+      try {
+        const m = text.match(/\{[\s\S]*\}/);
+        if(m){ const p = JSON.parse(m[0]); Object.keys(fields).forEach(function(k){ if(p[k] != null) fields[k] = String(p[k]); }); }
+      } catch(e){ console.warn('parse JSON z AI selhal:', e && e.message); }
+      res.status(200).json({ ok: true, fields: fields, usage: data.usage || null });
+    } catch(e) {
+      console.error('extractDodaciList výjimka:', e);
+      res.status(500).json({ error: 'Chyba serveru při AI' });
+    }
+  });
