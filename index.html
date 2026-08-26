@@ -1283,11 +1283,13 @@ document.addEventListener('touchend', function(e){
       <div style="display:flex;align-items:center;gap:8px;padding:12px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <button onclick="chatBackToList()" style="background:none;border:none;color:var(--accent2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">‹</button>
         <div id="chat-thread-title" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Kanál</div>
+        <button id="chat-search-btn" onclick="_chatToggleSearch()" title="Hledat v kanálu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">🔍</button>
         <button id="chat-media-btn" onclick="openChatMedia()" title="Fotky v kanálu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">🖼️</button>
         <button id="chat-mute-btn" onclick="_chatToggleMute()" title="Ztlumit oznámení kanálu" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">🔔</button>
         <button id="chat-members-btn" onclick="openChatMembers()" title="Členové skupiny" style="display:none;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px;cursor:pointer;">👥</button>
         <button onclick="closeChatPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:40px;min-height:40px;">✕</button>
       </div>
+      <div id="chat-search-bar" style="display:none;align-items:center;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--panel2);flex-shrink:0;"><input id="chat-search-input" type="text" placeholder="Hledat v kanálu…" autocomplete="off" oninput="_chatSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();_chatSearchNav(event.shiftKey?-1:1);}" style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:16px;color:var(--text);padding:8px 13px;font-size:14px;"><span id="chat-search-count" style="font-size:12px;color:var(--text2);min-width:40px;text-align:center;">0/0</span><button onclick="_chatSearchNav(-1)" title="Starší nález" style="background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);width:34px;height:34px;font-size:15px;cursor:pointer;">↑</button><button onclick="_chatSearchNav(1)" title="Novější nález" style="background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);width:34px;height:34px;font-size:15px;cursor:pointer;">↓</button><button onclick="_chatToggleSearch(false)" title="Zavřít hledání" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;width:34px;height:34px;">✕</button></div>
       <div id="chat-messages" style="padding:10px 12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;"></div>
       <div id="chat-reply-preview" style="display:none;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--border);background:var(--panel2);flex-shrink:0;">
         <div style="flex:1;min-width:0;font-size:12px;color:var(--text2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">↩︎ <span id="chat-reply-text"></span></div>
@@ -1429,6 +1431,7 @@ document.addEventListener('touchend', function(e){
   <button id="btn-denik" onclick="openDiaryPanel()" title="Deník stavby" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📓</button>
   <button id="btn-kzp"   onclick="openKzpPanel()"   title="Kvalita / KZP"   style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🧪</button>
   <button id="btn-zkousky" onclick="openZkouskyPanel()" title="Zkoušky na stavbě (laboratorní průvodka)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🔬</button>
+  <button id="btn-dodaci" onclick="openDodaciPanel()" title="Dodací listy (evidence dodávek)" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🚚</button>
   <button id="btn-dokumenty" onclick="openDokumentyPanel()" title="Dokumenty – KZP, TePř, protokoly zkoušek" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📋</button>
   <button id="btn-standalone-foto" onclick="takeStandalonePhoto()" title="Vyfotit" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">📷</button>
   <button id="btn-gallery" onclick="openGallery()" title="Fotogalerie" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:15px;cursor:pointer;">🖼️</button>
@@ -1884,6 +1887,48 @@ document.addEventListener('touchend', function(e){
         <label style="font-size:11px;color:var(--text2);">PDF soubor</label>
         <input id="dok-file" class="task-field" type="file" accept="application/pdf,.pdf">
         <button type="button" onclick="submitDokument()" style="margin-top:10px;width:100%;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:11px;font-size:14px;font-weight:700;cursor:pointer;">📤 Nahrát dokument</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- MODAL: Dodací listy -->
+<div id="dodaci-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:3200;align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:560px;width:100%;max-height:92vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🚚 Dodací listy</div>
+      <button onclick="exportDodaci()" title="Export tabulky (CSV pro Excel)" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer;">⬇ Export</button>
+      <button onclick="closeDodaciPanel()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div style="padding:10px 14px 0;flex-shrink:0;display:flex;align-items:center;gap:8px;">
+      <input id="dodaci-search" type="text" oninput="_dodaciSearch(this.value)" placeholder="Hledat (co / dodavatel / SO)…" autocomplete="off" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:9px 12px;font-size:13px;">
+      <span id="dodaci-count" style="font-size:11px;color:var(--text2);white-space:nowrap;">0 ks</span>
+    </div>
+    <div style="padding:8px 14px;overflow-y:auto;">
+      <div id="dodaci-list"></div>
+      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px;">
+        <div id="dodaci-form-title" style="font-weight:800;font-size:14px;color:var(--accent);margin-bottom:8px;">➕ Nový dodací list</div>
+        <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;">
+          <label style="flex:1;background:var(--panel2);border:1px dashed var(--border);border-radius:10px;padding:12px;text-align:center;font-size:13px;color:var(--text);cursor:pointer;">📷 Vyfotit / vybrat dodák
+            <input id="dodaci-foto-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="_dodaciPhotoChosen(this)">
+          </label>
+          <img id="dodaci-foto-preview" style="display:none;width:76px;height:76px;object-fit:cover;border-radius:10px;background:var(--panel2);flex-shrink:0;">
+        </div>
+        <button type="button" onclick="_dodaciAiFill()" title="Vyplnit z fotky pomocí AI (připravujeme)" style="width:100%;margin-bottom:10px;background:var(--panel2);border:1px dashed var(--accent2);border-radius:8px;color:var(--text2);padding:9px;font-size:12.5px;cursor:pointer;">✨ Vyplnit z fotky (AI) — brzy</button>
+        <label style="font-size:11px;color:var(--text2);">Co bylo dodáno *</label>
+        <input id="dodaci-co" class="task-field" type="text" placeholder="např. Obalované kamenivo ACL 16+">
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Množství</label><input id="dodaci-mnozstvi" class="task-field" type="text" placeholder="např. 24,5"></div>
+          <div style="flex:1;"><label style="font-size:11px;color:var(--text2);">Jednotka</label><input id="dodaci-jednotka" class="task-field" type="text" placeholder="t / m³ / ks"></div>
+        </div>
+        <label style="font-size:11px;color:var(--text2);">Od koho (dodavatel)</label>
+        <input id="dodaci-dodavatel" class="task-field" type="text" placeholder="např. Skanska – obalovna Rudná">
+        <label style="font-size:11px;color:var(--text2);">Na jaký SO / objekt</label>
+        <input id="dodaci-so" class="task-field" type="text" placeholder="např. SO 101">
+        <label style="font-size:11px;color:var(--text2);">Datum dodání</label>
+        <input id="dodaci-datum" class="task-field" type="date">
+        <label style="font-size:11px;color:var(--text2);">Poznámka (číslo DL, SPZ…)</label>
+        <input id="dodaci-poznamka" class="task-field" type="text" placeholder="nepovinné">
+        <button id="dodaci-save-btn" type="button" onclick="submitDodaci()" style="margin-top:10px;width:100%;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:11px;font-size:14px;font-weight:700;cursor:pointer;">📤 Uložit dodací list</button>
       </div>
     </div>
   </div>
@@ -3833,6 +3878,7 @@ function init() {
   loadMereni();
   loadZkousky();
   loadDokumenty();
+  loadDodaci();
   loadDroneOverlays();
   loadPanorama360();
   renderDiagSondy();
@@ -4856,6 +4902,23 @@ window._dokFilter = 'all';
 function loadDokumenty(){
   try { db.ref('dokumenty').on('value', function(snap){ dokumentyData = snap.val() || {}; var m=document.getElementById('dokumenty-modal'); if(m && m.style.display==='flex') renderDokumentyList(); }, function(e){ console.warn('loadDokumenty', e&&e.message); }); } catch(e){}
 }
+// ══ DODACI LISTY – evidence dodavek (foto dodaku + co/kdy/od koho/na jaky SO). AI vyteweni pripraveno, VYPNUTO (nestoji nic). ══
+// /dodaci_listy/{id} = {co,mnozstvi,jednotka,dodavatel,so,datum,poznamka,foto(cesta Storage),uid,author,ts}
+var AI_DODACI_ENABLED = false; // AI vyteweni z fotky – zapnout az po nasazeni CF extractDodaciList (jinak se nic nevola)
+var dodaciData = {}; window._dodaciFilter=''; window._dodaciEdit=null; window._dodaciFotoPath=null; window._dodaciNewFotoData=null;
+function loadDodaci(){ try{ db.ref('dodaci_listy').on('value', function(snap){ dodaciData=snap.val()||{}; var m=document.getElementById('dodaci-modal'); if(m && m.style.display==='flex') renderDodaciList(); }, function(e){ console.warn('loadDodaci', e&&e.message); }); }catch(e){} }
+function openDodaciPanel(){ if(!hasPerm('dodaci')){ showToast('🚚 Dodací listy Ti admin nepovolil',3000); return; } trackEvent('dodaci'); _dodaciResetForm(); document.getElementById('dodaci-modal').style.display='flex'; renderDodaciList(); }
+function closeDodaciPanel(){ document.getElementById('dodaci-modal').style.display='none'; }
+function _dodaciSearch(v){ window._dodaciFilter=(v||'').trim().toLowerCase(); renderDodaciList(); }
+function renderDodaciList(){ var box=document.getElementById('dodaci-list'); if(!box) return; var da=(typeof _deaccent==='function')?_deaccent:function(s){ return (s||'').toLowerCase(); }; var q=da(window._dodaciFilter||''); var ids=Object.keys(dodaciData).filter(function(id){ var d=dodaciData[id]; if(!d) return false; if(!q) return true; return da(((d.co||'')+' '+(d.dodavatel||'')+' '+(d.so||'')+' '+(d.poznamka||'')).toLowerCase()).indexOf(q)>=0; }).sort(function(a,b){ return (dodaciData[b].ts||0)-(dodaciData[a].ts||0); }); var c=document.getElementById('dodaci-count'); if(c) c.textContent=ids.length+' ks'; if(!ids.length){ box.innerHTML='<div style="text-align:center;color:var(--text2);padding:18px;font-size:13px;">Zatím žádné dodací listy. Přidej první ve formuláři níže.</div>'; return; } box.innerHTML=ids.map(function(id){ var d=dodaciData[id]; var can=canDelete(d.uid); var meta=[d.dodavatel,d.so,d.datum].filter(Boolean).map(escapeHtml).join(' · '); var qty=[d.mnozstvi,d.jednotka].filter(Boolean).map(escapeHtml).join(' '); return '<div style="display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--border);padding:9px 2px;">'+ (d.foto?('<img data-fp="'+escapeHtml(d.foto)+'" onclick="openDodaciFoto(\''+id+'\')" style="width:46px;height:46px;object-fit:cover;border-radius:8px;cursor:pointer;background:var(--panel2);flex-shrink:0;">'):'<span style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;background:var(--panel2);border-radius:8px;flex-shrink:0;">🚚</span>')+ '<div style="flex:1;min-width:0;cursor:pointer;" onclick="editDodaci(\''+id+'\')">'+ '<div style="font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(d.co||'Dodávka')+(qty?(' <span style="color:var(--text2);font-weight:400;">'+qty+'</span>'):'')+'</div>'+ '<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(meta||escapeHtml(d.author||''))+'</div>'+ '</div>'+ (can?('<button onclick="deleteDodaci(\''+id+'\')" title="Smazat" style="background:#e57373;border:none;border-radius:8px;color:#fff;padding:8px;font-size:14px;cursor:pointer;min-width:38px;min-height:38px;flex-shrink:0;">🗑</button>'):'')+ '</div>'; }).join(''); try{ Array.prototype.forEach.call(box.querySelectorAll('img[data-fp]'), function(im){ var p=im.getAttribute('data-fp'); if(typeof resolveFileUrl==='function') resolveFileUrl(p).then(function(u){ im.src=u; }); }); }catch(e){} }
+function openDodaciFoto(id){ var d=dodaciData[id]; if(!d||!d.foto){ editDodaci(id); return; } resolveFileUrl(d.foto).then(function(u){ window.open(u,'_blank','noopener'); }).catch(function(){ showToast('❌ Nelze otevřít fotku',2500); }); }
+function _dodaciResetForm(){ window._dodaciEdit=null; window._dodaciFotoPath=null; window._dodaciNewFotoData=null; ['co','mnozstvi','jednotka','dodavatel','so','poznamka'].forEach(function(k){ var el=document.getElementById('dodaci-'+k); if(el) el.value=''; }); var dt=document.getElementById('dodaci-datum'); if(dt) dt.value=(typeof ymd==='function'?ymd(new Date()):new Date().toISOString().slice(0,10)); var fi=document.getElementById('dodaci-foto-input'); if(fi) fi.value=''; var pv=document.getElementById('dodaci-foto-preview'); if(pv){ pv.style.display='none'; pv.src=''; } var t=document.getElementById('dodaci-form-title'); if(t) t.textContent='➕ Nový dodací list'; var sb=document.getElementById('dodaci-save-btn'); if(sb) sb.textContent='📤 Uložit dodací list'; }
+function editDodaci(id){ var d=dodaciData[id]; if(!d) return; window._dodaciEdit=id; window._dodaciFotoPath=d.foto||null; window._dodaciNewFotoData=null; var set=function(k,v){ var el=document.getElementById('dodaci-'+k); if(el) el.value=v||''; }; set('co',d.co); set('mnozstvi',d.mnozstvi); set('jednotka',d.jednotka); set('dodavatel',d.dodavatel); set('so',d.so); set('poznamka',d.poznamka); var dt=document.getElementById('dodaci-datum'); if(dt) dt.value=d.datum||''; var pv=document.getElementById('dodaci-foto-preview'); if(pv){ if(d.foto){ pv.style.display='block'; resolveFileUrl(d.foto).then(function(u){ pv.src=u; }); } else { pv.style.display='none'; pv.src=''; } } var t=document.getElementById('dodaci-form-title'); if(t) t.textContent='✏️ Úprava dodacího listu'; var sb=document.getElementById('dodaci-save-btn'); if(sb) sb.textContent='💾 Uložit změny'; try{ document.getElementById('dodaci-form-title').scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} }
+function deleteDodaci(id){ var d=dodaciData[id]; if(!d) return; if(!canDelete(d.uid)){ showToast('Můžeš mazat jen své zápisy',2500); return; } if(!confirm('Smazat dodací list „'+(d.co||'')+'"?')) return; db.ref('dodaci_listy/'+id).remove().then(function(){ showToast('🗑️ Smazáno',1200); if(window._dodaciEdit===id) _dodaciResetForm(); }).catch(function(){ showToast('❌ Chyba',2500); }); }
+function _dodaciPhotoChosen(inp){ var f=inp&&inp.files&&inp.files[0]; if(!f) return; if(!/^image\//.test(f.type)){ showToast('Vyber obrázek (foto dodáku)',2500); return; } var r=new FileReader(); r.onload=function(){ var pv=document.getElementById('dodaci-foto-preview'); if(pv){ pv.src=String(r.result); pv.style.display='block'; } window._dodaciNewFotoData=String(r.result); }; r.readAsDataURL(f); }
+function submitDodaci(){ var user=(typeof fbAuth!=='undefined'&&fbAuth)?fbAuth.currentUser:null; if(!user || !window.currentUser){ showToast('Přihlaš se',2000); return; } if(!hasPerm('dodaci')){ showToast('🚚 Dodací listy Ti admin nepovolil',3000); return; } var co=(document.getElementById('dodaci-co').value||'').trim(); if(!co){ showToast('Vyplň aspoň „Co bylo dodáno"',2500); return; } var rec={ co:co, mnozstvi:(document.getElementById('dodaci-mnozstvi').value||'').trim(), jednotka:(document.getElementById('dodaci-jednotka').value||'').trim(), dodavatel:(document.getElementById('dodaci-dodavatel').value||'').trim(), so:(document.getElementById('dodaci-so').value||'').trim(), datum:(document.getElementById('dodaci-datum').value||''), poznamka:(document.getElementById('dodaci-poznamka').value||'').trim(), uid:user.uid, author:(window.currentUser.name||'') }; var editing=window._dodaciEdit; function saveRec(fotoPath){ if(fotoPath) rec.foto=fotoPath; else if(editing && window._dodaciFotoPath) rec.foto=window._dodaciFotoPath; var p; if(editing){ rec.ts=(dodaciData[editing]&&dodaciData[editing].ts)||Date.now(); rec.editTs=Date.now(); p=db.ref('dodaci_listy/'+editing).update(rec); } else { rec.ts=Date.now(); p=db.ref('dodaci_listy').push(rec); } p.then(function(){ hideSync(); showToast('✅ Dodací list uložen',1800); _dodaciResetForm(); renderDodaciList(); }).catch(function(e){ hideSync(); showToast('❌ '+((e&&(e.code||e.message))||'chyba'),3500); }); } var newFoto=window._dodaciNewFotoData; if(newFoto){ showSync('⏳ Nahrávám fotku…'); var path='dodaci/'+(editing||('n'+Date.now()))+'_'+Date.now()+'.jpg'; var b64=newFoto.replace(/^data:[^;]+;base64,/,''); _privStorage().ref(path).putString(b64,'base64',{contentType:'image/jpeg'}).then(function(){ try{ delete _fileUrlCache[path]; }catch(e){} window._dodaciNewFotoData=null; saveRec(path); }).catch(function(e){ hideSync(); showToast('❌ Upload fotky selhal: '+((e&&(e.code||e.message))||''),3500); }); } else { showSync('⏳ Ukládám…'); saveRec(null); } }
+function _dodaciAiFill(){ if(!AI_DODACI_ENABLED){ showToast('✨ Vytěžení z fotky přidáme brzy – zatím vyplň ručně (šetříme náklady na AI).',3600); return; } showToast('✨ Zpracovávám fotku…',2000); /* pripraveno: po nasazeni CF extractDodaciList posli window._dodaciNewFotoData na AI a predvypln pole */ }
+function exportDodaci(){ var ids=Object.keys(dodaciData).sort(function(a,b){ return (dodaciData[b].ts||0)-(dodaciData[a].ts||0); }); if(!ids.length){ showToast('Nic k exportu',2000); return; } var head=['Datum','Co bylo dodáno','Množství','Jednotka','Dodavatel','SO','Poznámka','Zapsal']; var rows=ids.map(function(id){ var d=dodaciData[id]; return [d.datum||'', d.co||'', d.mnozstvi||'', d.jednotka||'', d.dodavatel||'', d.so||'', (d.poznamka||'').replace(/\s+/g,' '), d.author||'']; }); var csv='\ufeff'+[head].concat(rows).map(function(r){ return r.map(function(c){ c=String(c); return /[";\n]/.test(c)?('"'+c.replace(/"/g,'""')+'"'):c; }).join(';'); }).join('\r\n'); try{ var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='dodaci_listy_'+(typeof ymd==='function'?ymd(new Date()):'export')+'.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1500); showToast('⬇ Staženo (CSV pro Excel)',2500); }catch(e){ showToast('❌ Export selhal',2500); } }
 function openDokumentyPanel(){
   if(!hasPerm('dokumenty')){ showToast('📋 Dokumenty Ti admin nepovolil', 3000); return; }
   trackEvent('dokumenty');
@@ -10718,6 +10781,7 @@ var FEATURES = [
   { key:'kvalita',    label:'Kvalita / KZP',      btns:['btn-kzp'] },
   { key:'zkousky',    label:'Zkoušky na stavbě',  btns:['btn-zkousky'] },
   { key:'dokumenty',  label:'Dokumenty (KZP/TePř/protokoly)', btns:['btn-dokumenty'] },
+  { key:'dodaci',     label:'🚚 Dodací listy',    btns:['btn-dodaci'] },
   { key:'inzsite',    label:'Inženýrské sítě',    btns:['btn-is'] },
   { key:'body',       label:'🏆 Žebříček aktivity (soutěž M - SILNICE)', btns:['btn-body'] },
   { key:'blok',       label:'🗒️ Poznámkový blok (osobní zápisník)', btns:['btn-blok','btn-blok-hdr'] },
@@ -11742,6 +11806,8 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-26', verze:'v161', text:'🚚 Nové: Dodací listy! V horní liště ikona 🚚. Vyfotíš dodák, připíšeš co bylo dodáno, množství, od koho a na jaký SO – všechno se ukládá, dá se hledat a exportovat (CSV do Excelu) pro měsíční přehledy. Konec papírů v šuplíku. (Automatické vytěžení z fotky přes AI přidáme později.)' },
+  { datum:'2026-08-26', verze:'v160', text:'🔍 Hledání v chatu: v otevřeném kanálu klepni nahoře na lupu 🔍, napiš slovo (nezáleží na diakritice) a šipkami ↑↓ (nebo Enter / Shift+Enter) skáčeš mezi nalezenými zprávami – najde i podle jména pisatele. 👉 Nové gesto u úkolů: přejeď prstem po kartě úkolu doleva/doprava; poprvé si vybereš, co se má stát (otevřít detail / hotovo / převzít), a appka si tvou volbu zapamatuje.' },
   { datum:'2026-08-26', verze:'v159', text:'💬 Nový CHAT stavby! Vlevo je průhledná ikona 💬 (jako beruška), nebo v horní liště. Píšeš celé stavbě (kanál „Obecný“) nebo si založíš vlastní skupinu (➕ Skupina) a vybereš, kdo v ní bude. Každý má svoji barvu. Na zprávu můžeš reagovat smajlíkem (☺) nebo odpovědět (↩︎, nebo přejeď prstem po zprávě doprava). @označení pošle dotyčnému upozornění. Když přijde zpráva a appku nemáš otevřenou, svítí číslo na ikoně na ploše; po otevření zmizí. Chat Ti může admin v právech vypnout.' },
   { datum:'2026-08-26', verze:'v159', text:'📄 Měsíční fotozprávy: u fotky v „⋯ Možnosti“ → „Do měsíční zprávy“ ji zařadíš do měsíce a připíšeš popis (i hlasem 🎤); hromadně přes výběr v galerii („📄 Do zprávy“). V galerii ve filtru vybereš měsíc (album) – fotky ve zprávě mají 📄 odznak. Přes „📄 Export“ stáhneš fotky (s volbou razítka nebo bez) a popisy (kopírovat / .txt / Word). 📸 „Měsíční záloha fotek“: „Vybrat nové od minula“ označí vše od poslední zálohy, stáhneš a dáš „✓ Záloha hotová“.' },
   { datum:'2026-08-19', verze:'v158', text:'🐞 V přijatých hlášeních (beruška) se teď u nevyřešených ukazuje 💬 „Návrh odpovědi (vývoj)" – hotový text, jak byl podnět vyřešený. Stačí kliknout „✅ Vyřešit tímto textem" a autor hlášení odpověď rovnou uvidí (nebo si text uprav přes „Vyřešeno"). Konec ručního opisování.' },
@@ -12878,7 +12944,7 @@ function openChatThread(id){
     _chatMarkSeen(id);
   };
   window._chatMsgRef.on('value', window._chatMsgCb);
-  _chatCancelReply(); _chatAttachSwipe();
+  _chatCancelReply(); _chatAttachSwipe(); if(typeof _chatToggleSearch==='function') _chatToggleSearch(false);
 }
 function _chatCloseThread(keepId){
   if(window._chatMsgRef && window._chatMsgCb){ try{ window._chatMsgRef.off('value', window._chatMsgCb); }catch(e){} }
@@ -12934,6 +13000,12 @@ function _renderChatMessages(msgs){
   try{ Array.prototype.forEach.call(box.querySelectorAll('img[data-att]'), function(im){ var p=im.getAttribute('data-att'); if(typeof resolveFileUrl==='function') resolveFileUrl(p).then(function(u){ im.src=u; }); }); }catch(e){}
   box.scrollTop=box.scrollHeight;
 }
+/* HLEDANI V CHATU (v1) - lupa v hlavicce kanalu, sipky mezi nalezy, bez diakritiky, i podle jmena */
+function _chatSearchClearHit(){ if(window._chatHitEl){ try{ window._chatHitEl.style.boxShadow=''; }catch(e){} window._chatHitEl=null; } }
+function _chatToggleSearch(force){ var bar=document.getElementById('chat-search-bar'); if(!bar) return; var show=(typeof force==='boolean')?force:(bar.style.display==='none'||!bar.style.display); bar.style.display=show?'flex':'none'; if(show){ var inp=document.getElementById('chat-search-input'); if(inp){ inp.value=''; setTimeout(function(){ try{ inp.focus(); }catch(e){} },50); } _chatSearchInput(''); } else { _chatSearchClearHit(); window._chatSearchMatches=[]; window._chatSearchIdx=0; } }
+function _chatSearchInput(v){ var da=(typeof _deaccent==='function')?_deaccent:function(s){ return (s||'').toLowerCase(); }; var q=da(String(v||'').trim().toLowerCase()); var cnt=document.getElementById('chat-search-count'); if(!q){ window._chatSearchMatches=[]; window._chatSearchIdx=0; _chatSearchClearHit(); if(cnt) cnt.textContent='0/0'; return; } var msgs=window._chatMsgs||[]; window._chatSearchMatches=msgs.filter(function(m){ return da(((m.text||'')+' '+(m.name||'')).toLowerCase()).indexOf(q)>=0; }).map(function(m){ return m._id; }); window._chatSearchIdx=window._chatSearchMatches.length-1; _chatSearchGo(); }
+function _chatSearchGo(){ var ms=window._chatSearchMatches||[], cnt=document.getElementById('chat-search-count'); _chatSearchClearHit(); if(!ms.length){ if(cnt) cnt.textContent='0/0'; return; } if(window._chatSearchIdx<0) window._chatSearchIdx=ms.length-1; if(window._chatSearchIdx>=ms.length) window._chatSearchIdx=0; var id=ms[window._chatSearchIdx]; if(cnt) cnt.textContent=(window._chatSearchIdx+1)+'/'+ms.length; var box=document.getElementById('chat-messages'); if(!box) return; var wrap=box.querySelector('[data-mid="'+id+'"]'); if(!wrap) return; var bub=wrap.firstElementChild||wrap; try{ bub.style.boxShadow='0 0 0 2px var(--accent2)'; }catch(e){} window._chatHitEl=bub; try{ wrap.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){ try{ box.scrollTop=wrap.offsetTop-box.clientHeight/2; }catch(e2){} } }
+function _chatSearchNav(dir){ var ms=window._chatSearchMatches||[]; if(!ms.length) return; window._chatSearchIdx=(window._chatSearchIdx+dir+ms.length)%ms.length; _chatSearchGo(); }
 function _chatFindMsg(id){ return (window._chatMsgs||[]).filter(function(m){ return m._id===id; })[0]; }
 function _chatToggleReact(msgId, em){
   var u=window.currentUser, kanal=window._chatOpenId; if(!u||!kanal) return;
