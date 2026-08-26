@@ -121,8 +121,13 @@ self.addEventListener('push', function(event) {
 // ── Klik na notifikaci - otevřít aplikaci ──────────────────────
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  var taskId = event.notification.data && event.notification.data.taskId;
-  var url = './' + (taskId ? ('#task=' + encodeURIComponent(taskId)) : '');
+  var d = event.notification.data || {};
+  var hash = '';
+  if(d.taskId) hash = '#task=' + encodeURIComponent(d.taskId);
+  else if(d.kanalId) hash = '#chat=' + encodeURIComponent(d.kanalId);
+  else if(d.typ === 'chat') hash = '#chat';
+  else if(d.fotoKey) hash = '#foto=' + encodeURIComponent(d.fotoKey);
+  var url = './' + hash;
   event.waitUntil(
     self.clients.matchAll({type:'window', includeUncontrolled:true}).then(function(list){
       for(var i=0; i<list.length; i++) {

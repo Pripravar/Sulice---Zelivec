@@ -12621,6 +12621,7 @@ function loadTasks() {
     renderTasksList();
     renderTasksOnMap();
     updateTaskBadge();
+    if(!window._deepLinkChecked){ window._deepLinkChecked=true; setTimeout(_handleNotifDeepLink, 400); }
     // Pokud je otevřený detail, refresh ho
     if(window.openTaskId) {
       var t = window.allTasks.filter(function(x){ return x.id === window.openTaskId; })[0];
@@ -13850,6 +13851,29 @@ function saveTaskFromForm() {
     tStampMeta
   );
 }
+
+// Deep-link z push notifikace: po klepnutí na oznámení otevřít úkol/chat/fotku, které se týká.
+// (SW nastaví #task=/#chat=/#foto=; tady to přečteme a otevřeme – i s čekáním na načtení dat.)
+function _handleNotifDeepLink(){
+  try{
+    var h = location.hash || '', m;
+    function clearHash(){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ try{ location.hash=''; }catch(_){} } }
+    if((m=h.match(/[#&]task=([^&]+)/))){
+      var id=decodeURIComponent(m[1]), tries=0;
+      (function go(){ if(typeof openTaskDetail==='function' && (window.allTasks||[]).some(function(t){return t.id===id;})){ openTaskDetail(id); clearHash(); } else if(tries++<25){ setTimeout(go,400); } else clearHash(); })();
+    } else if((m=h.match(/[#&]chat=([^&]+)/))){
+      var k=decodeURIComponent(m[1]), tr=0;
+      if(typeof openChatPanel==='function') openChatPanel();
+      (function go(){ if(window._chatChannels && window._chatChannels[k]){ if(typeof openChatThread==='function') openChatThread(k); clearHash(); } else if(tr++<25){ setTimeout(go,400); } else clearHash(); })();
+    } else if(/[#&]chat(\b|$)/.test(h)){
+      if(typeof openChatPanel==='function') openChatPanel(); clearHash();
+    } else if((m=h.match(/[#&]foto=([^&]+)/))){
+      var key=decodeURIComponent(m[1]);
+      db.ref('standalone_photos/'+key).once('value',function(s){ var it=s.val(); if(it && typeof openPhotoFs==='function'){ it.fbKey=key; openPhotoFs(it.url, key, it); } clearHash(); });
+    }
+  }catch(e){}
+}
+window.addEventListener('hashchange', function(){ setTimeout(_handleNotifDeepLink, 60); });
 
 // ── DETAIL ÚKOLU ────────────────────────────────────────────────────
 window.openTaskId = null;

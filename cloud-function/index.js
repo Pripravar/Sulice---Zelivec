@@ -122,6 +122,8 @@ exports.sendTaskNotifications = functions
       notification: { title, body },
       data: {
         taskId:   rec.taskId  || '',
+        kanalId:  rec.kanalId || '',
+        fotoKey:  rec.fotoKey || '',
         typ:      rec.typ     || '',
         priorita: priorita
       },
