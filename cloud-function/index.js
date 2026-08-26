@@ -796,8 +796,9 @@ exports.extractDodaciList = functions
 
     const PROMPT = 'Na obrázku je DODACÍ LIST (dodávka materiálu na stavbu silnice v ČR). '
       + 'Vytáhni údaje a vrať POUZE JSON (žádný jiný text) přesně v tomto tvaru:\n'
-      + '{"co":"","mnozstvi":"","jednotka":"","dodavatel":"","cisloDL":"","datum":"","spz":""}\n'
-      + 'Význam: co=hlavní dodaný materiál/zboží stručně; mnozstvi=jen číselná hodnota; '
+      + '{"co":"","specifikace":"","mnozstvi":"","jednotka":"","dodavatel":"","cisloDL":"","datum":"","spz":""}\n'
+      + 'Význam: co=hlavní dodaný materiál/zboží stručně (např. Beton, Obalované kamenivo, Ocel); '
+      + 'specifikace=třída/pevnost/značka pokud je uvedena – u betonu VŽDY plné značení (např. C30/37 XF4 XC4 Cl0,4 Dmax22 S4), u oceli B500B apod.; mnozstvi=jen číselná hodnota; '
       + 'jednotka=t/m3/ks/m/kg apod.; dodavatel=kdo dodal (firma/závod/obalovna); '
       + 'cisloDL=číslo dodacího listu; datum=datum na dokladu ve formátu RRRR-MM-DD; '
       + 'spz=SPZ vozidla pokud je uvedena. Když údaj nenajdeš, dej prázdný řetězec. Nic jiného nepiš.';
@@ -826,7 +827,7 @@ exports.extractDodaciList = functions
       }
       let text = '';
       try { text = (data.content || []).map(function(b){ return b && b.type === 'text' ? b.text : ''; }).join(''); } catch(e){}
-      const fields = { co:'', mnozstvi:'', jednotka:'', dodavatel:'', cisloDL:'', datum:'', spz:'' };
+      const fields = { co:'', specifikace:'', mnozstvi:'', jednotka:'', dodavatel:'', cisloDL:'', datum:'', spz:'' };
       try {
         const m = text.match(/\{[\s\S]*\}/);
         if(m){ const p = JSON.parse(m[0]); Object.keys(fields).forEach(function(k){ if(p[k] != null) fields[k] = String(p[k]); }); }
