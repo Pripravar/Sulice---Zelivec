@@ -162,6 +162,8 @@ body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accen
 #btn-chat-fab:hover { opacity:1; }
 #btn-chat-fab.fab-collapsed { width:14px !important; height:34px !important; border-radius:0 10px 10px 0 !important; opacity:.4 !important; overflow:hidden; justify-content:flex-start; padding-left:1px; }
 #btn-chat-fab.fab-collapsed.fab-right { border-radius:10px 0 0 10px !important; justify-content:flex-end; padding-left:0; padding-right:1px; }
+#btn-report.fab-collapsed { width:14px !important; height:34px !important; border-radius:0 10px 10px 0 !important; opacity:.4 !important; overflow:hidden; }
+#btn-report.fab-collapsed.fab-right { border-radius:10px 0 0 10px !important; }
 .rep-tbtn { flex:1; padding:11px; border-radius:9px; border:2px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; }
 .rep-tbtn.active { border-color:var(--accent2); color:var(--accent2); }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
@@ -11491,7 +11493,8 @@ function _reportScreen(){
 function _repType(t){ _repTyp=t; ['chyba','vylepseni'].forEach(function(x){ var b=document.getElementById('rep-t-'+x); if(b) b.classList.toggle('active', x===t); }); }
 function _repKde(){ var jinde=(document.getElementById('rep-kde-jinde')||{}).checked; var el=document.getElementById('rep-misto'); if(el) el.style.display=jinde?'block':'none'; }
 function openReport(){
-  if(window._reportJustDragged) return;   // právě jsem berušku přetáhl → neotvírat
+  if(window._reportJustDragged) return;
+  if(_reportFabState().collapsed){ _reportFabExpand(); return; }   // právě jsem berušku přetáhl → neotvírat
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   if(typeof hasPerm==='function' && !hasPerm('beruska')){ showToast('🐞 Nahlašování Ti admin nepovolil', 3000); return; }
   _repType('chyba');
@@ -11503,15 +11506,27 @@ function openReport(){
   document.getElementById('report-modal').style.display='flex';
 }
 function closeReport(){ var m=document.getElementById('report-modal'); if(m) m.style.display='none'; }
-// 🐞 beruška je PLOVOUCÍ – dá se přetáhnout kamkoli (pozice v localStorage 'reportPos'). Tap = otevřít, tah = přesun.
+// 🐞 beruška je PLOVOUCÍ – přetáhni; u kraje se „zasune" do jazýčku, ťuknutím/tažením se vysune. Pozice v localStorage 'reportPos'.
+function _reportFabState(){ try{ return JSON.parse(localStorage.getItem('reportPos')||'null')||{}; }catch(e){ return {}; } }
+function _reportFabSave(s){ try{ localStorage.setItem('reportPos', JSON.stringify(s)); }catch(e){} }
+function _reportFabApply(){ var b=document.getElementById('btn-report'); if(!b) return; var p=_reportFabState();
+  if(p.collapsed){ b.classList.add('fab-collapsed'); b.classList.toggle('fab-right', p.side==='right'); b.style.top=((p.top!=null?p.top:Math.round(window.innerHeight/2-17)))+'px'; b.style.bottom='auto'; b.style.transform='none'; if(p.side==='right'){ b.style.right='0'; b.style.left='auto'; } else { b.style.left='0'; b.style.right='auto'; } }
+  else { b.classList.remove('fab-collapsed','fab-right'); if(p.left!=null){ b.style.left=p.left+'px'; b.style.top=p.top+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; } } }
+function _reportFabExpand(){ var p=_reportFabState(); p.collapsed=false; p.left=(p.side==='right')?(window.innerWidth-46):6; if(p.top==null) p.top=Math.round(window.innerHeight/2-19); _reportFabSave(p); _reportFabApply(); }
 (function(){
   function initReportDrag(){
     var b=document.getElementById('btn-report'); if(!b || b._dragInit) return; b._dragInit=true;
-    try{ var p=JSON.parse(localStorage.getItem('reportPos')||'null'); if(p && p.left!=null){ b.style.left=p.left+'px'; b.style.top=p.top+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; } }catch(e){}
+    _reportFabApply();
     var sx=0,sy=0,ox=0,oy=0,moved=false,dragging=false;
     b.addEventListener('pointerdown', function(e){ dragging=true; moved=false; sx=e.clientX; sy=e.clientY; var r=b.getBoundingClientRect(); ox=r.left; oy=r.top; try{ b.setPointerCapture(e.pointerId); }catch(_){}}, {passive:true});
-    b.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-sx, dy=e.clientY-sy; if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true; if(moved){ var nx=Math.max(2, Math.min(window.innerWidth-b.offsetWidth-2, ox+dx)); var ny=Math.max(2, Math.min(window.innerHeight-b.offsetHeight-2, oy+dy)); b.style.left=nx+'px'; b.style.top=ny+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; e.preventDefault(); }});
-    function end(){ if(!dragging) return; dragging=false; if(moved){ window._reportJustDragged=true; setTimeout(function(){ window._reportJustDragged=false; }, 350); try{ localStorage.setItem('reportPos', JSON.stringify({ left:parseInt(b.style.left,10), top:parseInt(b.style.top,10) })); }catch(e){} } }
+    b.addEventListener('pointermove', function(e){ if(!dragging) return; var dx=e.clientX-sx, dy=e.clientY-sy; if(!moved && (Math.abs(dx)+Math.abs(dy))>6) moved=true; if(moved){ if(b.classList.contains('fab-collapsed')) b.classList.remove('fab-collapsed','fab-right'); var w=b.offsetWidth||38,hh=b.offsetHeight||38; var nx=Math.max(-2, Math.min(window.innerWidth-w+2, ox+dx)); var ny=Math.max(2, Math.min(window.innerHeight-hh-2, oy+dy)); b.style.left=nx+'px'; b.style.top=ny+'px'; b.style.right='auto'; b.style.bottom='auto'; b.style.transform='none'; e.preventDefault(); }});
+    function end(){ if(!dragging) return; dragging=false; if(!moved) return; window._reportJustDragged=true; setTimeout(function(){ window._reportJustDragged=false; }, 350);
+      var r=b.getBoundingClientRect(); var top=parseInt(b.style.top,10); if(isNaN(top)) top=r.top;
+      if(r.left<=6){ _reportFabSave({collapsed:true, side:'left', top:top}); }
+      else if(r.right>=window.innerWidth-6){ _reportFabSave({collapsed:true, side:'right', top:top}); }
+      else { _reportFabSave({collapsed:false, left:parseInt(b.style.left,10), top:top}); }
+      _reportFabApply();
+    }
     b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initReportDrag); else initReportDrag();
