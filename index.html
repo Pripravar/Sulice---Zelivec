@@ -13002,6 +13002,22 @@ function reportOpenWord(){
   try{ var w=window.open('','_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); showToast('Otevřeno – v prohlížeči Sdílet/Tisk → PDF, nebo ulož a otevři ve Wordu',5000); } else { _downloadTextFile('fotozprava_'+(m||'').replace('-','_')+'.doc', html, 'application/msword'); } }catch(e){ _downloadTextFile('fotozprava_'+(m||'').replace('-','_')+'.doc', html, 'application/msword'); }
 }
 
+// Stažení JEN fotek dané měsíční zprávy – vyvolá stávající volbu razítka (SO/km/datum/jméno, i „bez razítka").
+// Týká se výhradně fotek zprávy; na běžnou zálohu/stahování to nesahá.
+function downloadReportPhotos(){
+  var a=_reportAlbum();
+  if(!a.m){ showToast('Nejdřív vyber měsíc ve filtru',2600); return; }
+  if(!a.items.length){ showToast('V tomto měsíci nejsou žádné fotky',2600); return; }
+  var sel={}; a.items.forEach(function(it){ if(it.fbKey) sel[_galleryItemKey(it)]=it; });
+  gallerySelectedKeys=sel;
+  if(typeof gallerySelectMode!=='undefined') gallerySelectMode=true;
+  closeReportExport();
+  if(typeof renderGallery==='function') renderGallery();
+  showToast('📄 Fotky zprávy vybrány – teď zvol razítko.',2200);
+  if(typeof downloadSelectedGalleryPhotosZip==='function') downloadSelectedGalleryPhotosZip();
+  else showToast('Stažení fotek není v této appce dostupné',2800);
+}
+
 /* ═══ MĚSÍČNÍ ZÁLOHA FOTEK ═══
    Vybere všechny fotky novější než poslední záloha (localStorage 'lastPhotoBackupTs'),
    uživatel je stáhne (ZIP/Mobil) a potvrdí „✓ Záloha hotová" → posune značku. */
@@ -18256,12 +18272,13 @@ function copyDiaryExport(){
       <button onclick="closeReportExport()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
     </div>
     <div style="padding:12px 16px;overflow:auto;">
+      <button onclick="downloadReportPhotos()" style="width:100%;background:#0ea5e9;border:none;border-radius:8px;color:#fff;padding:12px;font-weight:800;cursor:pointer;margin-bottom:10px;">⬇ Stáhnout fotky zprávy (volba razítka)</button>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <button onclick="reportCopyText()" style="flex:1;min-width:120px;background:var(--accent);border:none;border-radius:8px;color:#fff;padding:11px;font-weight:700;cursor:pointer;">📋 Kopírovat popisy</button>
         <button onclick="reportDownloadTxt()" style="flex:1;min-width:80px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:11px;font-weight:700;cursor:pointer;">⬇ .txt</button>
         <button onclick="reportOpenWord()" style="flex:1;min-width:80px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:11px;font-weight:700;cursor:pointer;">📄 Word</button>
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Fotky stáhneš přes výběr v galerii (💻 ZIP / 📲 Mobil). Tady jsou popisy k vložení do zprávy:</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Nahoře stáhneš fotky zprávy (vybereš razítko / bez razítka). Tady jsou popisy k vložení do zprávy:</div>
       <textarea id="report-export-text" readonly style="width:100%;height:40vh;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:13px;"></textarea>
     </div>
   </div>
