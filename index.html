@@ -1294,7 +1294,8 @@ document.addEventListener('touchend', function(e){
         <button onclick="_chatCancelReply()" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;min-width:36px;min-height:36px;">✕</button>
       </div>
       <div style="display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;align-items:flex-end;">
-        <button onclick="_chatPickPhoto()" title="Přidat fotku" style="background:var(--panel2);border:1px solid var(--border);border-radius:50%;color:var(--text);width:44px;height:44px;font-size:18px;cursor:pointer;flex-shrink:0;">📎</button>
+        <button onclick="_chatPickPhoto()" title="Vyfotit / z telefonu" style="background:var(--panel2);border:1px solid var(--border);border-radius:50%;color:var(--text);width:44px;height:44px;font-size:18px;cursor:pointer;flex-shrink:0;">📎</button>
+        <button onclick="openChatGalleryPick()" title="Vybrat fotku z galerie aplikace" style="background:var(--panel2);border:1px solid var(--border);border-radius:50%;color:var(--text);width:44px;height:44px;font-size:18px;cursor:pointer;flex-shrink:0;">🖼️</button>
         <input type="file" id="chat-photo-input" accept="image/*" style="display:none" onchange="_chatPhotoChosen(this)">
         <input id="chat-input" type="text" placeholder="Napiš zprávu… (@ označí osobu)" autocomplete="off" oninput="_onCommentInput(this)" onblur="setTimeout(_hideMentionPop,180)" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMessage();}" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:20px;color:var(--text);padding:11px 15px;font-size:15px;">
         <button onclick="sendChatMessage()" style="background:var(--accent);border:none;border-radius:50%;color:#fff;width:44px;height:44px;font-size:18px;cursor:pointer;flex-shrink:0;">➤</button>
@@ -1305,6 +1306,15 @@ document.addEventListener('touchend', function(e){
 </div>
 
 <!-- Nová / úprava skupiny -->
+<div id="chat-galpick-modal" style="display:none;position:fixed;inset:0;z-index:5460;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:14px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:520px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">🖼️ Vyber fotku z galerie</div>
+      <button onclick="closeChatGalleryPick()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+    </div>
+    <div id="chat-galpick-grid" style="padding:10px;overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
+  </div>
+</div>
 <div id="chat-media-modal" style="display:none;position:fixed;inset:0;z-index:5450;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:14px;">
   <div style="background:var(--panel);border-radius:14px;max-width:520px;width:100%;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);">
     <div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
@@ -12973,6 +12983,9 @@ function closeDmPicker(){ var m=document.getElementById('chat-dm-modal'); if(m) 
 function _chatOpenDM(otherUid){ var u=window.currentUser; if(!u) return; var id=_dmId(u.uid, otherUid); var ucast={}; ucast[u.uid]=true; ucast[otherUid]=true; db.ref('chat_kanaly/'+id).transaction(function(cur){ if(cur){ cur.ucastnici=cur.ucastnici||ucast; return cur; } return {typ:'dm', nazev:'', vytvorilUid:u.uid, ts:Date.now(), ucastnici:ucast}; }).then(function(){ closeDmPicker(); openChatThread(id); }).catch(function(e){ showToast('Nepodařilo se: '+(e.message||e),3000); }); }
 function openChatMedia(){ var id=window._chatOpenId; if(!id){ showToast('Otevři kanál',1600); return; } var box=document.getElementById('chat-media-grid'); if(box) box.innerHTML='<div style="color:var(--text2);padding:20px;text-align:center;grid-column:1/-1;">Načítám…</div>'; document.getElementById('chat-media-modal').style.display='flex'; db.ref('chat_zpravy/'+id).orderByChild('ts').once('value', function(snap){ var atts=[]; snap.forEach(function(ch){ var m=ch.val()||{}; if(m.attach) atts.push(m.attach); }); atts.reverse(); if(!box) return; if(!atts.length){ box.innerHTML='<div style="color:var(--text2);padding:20px;text-align:center;grid-column:1/-1;">Žádné fotky v tomto kanálu</div>'; return; } box.innerHTML=atts.map(function(p){ return '<img data-att="'+escapeHtml(p)+'" onclick="_chatOpenAttach(\''+escapeHtml(p)+'\')" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--panel2);">'; }).join(''); try{ Array.prototype.forEach.call(box.querySelectorAll('img[data-att]'), function(im){ var p=im.getAttribute('data-att'); if(typeof resolveFileUrl==='function') resolveFileUrl(p).then(function(u){ im.src=u; }); }); }catch(e){} }); }
 function closeChatMedia(){ var m=document.getElementById('chat-media-modal'); if(m) m.style.display='none'; }
+function openChatGalleryPick(){ if(!window._chatOpenId){ showToast('Otevři kanál',1600); return; } var box=document.getElementById('chat-galpick-grid'); if(box) box.innerHTML='<div style="grid-column:1/-1;color:var(--text2);text-align:center;padding:20px;">Načítám…</div>'; document.getElementById('chat-galpick-modal').style.display='flex'; db.ref('standalone_photos').orderByChild('ts').limitToLast(150).once('value', function(snap){ var arr=[]; snap.forEach(function(ch){ var v=ch.val()||{}; v.fbKey=ch.key; if(typeof canViewPhoto==='function' && !canViewPhoto(v)) return; arr.push(v); }); arr.reverse(); if(!box) return; if(!arr.length){ box.innerHTML='<div style="grid-column:1/-1;color:var(--text2);text-align:center;padding:20px;">Žádné fotky v galerii</div>'; return; } box.innerHTML=arr.map(function(v){ var p=v.thumb||v.url||''; return '<img data-att="'+escapeHtml(p)+'" data-full="'+escapeHtml(v.url||p)+'" onclick="_chatSendExistingPhoto(this.getAttribute(\'data-full\'))" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;background:var(--panel2);">'; }).join(''); try{ Array.prototype.forEach.call(box.querySelectorAll('img[data-att]'), function(im){ var p=im.getAttribute('data-att'); if(typeof resolveFileUrl==='function') resolveFileUrl(p).then(function(u){ im.src=u; }); }); }catch(e){} }); }
+function closeChatGalleryPick(){ var m=document.getElementById('chat-galpick-modal'); if(m) m.style.display='none'; }
+function _chatSendExistingPhoto(path){ var id=window._chatOpenId, u=window.currentUser; if(!id||!u||!path) return; closeChatGalleryPick(); var capEl=document.getElementById('chat-input'); var cap=capEl?(capEl.value||'').trim():''; var msg={uid:u.uid, name:u.name||'', text:cap.slice(0,2000), ts:Date.now(), attach:path}; if(window._chatReplyTo) msg.replyTo={ name:window._chatReplyTo.name||'', text:(window._chatReplyTo.text||'').slice(0,140), id:window._chatReplyTo.id||'' }; db.ref('chat_zpravy/'+id).push().set(msg).then(function(){ if(capEl) capEl.value=''; if(typeof _chatCancelReply==='function')_chatCancelReply(); _chatMarkSeen(id); _notifyChat(id, cap||'📷 fotka', []); }).catch(function(e){ showToast('Nepodařilo se: '+(e.message||e),3000); }); }
 function sendChatMessage(){
   var inp=document.getElementById('chat-input'); if(!inp) return;
   var text=(inp.value||'').trim(); if(!text) return;
@@ -13164,6 +13177,8 @@ function reportDownloadTxt(){ _downloadTextFile('fotozprava_'+(window._reportExp
 function _downloadTextFile(name, text, mime){ try{ var b=new Blob([text],{type:(mime||'text/plain')+';charset=utf-8'}); var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(u); a.remove(); },1200); showToast('⬇ Staženo: '+name,2000); }catch(e){ showToast('Stažení selhalo – použij Kopírovat',2800); } }
 function reportOpenWord(){
   var rows=window._reportExportRows||[]; var m=window._reportExportMonth||'';
+  showToast('📄 Připravuji Word (načítám fotky)…',1800);
+  Promise.all(rows.map(function(rr){ if(!rr.url) return Promise.resolve(''); if(typeof resolveFileUrl==='function'){ return resolveFileUrl(rr.url).then(function(u){return u||rr.url;},function(){return rr.url;}); } return Promise.resolve(rr.url); })).then(function(_urls){
   var head='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
     +'<head><meta charset="utf-8"><title>Fotozpráva '+escapeHtml(_repFmtMonth(m))+'</title>'
     +'<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->'
@@ -13173,7 +13188,7 @@ function reportOpenWord(){
   var html=head+'<h1>Měsíční fotozpráva '+escapeHtml(_repFmtMonth(m))+'</h1>';
   rows.forEach(function(r,i){
     html+='<div class="item"><p class="cap">'+(i+1)+') '+escapeHtml(r.loc)+'</p>';
-    if(r.url) html+='<img src="'+escapeHtml(r.url)+'" width="567"><br>';
+    if(_urls[i]) html+='<img src="'+escapeHtml(_urls[i])+'" width="567"><br>';
     if(r.pop) html+='<p class="pop">'+escapeHtml(r.pop)+'</p>';
     html+='</div>';
   });
@@ -13188,6 +13203,7 @@ function reportOpenWord(){
   }catch(e){
     try{ var w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); showToast('Otevřeno – ulož jako .doc / vytiskni do PDF',4000); } else showToast('Word se nepodařilo – zkus na PC',3000); }catch(_){ showToast('Word se nepodařilo stáhnout',3000); }
   }
+  });
 }
 
 // Stažení JEN fotek dané měsíční zprávy – vyvolá stávající volbu razítka (SO/km/datum/jméno, i „bez razítka").
@@ -13236,6 +13252,21 @@ function markBackupDone(){
   showToast('✅ Záloha označena k '+new Date(t).toLocaleDateString('cs-CZ')+'. Příště se vyberou jen novější.',4500);
   gallerySelectedKeys={}; renderGallery();
 }
+
+/* ═══ SWIPE AKCE na úkolech (v1) – přejetí doleva/doprava, poprvé nabídne výběr, uloží se (localStorage) ═══ */
+var SWIPE_TASK_ACTIONS = { open:{label:'📄 Otevřít detail', run:function(id){ openTaskDetail(id); }}, done:{label:'✅ Označit hotovo', run:function(id){ openTaskDetail(id); setTimeout(function(){ if(typeof markTaskDone==='function') markTaskDone(); },260); }}, take:{label:'🙋 Převzít / Řeším', run:function(id){ openTaskDetail(id); setTimeout(function(){ if(typeof takeTask==='function') takeTask(); },260); }} };
+function _swipeCfg(dir){ try{ return localStorage.getItem('swipeTask_'+dir)||''; }catch(e){ return ''; } }
+function _swipeSetCfg(dir,act){ try{ localStorage.setItem('swipeTask_'+dir,act); }catch(e){} }
+function _swipeRun(dir,id){ var act=_swipeCfg(dir); if(!act||!SWIPE_TASK_ACTIONS[act]){ _openSwipeCfg(dir,id); return; } SWIPE_TASK_ACTIONS[act].run(id); }
+function _openSwipeCfg(dir,id){ window._swipePendingId=id; window._swipePendingDir=dir; var t=document.getElementById('swipe-cfg-title'); if(t) t.textContent='Co má dělat přejetí '+(dir==='right'?'doprava →':'← doleva')+'?'; var box=document.getElementById('swipe-cfg-body'); if(box) box.innerHTML=Object.keys(SWIPE_TASK_ACTIONS).map(function(k){ return '<button onclick="_pickSwipe(\''+k+'\')" style="display:block;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:12px 14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:8px;">'+SWIPE_TASK_ACTIONS[k].label+'</button>'; }).join(''); var md=document.getElementById('swipe-cfg-modal'); if(md) md.style.display='flex'; }
+function _pickSwipe(act){ var dir=window._swipePendingDir, id=window._swipePendingId; _swipeSetCfg(dir,act); var md=document.getElementById('swipe-cfg-modal'); if(md) md.style.display='none'; showToast('Nastaveno: přejetí '+(dir==='right'?'doprava':'doleva')+' → '+(SWIPE_TASK_ACTIONS[act]?SWIPE_TASK_ACTIONS[act].label:''),2600); if(id && SWIPE_TASK_ACTIONS[act]) SWIPE_TASK_ACTIONS[act].run(id); }
+function _resetSwipe(){ try{ localStorage.removeItem('swipeTask_left'); localStorage.removeItem('swipeTask_right'); }catch(e){} var md=document.getElementById('swipe-cfg-modal'); if(md) md.style.display='none'; showToast('Swipe akce vynulovány – při dalším přejetí si vybereš znovu',3000); }
+function _attachTaskSwipe(){ var box=document.getElementById('tasks-list'); if(!box || box._swipeBound) return; box._swipeBound=true; var sx=0,sy=0,card=null;
+  box.addEventListener('touchstart', function(e){ card=(e.target.closest?e.target.closest('.task-card[data-taskid]'):null); if(card&&e.touches[0]){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; } }, {passive:true});
+  box.addEventListener('touchmove', function(e){ if(!card||!e.touches[0]) return; var dx=e.touches[0].clientX-sx, dy=Math.abs(e.touches[0].clientY-sy); if(Math.abs(dx)>8 && dy<30){ card.style.transition='none'; card.style.transform='translateX('+Math.max(-90,Math.min(90,dx))+'px)'; card.style.opacity=String(Math.max(.55,1-Math.abs(dx)/240)); } }, {passive:true});
+  function reset(){ if(card){ card.style.transition='transform .18s, opacity .18s'; card.style.transform=''; card.style.opacity=''; } }
+  box.addEventListener('touchend', function(e){ if(!card){ return; } var ct=e.changedTouches&&e.changedTouches[0]; var id=card.getAttribute('data-taskid'); var did=false; if(ct){ var dx=ct.clientX-sx, dy=Math.abs(ct.clientY-sy); if(Math.abs(dx)>60 && dy<45){ did=true; var dir=dx>0?'right':'left'; reset(); setTimeout(function(){ _swipeRun(dir,id); },60); } } if(!did) reset(); card=null; }, {passive:true}); }
+
 
 function sendTaskNotificationRequest(task, typ, extra) {
   // Cloud Function (viz cloud-function/) sleduje uzel /notifikace_fronta
@@ -13387,7 +13418,7 @@ function renderTasksList() {
     var cmtCount = t.komentare ? Object.keys(t.komentare).length : 0;
     var stateHtml = (t.stav === 'inprogress') ? ('<span class="tc-prog">🔵 Řeší: ' + escapeHtml(t.resiName || '') + '</span>') : '';
     var doneHtml = (t.stav === 'done' && t.hotovo) ? ('<span>✅ ' + new Date(t.hotovo).toLocaleDateString('cs-CZ') + (t.hotovilName ? (' · ' + escapeHtml(t.hotovilName)) : '') + '</span>') : '';
-    return '<div class="' + cls + '" onclick="openTaskDetail(\'' + t.id + '\')">'
+    return '<div class="' + cls + '" data-taskid="' + t.id + '" onclick="openTaskDetail(\'' + t.id + '\')">'
       + '<div class="tc-title">' + (t.soukromy?'🔒 ':'') + escapeHtml(t.title || '(bez názvu)') + '</div>'
       + '<div class="tc-meta">'
       +   profHtml
@@ -13435,6 +13466,7 @@ function openTasksPanel() {
   document.getElementById('tasks-panel').classList.add('open');
   if(typeof _syncAdminViewBtns==='function') _syncAdminViewBtns();
   renderTasksList();
+  if(typeof _attachTaskSwipe==='function') _attachTaskSwipe();
 }
 function closeTasksPanel() {
   document.getElementById('tasks-panel').classList.remove('open');
@@ -18472,6 +18504,16 @@ function copyDiaryExport(){
     <button onclick="shareSelectedWithSub()" title="Sdílet vybrané fotky subce (uvidí je ve své galerii)" style="background:#0ea5e9;color:#fff;">📷 Pro SUB</button>
     <button onclick="shareSelectedWithInvestor()" title="Sdílet vybrané fotky investorovi (uvidí je ve své galerii)" style="background:#8b5cf6;color:#fff;">🟣 Pro investora</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
+  </div>
+</div>
+
+<!-- Modal: konfigurace swipe akcí úkolů -->
+<div id="swipe-cfg-modal" style="display:none;position:fixed;inset:0;z-index:6400;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--panel);border-radius:14px;max-width:380px;width:100%;border:1px solid var(--border);padding:16px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div id="swipe-cfg-title" style="flex:1;font-size:15px;font-weight:700;color:var(--accent);">Přejetí</div><button onclick="document.getElementById('swipe-cfg-modal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Vyber, co se stane. Appka si to zapamatuje.</div>
+    <div id="swipe-cfg-body"></div>
+    <button onclick="_resetSwipe()" style="width:100%;margin-top:4px;background:none;border:none;color:var(--text2);font-size:12px;cursor:pointer;text-decoration:underline;">Vynulovat swipe akce</button>
   </div>
 </div>
 
