@@ -158,6 +158,8 @@ body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accen
 /* 🐞 Nahlásit chybu/vylepšení – VŽDY viditelné (i přes panely), fixní na levém okraji uprostřed */
 #btn-report { position:fixed; left:6px; top:50%; transform:translateY(-50%); z-index:9600; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:19px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:.72; touch-action:none; -webkit-user-select:none; user-select:none; }
 #btn-report:hover { opacity:1; }
+#btn-chat-fab { position:fixed; left:6px; top:calc(50% - 50px); z-index:9600; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:.72; -webkit-user-select:none; user-select:none; }
+#btn-chat-fab:hover { opacity:1; }
 .rep-tbtn { flex:1; padding:11px; border-radius:9px; border:2px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; font-weight:700; cursor:pointer; }
 .rep-tbtn.active { border-color:var(--accent2); color:var(--accent2); }
 /* Měřicí křížek – azurový, odlišný od bílého křížku poznámky/úkolu */
@@ -1642,6 +1644,7 @@ document.addEventListener('touchend', function(e){
 <button id="fabgrid-trigger" onclick="toggleFabGrid()" title="Vše – panely z lišty (listuj jak ciferník)">🗂️</button>
 <div id="fabgrid"></div>
 <!-- 🐞 Nahlásit chybu / návrh na vylepšení – vždy dostupné -->
+<button id="btn-chat-fab" onclick="openChatPanel()" title="Chat stavby">💬<span id="chat-fab-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#e94560;color:#fff;font-size:10px;font-weight:800;min-width:17px;height:17px;border-radius:9px;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 1px 4px rgba(0,0,0,.5);">0</span></button>
 <button id="btn-report" onclick="openReport()" title="Nahlásit chybu / návrh na vylepšení">🐞<span id="report-badge" style="display:none;position:absolute;top:-5px;right:-5px;background:#e94560;color:#fff;font-size:10px;font-weight:800;min-width:17px;height:17px;border-radius:9px;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 1px 4px rgba(0,0,0,.5);">0</span></button>
 <div id="report-modal" style="display:none;position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:16px;">
   <div style="background:var(--panel);border-radius:14px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;border:1px solid var(--border);padding:16px;box-sizing:border-box;">
@@ -9974,6 +9977,7 @@ function openGallery() {
   // AI hledání v obsahu fotek – zobraz jen když je feature zapnutá (nasazená)
   var srWrap = document.getElementById('gfilt-search-wrap'); if(srWrap) srWrap.style.display = AI_TAGS_ENABLED ? '' : 'none';
   var btBtn = document.getElementById('gallery-batchtag-btn'); if(btBtn) btBtn.style.display = (AI_TAGS_ENABLED && isAdmin()) ? '' : 'none';
+  if(typeof _renderBackupInfo==='function') _renderBackupInfo();
   renderGallery();
 }
 
@@ -10120,6 +10124,22 @@ function fillGalleryAuthorOptions(items){
     var opt = document.createElement('option');
     opt.value = a; opt.textContent = a;
     if(a === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+// Naplní výběr měsíčních zpráv jen měsíci, které v datech reálně existují (ať uživatel nehádá).
+function fillGalleryReportOptions(items){
+  var sel = document.getElementById('gfilt-report');
+  if(!sel || sel.tagName !== 'SELECT') return;
+  var current = sel.value;
+  var set = new Set();
+  items.forEach(function(it){ if(it.report) Object.keys(it.report).forEach(function(m){ if(it.report[m]) set.add(m); }); });
+  var arr = Array.from(set).sort().reverse();   // nejnovější měsíc nahoře
+  sel.innerHTML = '<option value="">— vše —</option>';
+  arr.forEach(function(m){
+    var opt = document.createElement('option');
+    opt.value = m; opt.textContent = '📄 ' + _repFmtMonth(m);
+    if(m === current) opt.selected = true;
     sel.appendChild(opt);
   });
 }
@@ -10327,6 +10347,14 @@ function _galleryItemEl(item) {
     var subB = document.createElement('div');
     subB.className = 'gallery-sub-badge'; subB.textContent = 'SUB';
     div.appendChild(subB);
+  }  // 📄 Odznak „v měsíční zprávě" (vpravo nahoře) – ať je v přehledu vidět, co je vybrané do zprávy
+  if(item.report && Object.keys(item.report).some(function(m){ return item.report[m]; })){
+    var repB = document.createElement('div');
+    repB.textContent = '📄';
+    var _rm = Object.keys(item.report).filter(function(m){ return item.report[m]; }).sort().map(_repFmtMonth);
+    repB.title = 'V měsíční zprávě: ' + _rm.join(', ');
+    repB.style.cssText = 'position:absolute;top:4px;right:4px;background:#10b981;color:#fff;font-size:12px;font-weight:800;padding:1px 5px;border-radius:6px;z-index:3;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+    div.appendChild(repB);
   }
   if(item.kategorie === 'zkousky'){
     var zkB = document.createElement('div');
@@ -10441,6 +10469,7 @@ function renderGallery() {
       items.reverse();
       fillGalleryAuthorOptions(items);
       fillGallerySoOptions(items);
+      fillGalleryReportOptions(items);
       var filtered = sortGalleryItems(applyGalleryFilters(items));
       galleryCurrentItems = filtered;
       if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
@@ -12705,8 +12734,9 @@ function _chatSeenTs(id){ var a=(window._chatSeen&&window._chatSeen[id])||0, b=0
 function _chatUnread(id){ return (window._chatLastTs[id]||0) > _chatSeenTs(id) ? 1 : 0; }
 function _updateChatBadge(){
   var n=0; _myChatChannels().forEach(function(k){ n += _chatUnread(k.id); });
-  var b=document.getElementById('chat-badge'); if(!b) return;
-  b.textContent = n>99?'99+':n; b.classList.toggle('show', n>0);
+  var txt = n>99?'99+':String(n);
+  var b=document.getElementById('chat-badge'); if(b){ b.textContent=txt; b.classList.toggle('show', n>0); }
+  var f=document.getElementById('chat-fab-badge'); if(f){ f.textContent=txt; f.style.display = n>0 ? 'flex' : 'none'; }
 }
 
 function openChatPanel(){
@@ -12970,6 +13000,35 @@ function reportOpenWord(){
   rows.forEach(function(r,i){ html+='<div style="margin:0 0 20px;"><div style="font-weight:bold;font-size:14px;">'+(i+1)+') '+escapeHtml(r.loc)+'</div>'; if(r.url) html+='<img src="'+escapeHtml(r.url)+'" style="max-width:560px;width:100%;height:auto;margin:6px 0;">'; if(r.pop) html+='<div style="font-size:13px;">'+escapeHtml(r.pop)+'</div>'; html+='</div>'; });
   html+='</body></html>';
   try{ var w=window.open('','_blank'); if(w){ w.document.open(); w.document.write(html); w.document.close(); showToast('Otevřeno – v prohlížeči Sdílet/Tisk → PDF, nebo ulož a otevři ve Wordu',5000); } else { _downloadTextFile('fotozprava_'+(m||'').replace('-','_')+'.doc', html, 'application/msword'); } }catch(e){ _downloadTextFile('fotozprava_'+(m||'').replace('-','_')+'.doc', html, 'application/msword'); }
+}
+
+/* ═══ MĚSÍČNÍ ZÁLOHA FOTEK ═══
+   Vybere všechny fotky novější než poslední záloha (localStorage 'lastPhotoBackupTs'),
+   uživatel je stáhne (ZIP/Mobil) a potvrdí „✓ Záloha hotová" → posune značku. */
+function _lastBackupTs(){ try{ return +(localStorage.getItem('lastPhotoBackupTs')||0); }catch(e){ return 0; } }
+function _setLastBackupTs(t){ try{ localStorage.setItem('lastPhotoBackupTs', String(t)); }catch(e){} _renderBackupInfo(); }
+function _renderBackupInfo(){
+  var el=document.getElementById('backup-info'); if(!el) return; var t=_lastBackupTs();
+  el.textContent = t ? ('Poslední záloha: '+new Date(t).toLocaleDateString('cs-CZ')+' '+new Date(t).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})) : 'Zatím nezálohováno – vybere všechny fotky.';
+}
+function selectPhotosSinceBackup(){
+  if(typeof galleryTab!=='undefined' && galleryTab!==0){ showToast('Přepni na „Fotky stavby"',2600); return; }
+  var cutoff=_lastBackupTs();
+  db.ref('standalone_photos').orderByChild('ts').once('value', function(snap){
+    var sel={}, n=0, newest=cutoff;
+    snap.forEach(function(ch){ var v=ch.val(); v.fbKey=ch.key; if(typeof canViewPhoto==='function' && !canViewPhoto(v)) return; var t=photoCreationDate(v).getTime(); if(t>cutoff){ sel[_galleryItemKey(v)]=v; n++; if(t>newest) newest=t; } });
+    if(!n){ showToast('Žádné nové fotky od poslední zálohy 🎉',3200); return; }
+    gallerySelectedKeys=sel; window._backupNewestTs=newest;
+    if(typeof gallerySelectMode!=='undefined') gallerySelectMode=true;
+    renderGallery();
+    showToast('📸 Vybráno '+n+' nových fotek. Stáhni je (💻 ZIP / 📲 Mobil), pak dej „✓ Záloha hotová".',6000);
+  });
+}
+function markBackupDone(){
+  var t=window._backupNewestTs || Date.now();
+  _setLastBackupTs(t);
+  showToast('✅ Záloha označena k '+new Date(t).toLocaleDateString('cs-CZ')+'. Příště se vyberou jen novější.',4500);
+  gallerySelectedKeys={}; renderGallery();
 }
 
 function sendTaskNotificationRequest(task, typ, extra) {
@@ -18148,8 +18207,18 @@ function copyDiaryExport(){
     <div style="margin-top:8px;">
       <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📄 Měsíční zpráva (album vybraných fotek)</label>
       <div style="display:flex;gap:6px;align-items:center;">
-        <input type="month" id="gfilt-report" onchange="renderGallery()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;">
+        <select id="gfilt-report" onchange="renderGallery()" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;"><option value="">— vše —</option></select>
         <button type="button" onclick="openReportExport()" title="Export popisů / Word pro tento měsíc" style="background:var(--accent2);border:none;border-radius:6px;color:#0f3460;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">📄 Export</button>
+      </div>
+    </div>
+    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
+
+    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📸 Měsíční záloha fotek (stažení bokem)</label>
+      <div id="backup-info" style="font-size:11px;color:var(--text2);margin-bottom:6px;"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button type="button" onclick="selectPhotosSinceBackup()" title="Vybrat všechny fotky přidané od poslední zálohy" style="flex:1;background:#0ea5e9;border:none;border-radius:6px;color:#fff;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;">Vybrat nové od minula</button>
+        <button type="button" onclick="markBackupDone()" title="Po stažení označit, že zálohováno k teď" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;">✓ Záloha hotová</button>
       </div>
     </div>
     <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
