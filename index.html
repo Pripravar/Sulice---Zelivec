@@ -10675,6 +10675,7 @@ var FEATURES = [
   { key:'dron',       label:'Dron snímky',       btns:['btn-drone'] },
   { key:'pripominky', label:'Poznámky a úkoly',   btns:['btn-place','btn-notes-evidence'] },
   { key:'ukoly',      label:'Úkolníček',         btns:['btn-tasks'] },
+  { key:'chat',       label:'💬 Chat stavby',     btns:['btn-chat','btn-chat-fab'] },
   { key:'denik',      label:'Deník / sichtovka',  btns:['btn-denik'] },
   { key:'kvalita',    label:'Kvalita / KZP',      btns:['btn-kzp'] },
   { key:'zkousky',    label:'Zkoušky na stavbě',  btns:['btn-zkousky'] },
@@ -11448,6 +11449,7 @@ var _repTyp='chyba';
 function _reportScreen(){
   var map=[
     ['report-modal','—'], // sebe ignoruj (řeší se pořadím)
+    ['chat-newgrp-modal','Chat – skupina'],['chat-modal','Chat'],['photo-fs','Prohlížeč fotky'],['report-export-modal','Měsíční zpráva – export'],
     ['blok-detail','Poznámky – detail'],['blok-panel','Poznámkový blok'],
     ['task-detail','Úkol – detail'],['task-new-modal','Nový úkol'],['tasks-panel','Úkolníček'],
     ['diary-panel','Deník / šichtovka'],['kzp-panel','Kvalita / KZP'],['zkousky-panel','Zkoušky na stavbě'],
@@ -11689,6 +11691,8 @@ function _logPhotoActivity(so){
 }
 // ── „🆕 Co je nového" – changelog novinek (developer-maintained; s novou funkcí přidej řádek nahoru) ──
 var APP_NOVINKY = [
+  { datum:'2026-08-26', verze:'v159', text:'💬 Nový CHAT stavby! Vlevo je průhledná ikona 💬 (jako beruška), nebo v horní liště. Píšeš celé stavbě (kanál „Obecný“) nebo si založíš vlastní skupinu (➕ Skupina) a vybereš, kdo v ní bude. Každý má svoji barvu. Na zprávu můžeš reagovat smajlíkem (☺) nebo odpovědět (↩︎, nebo přejeď prstem po zprávě doprava). @označení pošle dotyčnému upozornění. Když přijde zpráva a appku nemáš otevřenou, svítí číslo na ikoně na ploše; po otevření zmizí. Chat Ti může admin v právech vypnout.' },
+  { datum:'2026-08-26', verze:'v159', text:'📄 Měsíční fotozprávy: u fotky v „⋯ Možnosti“ → „Do měsíční zprávy“ ji zařadíš do měsíce a připíšeš popis (i hlasem 🎤); hromadně přes výběr v galerii („📄 Do zprávy“). V galerii ve filtru vybereš měsíc (album) – fotky ve zprávě mají 📄 odznak. Přes „📄 Export“ stáhneš fotky (s volbou razítka nebo bez) a popisy (kopírovat / .txt / Word). 📸 „Měsíční záloha fotek“: „Vybrat nové od minula“ označí vše od poslední zálohy, stáhneš a dáš „✓ Záloha hotová“.' },
   { datum:'2026-08-19', verze:'v158', text:'🐞 V přijatých hlášeních (beruška) se teď u nevyřešených ukazuje 💬 „Návrh odpovědi (vývoj)" – hotový text, jak byl podnět vyřešený. Stačí kliknout „✅ Vyřešit tímto textem" a autor hlášení odpověď rovnou uvidí (nebo si text uprav přes „Vyřešeno"). Konec ručního opisování.' },
   { datum:'2026-08-19', verze:'v157', text:'🔍 Filtr v galerii jde teď jasně schovat: po otevření se tlačítko změní na „🔼 Skrýt filtr" (žlutě) a v panelu je i velké tlačítko „Skrýt filtr a vidět fotky". Filtr přitom zůstane zapnutý (u schovaného svítí u tlačítka „•"), takže procházíš fotky přes celou obrazovku a nemusíš mít filtr otevřený. 👥 Admin: klik na svoje jméno teď rovnou otevře Správu uživatelů (žádné „OK/Zrušit"); odhlášení je tlačítkem 🚪 přímo v tabulce. Díky Tomášovi za podněty. 🐞' },
   { datum:'2026-08-11', verze:'v156', text:'🧪 V Kvalitě/KZP teď nahráváš PDF přímo z telefonu – nahoře vybereš, CO nahráváš (KZP / 📋 TePř / protokol / jiný dokument) a PDF se bezpečně uloží do Firebase (otevřou ho jen přihlášení). Odkaz na PDF zůstává jako druhá možnost. 🐞 Berušku (Nahlásit chybu) jde teď chytit a přetáhnout kamkoli – kam si ji dáš, tam zůstane.' },
@@ -12744,6 +12748,7 @@ function _updateChatBadge(){
 }
 
 function openChatPanel(){
+  if(typeof hasPerm==='function' && !hasPerm('chat')){ showToast('💬 Chat Ti admin nepovolil',2800); return; }
   if(!window.currentUser){ showToast('Nejdřív se přihlas', 2000); return; }
   initChat();
   document.getElementById('chat-modal').style.display='flex';
