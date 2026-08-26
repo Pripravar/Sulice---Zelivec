@@ -800,11 +800,12 @@ exports.extractDodaciList = functions
     const extraDesc = extra.map(function(e){ var k=String((e&&e.key)||'').replace(/[^a-zA-Z0-9_]/g,'').slice(0,32); return k?(k+'='+String((e&&e.hint)||'').slice(0,140)):''; }).filter(Boolean).join('; ');
     const PROMPT = 'Na obrázku je DODACÍ LIST (dodávka materiálu na stavbu silnice v ČR). '
       + 'Vytáhni údaje a vrať POUZE JSON (žádný jiný text) přesně v tomto tvaru:\n'
-      + '{"dodavatel":"","cisloDL":"","datum":"","spz":"","polozky":[{"co":"","specifikace":"","mnozstvi":"","jednotka":""}]' + (extraJson ? (','+extraJson) : '') + '}\n'
+      + '{"dodavatel":"","cisloDL":"","datum":"","spz":"","kvalita":"","polozky":[{"co":"","specifikace":"","mnozstvi":"","jednotka":""}]' + (extraJson ? (','+extraJson) : '') + '}\n'
       + 'Význam: dodavatel=kdo dodal (firma/závod/obalovna); cisloDL=číslo dodacího listu; datum=datum na dokladu ve formátu RRRR-MM-DD; spz=SPZ vozidla pokud je uvedena. '
       + 'polozky=seznam VŠECH dodaných položek na dokladu (u betonu obvykle jedna, u stavebnin i více řádků). Každá položka: co=materiál/zboží stručně (Beton, Obalované kamenivo, Ocel…); specifikace=třída/pevnost/značka – u betonu VŽDY plné značení (C30/37 XF4 XC4 Cl0,4 Dmax22 S4), u oceli B500B apod.; mnozstvi=jen číselná hodnota; jednotka=t/m3/ks/m/kg. '
       + (extraDesc ? ('Dále z dokladu vytáhni tyto údaje: ' + extraDesc + '. ') : '')
-      + 'Když údaj nenajdeš, dej prázdný řetězec (v polozky vrať aspoň jednu položku). Nic jiného nepiš.';
+      + 'kvalita=posuď čitelnost FOTKY dokladu: "ok" když jde dobře přečíst, "rozmazane" když jen částečně, "necitelne" když je rozmazaná/tmavá/z úhlu a NEJDE spolehlivě přečíst (uživatel má vyfotit znovu). '
+      + 'DŮLEŽITÉ: pokud údaj na dokladu JE, ale kvůli rozmazání/kvalitě ho NEJDE spolehlivě přečíst, napiš "?" (otazník) MÍSTO hádání. Prázdný řetězec dej jen když údaj na dokladu VŮBEC není. V polozky vrať aspoň jednu položku. Nic jiného nepiš.';
 
     try {
       const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -815,7 +816,7 @@ exports.extractDodaciList = functions
           'content-type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5',
+          model: 'claude-sonnet-5',
           max_tokens: 1024,
           messages: [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: mime, data: image } },
@@ -836,7 +837,7 @@ exports.extractDodaciList = functions
       const first = polozky[0] || {};
       const fields = { co:String(first.co||''), specifikace:String(first.specifikace||''), mnozstvi:String(first.mnozstvi||''), jednotka:String(first.jednotka||''), dodavatel:String(parsed.dodavatel||''), cisloDL:String(parsed.cisloDL||''), datum:String(parsed.datum||''), spz:String(parsed.spz||'') };
       const extraVals = {}; extraKeys.forEach(function(k){ if(parsed[k] != null) extraVals[k] = String(parsed[k]); });
-      res.status(200).json({ ok: true, fields: fields, polozky: polozky, extra: extraVals, usage: data.usage || null });
+      res.status(200).json({ ok: true, fields: fields, polozky: polozky, extra: extraVals, kvalita: String(parsed.kvalita||''), usage: data.usage || null });
     } catch(e) {
       console.error('extractDodaciList výjimka:', e);
       res.status(500).json({ error: 'Chyba serveru při AI' });
