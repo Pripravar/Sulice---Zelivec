@@ -790,15 +790,25 @@ exports.extractDodaciList = functions
     const body = req.body || {};
     let image = String(body.image || '').replace(/^data:[^;]+;base64,/, '');
     const mime = /png/i.test(String(body.mime || '')) ? 'image/png' : 'image/jpeg';
-    if(!image || image.length > 8 * 1024 * 1024) {
-      res.status(400).json({ error: 'Chybí nebo příliš velký obrázek' }); return;
-    }
+    const mode = String(body.mode || 'jednotlivy');
+    let pdf = String(body.pdf || '').replace(/^data:[^;]+;base64,/, '');
+    const vtext = String(body.text || '').slice(0, 60000);
+    if(!image && !pdf && !vtext) { res.status(400).json({ error: 'Chybí obrázek/PDF/text' }); return; }
+    if((image && image.length > 8*1024*1024) || (pdf && pdf.length > 12*1024*1024)) { res.status(400).json({ error: 'Soubor je příliš velký' }); return; }
 
     const extra = Array.isArray(body.extra) ? body.extra.slice(0,8) : [];
     const extraKeys = extra.map(function(e){ return String((e&&e.key)||'').replace(/[^a-zA-Z0-9_]/g,'').slice(0,32); }).filter(Boolean);
     const extraJson = extraKeys.map(function(k){ return '"'+k+'":""'; }).join(',');
     const extraDesc = extra.map(function(e){ var k=String((e&&e.key)||'').replace(/[^a-zA-Z0-9_]/g,'').slice(0,32); return k?(k+'='+String((e&&e.hint)||'').slice(0,140)):''; }).filter(Boolean).join('; ');
-    const PROMPT = 'Na obrázku je DODACÍ LIST (dodávka materiálu na stavbu silnice v ČR). '
+    let PROMPT;
+    if(mode === 'vypis'){
+      PROMPT = 'V přiloženém souboru je VÝPIS / SOUPIS více dodávek materiálu na stavbu silnice v ČR (např. výpis z lomu nebo betonárny – řádky co/kdy/kolik bylo odebráno). '
+        + 'Vytáhni VŠECHNY řádky/dodávky a vrať POUZE JSON (žádný jiný text) v tomto tvaru:\n'
+        + '{"dodaky":[{"datum":"","co":"","specifikace":"","mnozstvi":"","jednotka":"","dodavatel":"","cisloDL":"","spz":""}]}\n'
+        + 'Každý řádek výpisu = jedna položka v poli dodaky. datum=RRRR-MM-DD; co=materiál/zboží stručně; specifikace=třída/pevnost/značka (u betonu plné značení C30/37 XF4…); mnozstvi=jen číselná hodnota; jednotka=t/m3/ks/m/kg; dodavatel=kdo dodal (firma/lom/betonárna); cisloDL=číslo dokladu/dodacího listu; spz=SPZ vozidla pokud je. '
+        + 'Když údaj u řádku není, dej prázdný řetězec. Vrať i desítky řádků, pokud tam jsou. Nic jiného nepiš.';
+    } else {
+    const PROMPT0 = 'Na obrázku je DODACÍ LIST (dodávka materiálu na stavbu silnice v ČR). '
       + 'Vytáhni údaje a vrať POUZE JSON (žádný jiný text) přesně v tomto tvaru:\n'
       + '{"dodavatel":"","cisloDL":"","datum":"","spz":"","kvalita":"","polozky":[{"co":"","specifikace":"","mnozstvi":"","jednotka":""}]' + (extraJson ? (','+extraJson) : '') + '}\n'
       + 'Význam: dodavatel=kdo dodal (firma/závod/obalovna); cisloDL=číslo dodacího listu; datum=datum na dokladu ve formátu RRRR-MM-DD; spz=SPZ vozidla pokud je uvedena. '
@@ -806,6 +816,8 @@ exports.extractDodaciList = functions
       + (extraDesc ? ('Dále z dokladu vytáhni tyto údaje: ' + extraDesc + '. ') : '')
       + 'kvalita=posuď čitelnost FOTKY dokladu: "ok" když jde dobře přečíst, "rozmazane" když jen částečně, "necitelne" když je rozmazaná/tmavá/z úhlu a NEJDE spolehlivě přečíst (uživatel má vyfotit znovu). '
       + 'DŮLEŽITÉ: pokud údaj na dokladu JE, ale kvůli rozmazání/kvalitě ho NEJDE spolehlivě přečíst, napiš "?" (otazník) MÍSTO hádání. Prázdný řetězec dej jen když údaj na dokladu VŮBEC není. V polozky vrať aspoň jednu položku. Nic jiného nepiš.';
+      PROMPT = PROMPT0;
+    }
 
     try {
       const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -815,14 +827,7 @@ exports.extractDodaciList = functions
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json'
         },
-        body: JSON.stringify({
-          model: 'claude-sonnet-5',
-          max_tokens: 1024,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: mime, data: image } },
-            { type: 'text', text: PROMPT }
-          ]}]
-        })
+        body: JSON.stringify((function(){ var content=[]; if(pdf){ content.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data: pdf } }); } else if(image){ content.push({ type:'image', source:{ type:'base64', media_type: mime, data: image } }); } if(vtext){ content.push({ type:'text', text:'DATA Z VÝPISU (text):\n'+vtext }); } content.push({ type:'text', text: PROMPT }); return { model:'claude-sonnet-5', max_tokens: (mode==='vypis'?4096:1024), messages:[{ role:'user', content: content }] }; })())
       });
       const data = await aiResp.json();
       if(!aiResp.ok) {
@@ -833,6 +838,10 @@ exports.extractDodaciList = functions
       try { text = (data.content || []).map(function(b){ return b && b.type === 'text' ? b.text : ''; }).join(''); } catch(e){}
       let parsed = {};
       try { const m = text.match(/\{[\s\S]*\}/); if(m) parsed = JSON.parse(m[0]) || {}; } catch(e){ console.warn('parse JSON z AI selhal:', e && e.message); }
+      if(mode === 'vypis'){
+        var dodaky = Array.isArray(parsed.dodaky) ? parsed.dodaky.map(function(r){ r=r||{}; return { datum:String(r.datum||''), co:String(r.co||''), specifikace:String(r.specifikace||''), mnozstvi:String(r.mnozstvi||''), jednotka:String(r.jednotka||''), dodavatel:String(r.dodavatel||''), cisloDL:String(r.cisloDL||''), spz:String(r.spz||'') }; }).filter(function(r){ return r.co||r.mnozstvi||r.datum||r.cisloDL; }) : [];
+        res.status(200).json({ ok:true, dodaky:dodaky, usage:data.usage||null }); return;
+      }
       const polozky = Array.isArray(parsed.polozky) ? parsed.polozky.map(function(it){ it=it||{}; return { co:String(it.co||''), specifikace:String(it.specifikace||''), mnozstvi:String(it.mnozstvi||''), jednotka:String(it.jednotka||'') }; }).filter(function(it){ return it.co||it.specifikace||it.mnozstvi||it.jednotka; }) : [];
       const first = polozky[0] || {};
       const fields = { co:String(first.co||''), specifikace:String(first.specifikace||''), mnozstvi:String(first.mnozstvi||''), jednotka:String(first.jednotka||''), dodavatel:String(parsed.dodavatel||''), cisloDL:String(parsed.cisloDL||''), datum:String(parsed.datum||''), spz:String(parsed.spz||'') };
