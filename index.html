@@ -6866,7 +6866,7 @@ function openNoteDetail(id) {
     var dlBtn = document.createElement('a');
     dlBtn.href = src;
     if(!src.startsWith('data:')){ dlBtn.target='_blank'; dlBtn.rel='noopener'; }
-    else { dlBtn.download = 'foto_' + (pi+1) + '.jpg'; }
+    else { dlBtn.download = 'sulice_foto_' + (pi+1) + '.jpg'; }
     dlBtn.style.cssText = 'position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,0.6);color:#fff;font-size:14px;border-radius:4px;padding:1px 4px;text-decoration:none;line-height:1.4;';
     dlBtn.textContent = '⬇';
     var btn = document.createElement('button');
@@ -6889,7 +6889,7 @@ function openNoteDetail(id) {
       dlAll.onclick = function() {
         photos.forEach(function(src, i) {
           var a = document.createElement('a');
-          a.href = src; a.download = 'foto_' + (i+1) + '.jpg';
+          a.href = src; a.download = 'sulice_foto_' + (i+1) + '.jpg';
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
         });
       };
