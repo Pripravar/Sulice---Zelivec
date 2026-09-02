@@ -18596,7 +18596,7 @@ function copyDiaryExport(){
     <button onclick="_closePhotoCmtBox()" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text2);padding:10px 12px;cursor:pointer;min-height:42px;">✕</button>
   </div>
   <!-- Inline pole „Do měsíční zprávy" (v toku, pod fotkou – nepřekrývá ji) -->
-  <div id="photo-fs-report-box" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="display:none;flex:0 0 auto;width:100%;box-sizing:border-box;background:rgba(12,14,20,0.98);color:#fff;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.16);">
+  <div id="photo-fs-report-box" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="display:none;position:absolute;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));background:rgba(12,14,20,0.98);color:#fff;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.16);z-index:9;max-height:52vh;overflow-y:auto;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><b style="font-size:14px;">📄 Měsíční zpráva</b><span style="flex:1;"></span><button onclick="closePhotoReportBox()" style="background:none;border:none;color:#bbb;font-size:20px;cursor:pointer;min-height:36px;">✕</button></div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <input type="month" id="pfr-month" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:14px;">
