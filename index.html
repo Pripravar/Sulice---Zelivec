@@ -7286,6 +7286,7 @@ function navigateFs(dir) {
   var it = galleryCurrentItems[n];
   _renderFsItem(it.url, it.fbKey || null, it);
   _updateFsNav();
+  try{ var _rb=document.getElementById('photo-fs-report-box'); if(_rb && _rb.style.display==='block') _pfrFill(false); }catch(e){}
 }
 
 // Zobrazí/skryje šipky a počítadlo podle pozice v galerii.
@@ -13381,12 +13382,20 @@ function _repFmtMonth(m){ if(!m) return ''; var p=(m||'').split('-'); return p.l
 function _repNormMonth(s){ s=(s||'').trim(); var m=s.match(/^(\d{4})-(\d{1,2})$/); if(m) return m[1]+'-'+String(m[2]).padStart(2,'0'); m=s.match(/^(\d{1,2})[\/.](\d{4})$/); if(m) return m[2]+'-'+String(m[1]).padStart(2,'0'); return ''; }
 function _repMonthDefaultFor(it){ try{ var d=itemDateYmd(it); if(d) return d.slice(0,7); }catch(e){} return _repMonthNow(); }
 
+function _repSoKmPrefix(it){ if(!it) return ''; var so=(it.soList&&it.soList.length)?it.soList.join(', '):(it.so||''); var p=[]; if(so) p.push(so); if(it.km) p.push('km '+it.km); return p.length?(p.join(', ')+' — '):''; }
+function _pfrFill(autoAdd){
+  if(!_photoFsItem) return;
+  var m=_repMonthDefaultFor(_photoFsItem);
+  var mEl=document.getElementById('pfr-month'); if(mEl) mEl.value=m;
+  if(autoAdd){ var rep=_photoFsItem.report||{}; if(!rep[m]){ rep[m]=true; _photoFsItem.report=rep; try{ db.ref('standalone_photos/'+_photoFsKey+'/report/'+m).set(true); }catch(e){} if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); } }
+  var pEl=document.getElementById('pfr-popis'); if(pEl){ var ex=(_photoFsItem && _photoFsItem.reportPopis)||''; pEl.value = ex || _repSoKmPrefix(_photoFsItem); }
+  _renderPfrMonths();
+}
 function openPhotoReportBox(){
   if(!_photoFsKey || !window.currentUser){ showToast('Označit lze jen fotky po přihlášení',2500); return; }
   if(typeof closeFsMenu==='function') closeFsMenu();
-  var mEl=document.getElementById('pfr-month'); if(mEl && !mEl.value) mEl.value=_repMonthDefaultFor(_photoFsItem);
-  var pEl=document.getElementById('pfr-popis'); if(pEl) pEl.value=(_photoFsItem && _photoFsItem.reportPopis)||'';
-  _renderPfrMonths();
+  _pfrFill(true);
+  showToast('📄 Ve zprávě '+_repFmtMonth(_repMonthDefaultFor(_photoFsItem))+' – dopiš popis a dej Uložit',2600);
   var b=document.getElementById('photo-fs-report-box'); if(b) b.style.display='block';
 }
 function closePhotoReportBox(){ var b=document.getElementById('photo-fs-report-box'); if(b) b.style.display='none'; }
@@ -13407,7 +13416,10 @@ function pfrToggleMonth(){
 function pfrRemoveMonth(m){ if(!_photoFsKey) return; var rep=_photoFsItem.report||{}; delete rep[m]; _photoFsItem.report=rep; db.ref('standalone_photos/'+_photoFsKey+'/report/'+m).set(null); _renderPfrMonths(); if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); }
 function savePhotoReport(){
   if(!_photoFsKey) return; var pEl=document.getElementById('pfr-popis'); var v=pEl?(pEl.value||'').trim():'';
-  db.ref('standalone_photos/'+_photoFsKey+'/reportPopis').set(v||null).then(function(){ _photoFsItem.reportPopis=v; showToast('📄 Popis uložen',1500); if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); });
+  var m=_repMonthDefaultFor(_photoFsItem); var rep=_photoFsItem.report||{}; var addMonth=!rep[m];
+  var ops=[ db.ref('standalone_photos/'+_photoFsKey+'/reportPopis').set(v||null) ];
+  if(addMonth){ rep[m]=true; _photoFsItem.report=rep; ops.push(db.ref('standalone_photos/'+_photoFsKey+'/report/'+m).set(true)); }
+  Promise.all(ops).then(function(){ _photoFsItem.reportPopis=v; showToast('📄 Uloženo'+(addMonth?(' + do zprávy '+_repFmtMonth(m)):''),1800); _renderPfrMonths(); if(document.getElementById('gallery-modal').classList.contains('open')) renderGallery(); });
 }
 function pfrVoice(){ _voiceToField('pfr-popis'); }
 
