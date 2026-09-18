@@ -10349,10 +10349,10 @@ function applyGalleryFilters(items){
   var onlyZk = zkEl ? zkEl.checked : false;
   var repEl = document.getElementById('gfilt-report');
   var repM = repEl ? (repEl.value || '') : '';
-  var zbvOnly = (document.getElementById('gfilt-zbv')||{}).checked;   // "YYYY-MM" – album měsíční zprávy
+  var zbvSel = (document.getElementById('gfilt-zbv')||{}).value||'';   // "YYYY-MM" – album měsíční zprávy
   // Tlačítko „✕ Zrušit filtr" v hlavičce ukázat, jen když je nějaký filtr aktivní
   // (u subky nepočítáme vynucený SUB filtr – ten stejně vypnout nejde).
-  var anyActive = srch || onlyKom || onlyZk || repM || zbvOnly || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soSel.size || (subKind && !isSubOnly() && !isInvestorOnly());
+  var anyActive = srch || onlyKom || onlyZk || repM || zbvSel || !isNaN(kmOd) || !isNaN(kmDo) || dtOd || dtDo || aut || soSel.size || (subKind && !isSubOnly() && !isInvestorOnly());
   var cfBtn = document.getElementById('gallery-clearfilter-btn');
   if(cfBtn) cfBtn.style.display = anyActive ? '' : 'none';
   // Měsíční okno: bez filtru (a v ploché mřížce) ukaž jen posledních N měsíců (výkon u tisíců fotek).
@@ -10388,7 +10388,7 @@ function applyGalleryFilters(items){
     if(onlyKom && !(kom && kom.text)) return false;
     if(onlyZk && it.kategorie !== 'zkousky') return false;
     if(repM){ if(!(it.report && it.report[repM])) return false; }
-    if(zbvOnly){ if(!it.zbv) return false; }   // jen fotky zařazené do vybrané měsíční zprávy
+    if(zbvSel){ if(!it.zbv) return false; if(zbvSel!=='__vse__' && (it.zbvPopis||'')!==zbvSel) return false; }   // jen fotky zařazené do vybrané měsíční zprávy
     if(srchWords.length){
       // Hledá v AI popisu (tags) + SO + km + autor + datum + komentář (text i autor). AND.
       var hay = [it.tags, it.so, (it.soList||[]).join(' '), it.km, it.author, it.date, (kom?kom.text:''), (kom?kom.author:'')].filter(Boolean).join(' ').toLowerCase();
@@ -10436,6 +10436,14 @@ function fillGalleryAuthorOptions(items){
   });
 }
 // Naplní výběr měsíčních zpráv jen měsíci, které v datech reálně existují (ať uživatel nehádá).
+function fillGalleryZbvOptions(items){
+  var sel=document.getElementById('gfilt-zbv'); if(!sel || sel.tagName!=='SELECT') return;
+  var cur=sel.value; var seen={}, arr=[];
+  (items||[]).forEach(function(it){ if(it && it.zbv){ var p=(it.zbvPopis||'').trim(); if(p && !seen[p]){ seen[p]=1; arr.push(p); } } });
+  arr.sort(function(a,b){ return a.localeCompare(b,'cs'); });
+  sel.innerHTML='<option value="">— vše —</option><option value="__vse__">📐 Všechny ZBV</option>'+arr.map(function(p){ return '<option value="'+escapeHtml(p)+'">📐 '+escapeHtml(p)+'</option>'; }).join('');
+  if(cur){ sel.value=cur; if(sel.value!==cur) sel.value=''; }
+}
 function fillGalleryReportOptions(items){
   var sel = document.getElementById('gfilt-report');
   if(!sel || sel.tagName !== 'SELECT') return;
@@ -10609,7 +10617,7 @@ function clearGalleryFilters(){
   var komEl = document.getElementById('gfilt-komentar'); if(komEl) komEl.checked = false;
   var zkEl2 = document.getElementById('gfilt-zkousky'); if(zkEl2) zkEl2.checked = false;
   var repEl2 = document.getElementById('gfilt-report'); if(repEl2) repEl2.value = '';
-  var zbvEl2 = document.getElementById('gfilt-zbv'); if(zbvEl2) zbvEl2.checked = false;
+  var zbvEl2 = document.getElementById('gfilt-zbv'); if(zbvEl2) zbvEl2.value = '';
   renderGallery();
 }
 
@@ -10787,7 +10795,7 @@ function renderGallery() {
       items.reverse();
       fillGalleryAuthorOptions(items);
       fillGallerySoOptions(items);
-      fillGalleryReportOptions(items);
+      fillGalleryReportOptions(items); fillGalleryZbvOptions(items);
       var filtered = sortGalleryItems(applyGalleryFilters(items));
       galleryCurrentItems = filtered;
       if(cnt) cnt.textContent = filtered.length + ' / ' + items.length;
@@ -18916,7 +18924,8 @@ function copyDiaryExport(){
       <input type="checkbox" id="gfilt-zkousky" onchange="renderGallery()" style="width:18px;height:18px;"> 🔬 Jen fotky ke zkouškám
     </label>
     <div style="margin-top:8px;" data-perm="zbv">
-      <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="gfilt-zbv" onchange="renderGallery()" style="width:18px;height:18px;"> 📐 Jen fotky ZBV (změny během výstavby)</label>
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📐 ZBV – změny během výstavby (filtr)</label>
+      <select id="gfilt-zbv" onchange="renderGallery()" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:13px;"><option value="">— vše —</option><option value="__vse__">📐 Všechny ZBV</option></select>
     </div>
     <div style="margin-top:8px;">
       <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📄 Měsíční zpráva (album vybraných fotek)</label>
