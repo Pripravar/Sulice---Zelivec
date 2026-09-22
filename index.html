@@ -13523,9 +13523,27 @@ function zbvTagSelected(){
   if(!items.length){ showToast('Vyber fotky z galerie',2200); return; }
   if(!window.currentUser){ showToast('Přihlas se',2000); return; }
   if(typeof hasPerm==='function' && !hasPerm('zbv')){ showToast('📐 ZBV Ti admin nepovolil',2800); return; }
+  if(typeof _zbvFillDatalist==='function') _zbvFillDatalist();
   var def=(document.getElementById('gfilt-zbv')||{}).value||''; if(def==='__vse__') def='';
-  var inp=prompt('Do které ZBV zařadit '+items.length+' fotek?\nNapiš stručný popis ZBV (stejný pro všechny):', def);
-  if(inp===null) return; var v=(inp||'').trim(); if(!v){ showToast('Napiš popis ZBV',2600); return; }
+  var old=document.getElementById('zbv-bulk-ovl'); if(old) old.remove();
+  var ovl=document.createElement('div'); ovl.id='zbv-bulk-ovl';
+  ovl.style.cssText='position:fixed;inset:0;z-index:9800;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  ovl.innerHTML='<div onclick="event.stopPropagation()" style="background:var(--panel,#1a1a2e);border:1px solid var(--border,#333);border-radius:14px;max-width:420px;width:100%;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,.6);">'
+    +'<div style="font-size:15px;font-weight:800;color:#f59e0b;margin-bottom:4px;">📐 Do ZBV – '+items.length+' fotek</div>'
+    +'<div style="font-size:12px;color:var(--text2,#9aa);margin-bottom:10px;">Napiš popis ZBV (našeptává už založené):</div>'
+    +'<input id="zbv-bulk-input" list="dl-zbv-popis" autocomplete="off" placeholder="Stručný popis ZBV" style="width:100%;box-sizing:border-box;background:var(--panel2,#22223a);border:1px solid var(--border,#333);border-radius:8px;color:var(--text,#fff);padding:11px;font-size:14px;">'
+    +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;"><button onclick="_zbvBulkClose()" style="background:var(--panel2,#22223a);border:1px solid var(--border,#333);border-radius:8px;color:var(--text,#fff);padding:10px 14px;cursor:pointer;">Zrušit</button><button onclick="_zbvBulkConfirm()" style="background:#f59e0b;border:none;border-radius:8px;color:#1a1a1a;padding:10px 16px;font-weight:800;cursor:pointer;">📐 Zařadit</button></div></div>';
+  ovl.addEventListener('click', function(e){ if(e.target===ovl) _zbvBulkClose(); });
+  document.body.appendChild(ovl);
+  window._zbvBulkItems=items;
+  var bi=document.getElementById('zbv-bulk-input'); if(bi){ bi.value=def; setTimeout(function(){ try{ bi.focus(); }catch(e){} },50); bi.onkeydown=function(e){ if(e.key==='Enter') _zbvBulkConfirm(); else if(e.key==='Escape') _zbvBulkClose(); }; }
+}
+function _zbvBulkClose(){ var o=document.getElementById('zbv-bulk-ovl'); if(o) o.remove(); window._zbvBulkItems=null; }
+function _zbvBulkConfirm(){
+  var items=window._zbvBulkItems||[]; if(!items.length){ _zbvBulkClose(); return; }
+  var inp=document.getElementById('zbv-bulk-input'); var v=inp?(inp.value||'').trim():'';
+  if(!v){ showToast('Napiš popis ZBV',2400); return; }
+  _zbvBulkClose();
   showSync('📐 Zařazuji 0/'+items.length+'…'); var done=0,fail=0;
   var proms=items.map(function(it){ return db.ref('standalone_photos/'+it.fbKey).update({zbv:true, zbvPopis:v}).then(function(){ it.zbv=true; it.zbvPopis=v; done++; showSync('📐 Zařazuji '+done+'/'+items.length+'…'); }).catch(function(){ fail++; done++; }); });
   Promise.all(proms).then(function(){ hideSync(); showToast('📐 Do ZBV „'+v+'“: '+(items.length-fail)+' fotek'+(fail?(' ('+fail+'× chyba)'):''),3600); gallerySelectedKeys={}; renderGallery(); });
