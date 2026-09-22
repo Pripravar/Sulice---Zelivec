@@ -13518,6 +13518,18 @@ function _voiceToField(fieldId){
   }catch(e){ showToast('🎤 Nepodařilo se spustit diktování',2500); }
 }
 
+function zbvTagSelected(){
+  var items=Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
+  if(!items.length){ showToast('Vyber fotky z galerie',2200); return; }
+  if(!window.currentUser){ showToast('Přihlas se',2000); return; }
+  if(typeof hasPerm==='function' && !hasPerm('zbv')){ showToast('📐 ZBV Ti admin nepovolil',2800); return; }
+  var def=(document.getElementById('gfilt-zbv')||{}).value||''; if(def==='__vse__') def='';
+  var inp=prompt('Do které ZBV zařadit '+items.length+' fotek?\nNapiš stručný popis ZBV (stejný pro všechny):', def);
+  if(inp===null) return; var v=(inp||'').trim(); if(!v){ showToast('Napiš popis ZBV',2600); return; }
+  showSync('📐 Zařazuji 0/'+items.length+'…'); var done=0,fail=0;
+  var proms=items.map(function(it){ return db.ref('standalone_photos/'+it.fbKey).update({zbv:true, zbvPopis:v}).then(function(){ it.zbv=true; it.zbvPopis=v; done++; showSync('📐 Zařazuji '+done+'/'+items.length+'…'); }).catch(function(){ fail++; done++; }); });
+  Promise.all(proms).then(function(){ hideSync(); showToast('📐 Do ZBV „'+v+'“: '+(items.length-fail)+' fotek'+(fail?(' ('+fail+'× chyba)'):''),3600); gallerySelectedKeys={}; renderGallery(); });
+}
 function reportTagSelected(){
   var items=Object.values(gallerySelectedKeys).filter(function(it){ return it && it.fbKey; });
   if(!items.length){ showToast('Vyber fotky z galerie',2200); return; }
@@ -18963,6 +18975,7 @@ function copyDiaryExport(){
     <button onclick="reassignKmSelectedGalleryPhotos()" title="Hromadně přenastavit staničení (km)" style="background:#f5a623;color:#0f3460;">📍 Staničení</button>
     <button onclick="changeDateSelectedGalleryPhotos()" title="Hromadně změnit datum pořízení" style="background:#f5a623;color:#0f3460;">📅 Datum</button>
     <button onclick="reportTagSelected()" title="Zařadit vybrané fotky do měsíční zprávy" style="background:#10b981;color:#fff;">📄 Do zprávy</button>
+    <button onclick="zbvTagSelected()" title="Zařadit vybrané fotky do konkrétní ZBV" style="background:#f59e0b;color:#1a1a1a;">📐 Do ZBV</button>
     <button onclick="shareSelectedWithSub()" title="Sdílet vybrané fotky subce (uvidí je ve své galerii)" style="background:#0ea5e9;color:#fff;">📷 Pro SUB</button>
     <button onclick="shareSelectedWithInvestor()" title="Sdílet vybrané fotky investorovi (uvidí je ve své galerii)" style="background:#8b5cf6;color:#fff;">🟣 Pro investora</button>
     <button onclick="deleteSelectedGalleryPhotos()" title="Smazat vybrané fotky" style="background:#e57373;color:#fff;">🗑️ Smazat</button>
