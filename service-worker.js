@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 // VERZE cache - při změně příště zvedni, ať si telefony stáhnou novou verzi.
-const CACHE_VERSION = 'sulice-v158-2026-08-19-fcm27-chat1';
+const CACHE_VERSION = 'sulice-v159-2026-09-24-propfix-fotoUX';
 
 const CORE_ASSETS = [
   './',
