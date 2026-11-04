@@ -18399,7 +18399,7 @@ async function downloadTeprWithSigs(){
 
   try {
     showSync('⏳ Stahuji originál…');
-    var r = await fetch(k.pdfUrl);
+    var r = await fetch(await resolveFileUrl(k.pdfUrl));   // Storage cesta (nahrané TePř) → token URL
     if(!r.ok) throw new Error('PDF nenalezeno: ' + k.pdfUrl);
     var bytes = await r.arrayBuffer();
 
