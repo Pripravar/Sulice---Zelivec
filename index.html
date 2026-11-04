@@ -180,7 +180,7 @@ body.grid-open #fabgrid-trigger { border-color:var(--accent2); color:var(--accen
 #measure-hud .mh-row { display:flex; align-items:center; gap:8px; justify-content:center; flex-wrap:wrap; }
 #measure-hud button { border:none; border-radius:10px; padding:11px 14px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px; }
 
-#toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 16px; font-size:13px; z-index:3000; opacity:0; transition:all .3s; white-space:nowrap; pointer-events:none; }
+#toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 16px; font-size:13px; z-index:99999; opacity:0; transition:all .3s; white-space:nowrap; pointer-events:none; }
 #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
 /* ══ STANIČENÍ ══
@@ -13745,13 +13745,26 @@ function downloadReportPhotos(){
 /* ═══ MĚSÍČNÍ ZÁLOHA FOTEK ═══
    Vybere všechny fotky novější než poslední záloha (localStorage 'lastPhotoBackupTs'),
    uživatel je stáhne (ZIP/Mobil) a potvrdí „✓ Záloha hotová" → posune značku. */
-function _lastBackupTs(){ try{ return +(localStorage.getItem('lastPhotoBackupTs')||0); }catch(e){ return 0; } }
-function _setLastBackupTs(t){ try{ localStorage.setItem('lastPhotoBackupTs', String(t)); }catch(e){} _renderBackupInfo(); }
+function _lastBackupTs(){ try{ return +(localStorage.getItem(_backupKey())||0); }catch(e){ return 0; } }
+
+function _appScope(){
+  try{ if(window.FIREBASE_CONFIG && FIREBASE_CONFIG.projectId) return FIREBASE_CONFIG.projectId; }catch(e){}
+  try{ var seg=(location.pathname.split('/').filter(Boolean)[0])||''; if(seg && seg.indexOf('.')===-1) return seg; }catch(e){}
+  return 'app';
+}
+
+function _backupKey(){ return 'lastPhotoBackupTs::'+_appScope(); }
+
+function _setLastBackupTs(t){ try{ localStorage.setItem(_backupKey(), String(t)); }catch(e){} _renderBackupInfo(); }
 function _renderBackupInfo(){
+  // Zálohu vidí/dělá jen správce (admin) – a je per aplikace (viz _appScope).
+  var sec=document.getElementById('backup-section');
+  if(sec) sec.style.display = (typeof isAdmin==='function' && isAdmin()) ? 'block' : 'none';
   var el=document.getElementById('backup-info'); if(!el) return; var t=_lastBackupTs();
   el.textContent = t ? ('Poslední záloha: '+new Date(t).toLocaleDateString('cs-CZ')+' '+new Date(t).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})) : 'Zatím nezálohováno – vybere všechny fotky.';
 }
 function selectPhotosSinceBackup(){
+  if(typeof isAdmin==='function' && !isAdmin()){ showToast('Zálohu fotek dělá jen správce', 2800); return; }
   if(typeof galleryTab!=='undefined' && galleryTab!==0){ showToast('Přepni na „Fotky stavby"',2600); return; }
   var cutoff=_lastBackupTs();
   db.ref('standalone_photos').orderByChild('ts').once('value', function(snap){
@@ -13767,9 +13780,12 @@ function selectPhotosSinceBackup(){
   });
 }
 function markBackupDone(){
+  if(typeof isAdmin==='function' && !isAdmin()){ showToast('Zálohu může označit jen správce', 2800); return; }
+  // Dvojí potvrzení – ať se omylem neposune značka a nepřijdeš o fotky ze zálohy
+  if(!confirm('Opravdu je záloha fotek HOTOVÁ?\n\nPotvrď jen když jsi fotky (ZIP) skutečně stáhl a uložil bokem.\nPříště se pak nabídnou jen fotky novější než teď.')) return;
   var t=window._backupNewestTs || Date.now();
   _setLastBackupTs(t);
-  showToast('✅ Záloha označena k '+new Date(t).toLocaleDateString('cs-CZ')+'. Příště se vyberou jen novější.',4500);
+  showToast('✅ Záloha označena k '+new Date(t).toLocaleDateString('cs-CZ')+' '+new Date(t).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+'. Příště se vyberou jen novější.',4800);
   gallerySelectedKeys={}; renderGallery();
 }
 
@@ -19009,8 +19025,8 @@ function copyDiaryExport(){
         <button type="button" onclick="openReportExport()" title="Export popisů / Word pro tento měsíc" style="background:var(--accent2);border:none;border-radius:6px;color:#0f3460;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">📄 Export</button>
       </div>
     </div>
-    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
-      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📸 Měsíční záloha fotek (stažení bokem)</label>
+    <div id="backup-section" style="margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;display:none;">
+      <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px;">📸 Měsíční záloha fotek (jen správce)</label>
       <div id="backup-info" style="font-size:11px;color:var(--text2);margin-bottom:6px;"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button type="button" onclick="selectPhotosSinceBackup()" title="Vybere fotky přidané od poslední zálohy a rovnou nabídne stažení ZIP" style="flex:1;background:#0ea5e9;border:none;border-radius:6px;color:#fff;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Stáhnout nové (ZIP)</button>
