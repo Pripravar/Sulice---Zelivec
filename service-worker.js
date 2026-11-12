@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 // VERZE cache - při změně příště zvedni, ať si telefony stáhnou novou verzi.
-const CACHE_VERSION = 'sulice-v165-2026-11-04-teprStazeniPodpisy';
+const CACHE_VERSION = 'sulice-v166-2026-11-12-androidIkonyZachranaFotky';
 
 const CORE_ASSETS = [
   './',
@@ -107,7 +107,7 @@ self.addEventListener('push', function(event) {
   var title = n.title || 'Sulice – Želivec';
   var options = {
     body:    n.body || '',
-    icon:    n.icon || './manifest.json',
+    icon:    n.icon || './icon-192.png',
     badge:   n.badge,
     data:    data.data || {},
     tag:     (data.data && data.data.taskId) || 'sulice-notify',
