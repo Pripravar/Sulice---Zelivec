@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 // VERZE cache - při změně příště zvedni, ať si telefony stáhnou novou verzi.
-const CACHE_VERSION = 'sulice-v166-2026-11-12-androidIkonyZachranaFotky';
+const CACHE_VERSION = 'sulice-v167-2026-11-19-schvaleniGpsPrepinac';
 
 const CORE_ASSETS = [
   './',
@@ -110,7 +110,7 @@ self.addEventListener('push', function(event) {
     icon:    n.icon || './icon-192.png',
     badge:   n.badge,
     data:    data.data || {},
-    tag:     (data.data && data.data.taskId) || 'sulice-notify',
+    tag:     (data.data && (data.data.taskId || (data.data.typ === 'schvaleni' ? ('schvaleni-' + (data.data.uid || '')) : ''))) || 'sulice-notify',
     renotify: true
   };
   event.waitUntil(self.registration.showNotification(title, options).then(function(){
@@ -127,6 +127,7 @@ self.addEventListener('notificationclick', function(event) {
   else if(d.kanalId) hash = '#chat=' + encodeURIComponent(d.kanalId);
   else if(d.typ === 'chat') hash = '#chat';
   else if(d.fotoKey) hash = '#foto=' + encodeURIComponent(d.fotoKey);
+  else if(d.typ === 'schvaleni') hash = '#schvaleni';   // nový uživatel čeká → Správa uživatelů
   var url = './' + hash;
   event.waitUntil(
     self.clients.matchAll({type:'window', includeUncontrolled:true}).then(function(list){
